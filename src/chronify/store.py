@@ -26,8 +26,8 @@ class Store:
         else:
             self._engine = engine
 
-    #def add_time_series(self, data: np.ndarray) -> None:
-        #"""Add a time series array to the store."""
+    # def add_time_series(self, data: np.ndarray) -> None:
+    # """Add a time series array to the store."""
 
     def create_view_from_parquet(self, name: str, path: Path) -> None:
         """Create a view in the database from a Parquet file."""
@@ -67,9 +67,7 @@ class Store:
     def _check_table_schema(self, schema: TableSchema) -> None:
         table = Table(schema.name, g_metadata)
         expected_columns = set(
-            schema.time_array_id_columns
-            + schema.time_config.time_columns
-            + schema.value_columns
+            schema.time_array_id_columns + schema.time_config.time_columns + schema.value_columns
         )
         existing_columns = {x.name for x in table.columns}
         diff = expected_columns - existing_columns

@@ -1,7 +1,7 @@
 from sqlalchemy import Connection, Engine, text
 
-from chronify import TableSchema
 from chronify.exceptions import InvalidTable
+from chronify.models import TableSchema
 
 
 class TimeSeriesChecker:
@@ -62,5 +62,7 @@ class TimeSeriesChecker:
         result3 = conn.execute(text(query3)).all()
         actual_count = result3[0][0]
         if actual_count != schema.time_config.length:
-            msg = "Time arrays must have length={schema.time_config.length}. Actual = {actual_count}"
+            msg = (
+                "Time arrays must have length={schema.time_config.length}. Actual = {actual_count}"
+            )
             raise InvalidTable(msg)

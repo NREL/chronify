@@ -3,7 +3,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing_extensions import Annotated
 
-from chronify.time_configs import AnnualTimeRange, TimeBaseModel, TimeConfig
+from chronify.time_configs import TimeConfig
 
 
 def make_model_config(**kwargs) -> ConfigDict:
@@ -16,7 +16,7 @@ def make_model_config(**kwargs) -> ConfigDict:
         use_enum_values=False,
         arbitrary_types_allowed=True,
         populate_by_name=True,
-        **kwargs,
+        **kwargs,  # type: ignore
     )
 
 
@@ -77,7 +77,6 @@ class TableSchema(TSSBaseModel):
 
 
 # TODO: print example tables here.
-
 
 
 def _check_name(name: str) -> None:

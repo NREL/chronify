@@ -29,7 +29,9 @@ class RepresentativePeriodFormat(StrEnum):
     # number of permutations (seasons, weekend day vs week day, sub-hour time, etc).
 
     ONE_WEEK_PER_MONTH_BY_HOUR = "one_week_per_month_by_hour"
-    ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR = "one_weekday_day_and_one_weekend_day_per_month_by_hour",
+    ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR = (
+        "one_weekday_day_and_one_weekend_day_per_month_by_hour",
+    )
 
 
 class LeapDayAdjustmentType(StrEnum):
@@ -63,14 +65,14 @@ class TimeIntervalType(StrEnum):
     # https://github.com/Smart-DS/R2PD/blob/master/R2PD/tshelpers.py#L15
 
     PERIOD_ENDING = "period_ending"
-        #description="A time interval that is period ending is coded by the end time. E.g., 2pm (with"
-        #" freq=1h) represents a period of time between 1-2pm.",
+    # description="A time interval that is period ending is coded by the end time. E.g., 2pm (with"
+    # " freq=1h) represents a period of time between 1-2pm.",
     PERIOD_BEGINNING = "period_beginning"
-        #description="A time interval that is period beginning is coded by the beginning time. E.g.,"
-        #" 2pm (with freq=01:00:00) represents a period of time between 2-3pm. This is the dsgrid"
-        #" default.",
+    # description="A time interval that is period beginning is coded by the beginning time. E.g.,"
+    # " 2pm (with freq=01:00:00) represents a period of time between 2-3pm. This is the dsgrid"
+    # " default.",
     INSTANTANEOUS = "instantaneous"
-        #description="The time record value represents measured, instantaneous time",
+    # description="The time record value represents measured, instantaneous time",
 
 
 class MeasurementType(StrEnum):
@@ -80,9 +82,9 @@ class MeasurementType(StrEnum):
     MIN = "min"
     MAX = "max"
     MEASURED = "measured"
-        #description="Data values represent the measured value at that reported time",
+    # description="Data values represent the measured value at that reported time",
     TOTAL = "total"
-        #description="Data values represent the sum of values in a time range",
+    # description="Data values represent the sum of values in a time range",
 
 
 class TimeZone(StrEnum):
@@ -162,7 +164,9 @@ def get_standard_time(tz: TimeZone) -> TimeZone:
         case TimeZone.ARIZONA:
             return TimeZone.ARIZONA
         case _:
-            raise NotImplementedError(f"BUG: case not covered: {tz}")
+            msg = f"BUG: case not covered: {tz}"
+            raise NotImplementedError(msg)
+
 
 def get_prevailing_time(tz: TimeZone) -> TimeZone:
     """get equivalent prevailing time"""
@@ -184,7 +188,9 @@ def get_prevailing_time(tz: TimeZone) -> TimeZone:
         case TimeZone.ARIZONA:
             return TimeZone.ARIZONA
         case _:
-            raise NotImplementedError(f"BUG: case not covered: {tz}")
+            msg = f"BUG: case not covered: {tz}"
+            raise NotImplementedError(msg)
+
 
 _STANDARD_TIME_ZONES = {
     TimeZone.UTC,
@@ -204,6 +210,7 @@ _PREVAILING_TIME_ZONES = {
     TimeZone.EPT,
     TimeZone.ARIZONA,
 }
+
 
 def is_standard(tz: TimeZone) -> bool:
     return tz in _STANDARD_TIME_ZONES

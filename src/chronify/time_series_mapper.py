@@ -1,3 +1,6 @@
+from chronify.time_configs import TimeConfig
+
+
 class TimeSeriesMapper:
     """Maps time series data from one configuration to another."""
 
@@ -9,4 +12,3 @@ class TimeSeriesMapper:
         to_table: str,
     ) -> None:
         pass
-

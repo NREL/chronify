@@ -57,9 +57,7 @@ class LocalTimeAsStrings(BaseModel):
     They are aligned for each geography when adjusted for time zone but staggered
     in an absolute time scale."""
 
-    format_type: Literal[DatetimeFormat.LOCAL_AS_STRINGS] = (
-        DatetimeFormat.LOCAL_AS_STRINGS
-    )
+    format_type: Literal[DatetimeFormat.LOCAL_AS_STRINGS] = DatetimeFormat.LOCAL_AS_STRINGS
 
     data_str_format: Annotated[
         str,
@@ -70,23 +68,21 @@ class LocalTimeAsStrings(BaseModel):
         ),
     ]
 
-    @field_validator("data_str_format")
-    @classmethod
-    def check_data_str_format(cls, data_str_format):
-        raise NotImplementedError(
-            "DatetimeFormat.LOCAL_AS_STRINGS is not fully implemented."
-        )
-        dsf = data_str_format
-        if (
-            "x" not in dsf
-            and "X" not in dsf
-            and "Z" not in dsf
-            and "z" not in dsf
-            and "V" not in dsf
-            and "O" not in dsf
-        ):
-            raise ValueError("data_str_format must provide time zone or zone offset.")
-        return data_str_format
+    # @field_validator("data_str_format")
+    # @classmethod
+    # def check_data_str_format(cls, data_str_format):
+    #    raise NotImplementedError("DatetimeFormat.LOCAL_AS_STRINGS is not fully implemented.")
+    #    dsf = data_str_format
+    #    if (
+    #        "x" not in dsf
+    #        and "X" not in dsf
+    #        and "Z" not in dsf
+    #        and "z" not in dsf
+    #        and "V" not in dsf
+    #        and "O" not in dsf
+    #    ):
+    #        raise ValueError("data_str_format must provide time zone or zone offset.")
+    #    return data_str_format
 
 
 class DaylightSavingAdjustment(BaseModel):
@@ -199,9 +195,7 @@ class DatetimeRange(TimeBaseModel):
         tz_info = self.start.tzinfo
         for i in range(self.length):
             cur = self.start.astimezone(ZoneInfo("UTC")) + i * self.frequency
-            cur = adjust_timestamp_by_dst_offset(
-                cur.astimezone(tz_info), self.frequency
-            )
+            cur = adjust_timestamp_by_dst_offset(cur.astimezone(tz_info), self.frequency)
             month = cur.month
             day = cur.day
             if not (
@@ -238,7 +232,6 @@ class AnnualTimeRange(TimeBaseModel):
 
 
 class IndexTimeRange(TimeBaseModel):
-
     time_type: Literal[TimeType.INDEX] = TimeType.INDEX
     start: int
     frequency: timedelta
@@ -248,39 +241,39 @@ class IndexTimeRange(TimeBaseModel):
     measurement_type: MeasurementType
 
     # TODO DT: totally wrong
-    def iter_timestamps(self) -> Generator[datetime, None, None]:
-        cur = self.start.to_pydatetime().astimezone(ZoneInfo("UTC"))
-        cur_idx = self.start_index
-        end = (
-            self.end.to_pydatetime().astimezone(ZoneInfo("UTC")) + self.frequency
-        )  # to make end time inclusive
+    # def iter_timestamps(self) -> Generator[datetime, None, None]:
+    #    cur = self.start.to_pydatetime().astimezone(ZoneInfo("UTC"))
+    #    cur_idx = self.start_index
+    #    end = (
+    #        self.end.to_pydatetime().astimezone(ZoneInfo("UTC")) + self.frequency
+    #    )  # to make end time inclusive
 
-        while cur < end:
-            cur_tz = cur.astimezone(self.tzinfo)
-            cur_tz = adjust_timestamp_by_dst_offset(cur_tz, self.frequency)
-            month = cur_tz.month
-            day = cur_tz.day
-            if not (
-                self.time_based_data_adjustment.leap_day_adjustment
-                == LeapDayAdjustmentType.DROP_FEB29
-                and month == 2
-                and day == 29
-            ):
-                if not (
-                    self.time_based_data_adjustment.leap_day_adjustment
-                    == LeapDayAdjustmentType.DROP_DEC31
-                    and month == 12
-                    and day == 31
-                ):
-                    if not (
-                        self.time_based_data_adjustment.leap_day_adjustment
-                        == LeapDayAdjustmentType.DROP_JAN1
-                        and month == 1
-                        and day == 1
-                    ):
-                        yield cur_idx
-            cur += self.frequency
-            cur_idx += 1
+    #    while cur < end:
+    #        cur_tz = cur.astimezone(self.tzinfo)
+    #        cur_tz = adjust_timestamp_by_dst_offset(cur_tz, self.frequency)
+    #        month = cur_tz.month
+    #        day = cur_tz.day
+    #        if not (
+    #            self.time_based_data_adjustment.leap_day_adjustment
+    #            == LeapDayAdjustmentType.DROP_FEB29
+    #            and month == 2
+    #            and day == 29
+    #        ):
+    #            if not (
+    #                self.time_based_data_adjustment.leap_day_adjustment
+    #                == LeapDayAdjustmentType.DROP_DEC31
+    #                and month == 12
+    #                and day == 31
+    #            ):
+    #                if not (
+    #                    self.time_based_data_adjustment.leap_day_adjustment
+    #                    == LeapDayAdjustmentType.DROP_JAN1
+    #                    and month == 1
+    #                    and day == 1
+    #                ):
+    #                    yield cur_idx
+    #        cur += self.frequency
+    #        cur_idx += 1
 
 
 class RepresentativePeriodTimeRange(TimeBaseModel):
@@ -293,9 +286,7 @@ class RepresentativePeriodTimeRange(TimeBaseModel):
 
 
 TimeConfig = Annotated[
-    Union[
-        AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTimeRange
-    ],
+    Union[AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTimeRange],
     Field(
         description="Defines the times in a time series table.",
         discriminator="time_type",
@@ -303,9 +294,7 @@ TimeConfig = Annotated[
 ]
 
 
-def adjust_timestamp_by_dst_offset(
-    timestamp: datetime, frequency: timedelta
-) -> datetime:
+def adjust_timestamp_by_dst_offset(timestamp: datetime, frequency: timedelta) -> datetime:
     """Reduce the timestamps within the daylight saving range by 1 hour.
     Used to ensure that a time series at daily (or lower) frequency returns each day at the
     same timestamp in prevailing time, an expected behavior in most standard libraries.
