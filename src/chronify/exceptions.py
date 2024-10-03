@@ -4,3 +4,7 @@ class ChronifyExceptionBase(Exception):
 
 class InvalidTable(ChronifyExceptionBase):
     """Raised when a table does not match its schema."""
+
+
+class InvalidParameter(ChronifyExceptionBase):
+    """Raised when an invalid parameter is passed."""

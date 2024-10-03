@@ -1,10 +1,21 @@
+import itertools
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import create_engine, text, Engine, MetaData, Table
+from sqlalchemy import Column, Engine, MetaData, Table, create_engine, text
 
 from chronify.exceptions import InvalidTable
-from chronify.models import TableSchema
+from chronify.csv_io import read_csv
+from chronify.duckdb.functions import unpivot as duckdb_unpivot
+from chronify.duckdb.functions import add_datetime_column
+from chronify.models import (
+    CsvTableSchema,
+    TableSchema,
+    TableSchemaBase,
+    get_sqlalchemy_type_from_duckdb,
+)
+from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import TimeSeriesChecker
 
 g_metadata = MetaData()
@@ -13,7 +24,7 @@ g_metadata = MetaData()
 class Store:
     """Data store for time series data"""
 
-    def __init__(self, engine: Optional[Engine] = None, **connect_args) -> None:
+    def __init__(self, engine: Optional[Engine] = None, **connect_kwargs) -> None:
         """Construct the Store.
 
         Parameters
@@ -22,9 +33,16 @@ class Store:
             Optional, defaults to a DuckDB engine.
         """
         if engine is None:
-            self._engine = create_engine("duckdb:///:memory:", **connect_args)
+            self._engine = create_engine("duckdb:///:memory:", **connect_kwargs)
         else:
             self._engine = engine
+        # TODO: how do we tell the engine type for engine specific functionality?
+
+    # TODO
+    # @classmethod
+    # def load_spark(cls, spark_url: str, **connect_kwargs) -> Store:
+    # engine = create_engine(spark_url, **connect_kwargs)
+    # return cls(engine)
 
     # def add_time_series(self, data: np.ndarray) -> None:
     # """Add a time series array to the store."""
@@ -32,14 +50,74 @@ class Store:
     def create_view_from_parquet(self, name: str, path: Path) -> None:
         """Create a view in the database from a Parquet file."""
         with self._engine.begin() as conn:
-            query = f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{path}/**/*.parquet')"
+            if self._engine.driver == "duckdb_engine":
+                query = f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{path}/**/*.parquet')"
+            else:
+                msg = f"create_view_from_parquet does not support driver={self._engine.driver}"
+                raise NotImplementedError(msg)
             conn.execute(text(query))
 
-    def export_csv(self, table: str, path: Path) -> None:
-        """Export a table or view to a CSV file."""
+    # def export_csv(self, table: str, path: Path) -> None:
+    #    """Export a table or view to a CSV file."""
 
-    def export_parquet(self, table: str, path: Path) -> None:
-        """Export a table or view to a Parquet file."""
+    # def export_parquet(self, table: str, path: Path) -> None:
+    #    """Export a table or view to a Parquet file."""
+
+    def ingest_from_csv(
+        self,
+        path: Path | str,
+        src_schema: CsvTableSchema,
+        dst_schema: TableSchema,
+    ) -> None:
+        """Ingest data into the table specifed by schema. If the table does not exist,
+        create it.
+        """
+        rel = read_csv(path, src_schema)
+        check_columns(rel.columns, src_schema.list_columns())
+        # TODO: doesn't do anything yet
+        check_schema_compatibility(src_schema, dst_schema)
+
+        if src_schema.pivoted_dimension_name is not None:
+            rel = duckdb_unpivot(
+                rel,
+                src_schema.value_columns,
+                src_schema.pivoted_dimension_name,
+                dst_schema.value_column,
+            )
+
+        if isinstance(src_schema.time_config, IndexTimeRange):
+            if isinstance(dst_schema.time_config, DatetimeRange):
+                rel = add_datetime_column(
+                    rel=rel,
+                    start=dst_schema.time_config.start,
+                    resolution=dst_schema.time_config.resolution,
+                    length=dst_schema.time_config.length,
+                    time_array_id_columns=src_schema.time_array_id_columns,
+                    time_column=dst_schema.time_config.time_columns[0],
+                    timestamps=list(src_schema.time_config.iter_timestamps()),
+                )
+            else:
+                cls_name = dst_schema.time_config.__class__.__name__
+                msg = f"IndexTimeRange cannot be converted to {cls_name}"
+                raise NotImplementedError(msg)
+
+        if not self.has_table(dst_schema.name):
+            dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in rel.dtypes]
+            columns = [Column(x, y) for x, y in zip(rel.columns, dtypes)]
+            # TODO: Is this really the best way? Seems weird.
+            Table(dst_schema.name, g_metadata, *columns)
+            g_metadata.create_all(self._engine)
+
+        values = rel.fetchall()
+        with self._engine.begin() as conn:
+            values_str = ",".join(itertools.repeat("?", len(values[0])))
+            query = f"INSERT INTO {dst_schema.name} VALUES({values_str})"
+            conn.exec_driver_sql(query, values)
+            conn.commit()
+
+    def has_table(self, name: str) -> bool:
+        """Return True if the database has a table with the given name."""
+        return name in g_metadata.tables
 
     def load_table(self, path: Path, schema: TableSchema) -> None:
         """Load a table into the database."""
@@ -66,16 +144,29 @@ class Store:
 
     def _check_table_schema(self, schema: TableSchema) -> None:
         table = Table(schema.name, g_metadata)
-        expected_columns = set(
-            schema.time_array_id_columns + schema.time_config.time_columns + schema.value_columns
-        )
-        existing_columns = {x.name for x in table.columns}
-        diff = expected_columns - existing_columns
-        if diff:
-            cols = " ".join(sorted(diff))
-            msg = f"These columns are defined in the schema but not present in the table: {cols}"
-            raise InvalidTable(msg)
+        columns = {x.name for x in table.columns}
+        check_columns(columns, schema.list_columns())
 
     def _check_timestamps(self, schema: TableSchema) -> None:
         checker = TimeSeriesChecker(self._engine)
         checker.check_timestamps(schema)
+
+
+def check_columns(table_columns: Iterable[str], schema_columns: Iterable[str]) -> None:
+    """Check if the columns match the schema.
+
+    Raises
+    ------
+    InvalidTable
+        Raised if the columns don't match the schema.
+    """
+    expected_columns = set(schema_columns)
+    diff = expected_columns.difference(table_columns)
+    if diff:
+        cols = " ".join(sorted(diff))
+        msg = f"These columns are defined in the schema but not present in the table: {cols}"
+        raise InvalidTable(msg)
+
+
+def check_schema_compatibility(src: TableSchemaBase, dst: TableSchemaBase) -> None:
+    """Check that a table with src schema can be converted to dst."""

@@ -88,10 +88,7 @@ class MeasurementType(StrEnum):
 
 
 class TimeZone(StrEnum):
-    """Time zone enum types
-    - tz: zoneinfo.available_timezones()
-    - tz_name: spark uses Java timezones: https://jenkov.com/tutorials/java-date-time/java-util-timezone.html
-    """
+    """Time zones"""
 
     UTC = "UTC"
     HST = "HawaiiAleutianStandard"
@@ -126,10 +123,11 @@ _TIME_ZONE_TO_ZONE_INFO = {
 
 
 def get_zone_info(tz: TimeZone) -> ZoneInfo:
+    """Return a ZoneInfo instance for the given time zone."""
     return _TIME_ZONE_TO_ZONE_INFO[tz]
 
 
-_TIME_ZONE_TO_TZ_NAME = {
+_TIME_ZONE_TO_TZ_OFFSET_AS_STR = {
     TimeZone.UTC: "UTC",
     TimeZone.HST: "-10:00",
     TimeZone.AST: "-09:00",
@@ -140,12 +138,13 @@ _TIME_ZONE_TO_TZ_NAME = {
 }
 
 
-def get_time_zone_name(tz: TimeZone) -> str:
-    return _TIME_ZONE_TO_TZ_NAME[tz]
+def get_time_zone_offset(tz: TimeZone) -> str:
+    """Return the offset of the time zone from UTC."""
+    return _TIME_ZONE_TO_TZ_OFFSET_AS_STR[tz]
 
 
 def get_standard_time(tz: TimeZone) -> TimeZone:
-    """get equivalent standard time"""
+    """Return the equivalent standard time zone."""
     match tz:
         case TimeZone.UTC:
             return TimeZone.UTC
@@ -169,7 +168,7 @@ def get_standard_time(tz: TimeZone) -> TimeZone:
 
 
 def get_prevailing_time(tz: TimeZone) -> TimeZone:
-    """get equivalent prevailing time"""
+    """Return the equivalent prevailing time zone."""
     match tz:
         case TimeZone.UTC:
             return TimeZone.UTC
@@ -213,8 +212,10 @@ _PREVAILING_TIME_ZONES = {
 
 
 def is_standard(tz: TimeZone) -> bool:
+    """Return True if the time zone is a standard time zone."""
     return tz in _STANDARD_TIME_ZONES
 
 
 def is_prevailing(tz: TimeZone) -> bool:
+    """Return True if the time zone is a prevailing time zone."""
     return tz in _PREVAILING_TIME_ZONES
