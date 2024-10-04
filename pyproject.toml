@@ -32,6 +32,7 @@ dependencies = [
     "rich",
     "pydantic >= 2.7, < 3",
     "sqlalchemy",
+    "tzdata",
 ]
 [project.optional-dependencies]
 dev = [
