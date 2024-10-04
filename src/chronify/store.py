@@ -18,8 +18,6 @@ from chronify.models import (
 from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import TimeSeriesChecker
 
-g_metadata = MetaData()
-
 
 class Store:
     """Data store for time series data"""
@@ -50,10 +48,10 @@ class Store:
     def create_view_from_parquet(self, name: str, path: Path) -> None:
         """Create a view in the database from a Parquet file."""
         with self._engine.begin() as conn:
-            if self._engine.driver == "duckdb_engine":
+            if self._engine.name == "duckdb":
                 query = f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{path}/**/*.parquet')"
             else:
-                msg = f"create_view_from_parquet does not support driver={self._engine.driver}"
+                msg = f"create_view_from_parquet does not support engine={self._engine.name}"
                 raise NotImplementedError(msg)
             conn.execute(text(query))
 
@@ -105,8 +103,9 @@ class Store:
             dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in rel.dtypes]
             columns = [Column(x, y) for x, y in zip(rel.columns, dtypes)]
             # TODO: Is this really the best way? Seems weird.
-            Table(dst_schema.name, g_metadata, *columns)
-            g_metadata.create_all(self._engine)
+            metadata = MetaData()
+            Table(dst_schema.name, metadata, *columns)
+            metadata.create_all(self._engine)
 
         values = rel.fetchall()
         with self._engine.begin() as conn:
@@ -117,7 +116,8 @@ class Store:
 
     def has_table(self, name: str) -> bool:
         """Return True if the database has a table with the given name."""
-        return name in g_metadata.tables
+        metadata = MetaData()
+        return name in metadata.tables
 
     def load_table(self, path: Path, schema: TableSchema) -> None:
         """Load a table into the database."""
@@ -140,10 +140,11 @@ class Store:
         """Update the sqlalchemy metadata for table schema. Call this method if you add tables
         in the sqlalchemy engine outside of this class.
         """
-        g_metadata.reflect(self._engine, views=True, autoload_with=self._engine)
+        metadata = MetaData()
+        metadata.reflect(self._engine, views=True, autoload_with=self._engine)
 
     def _check_table_schema(self, schema: TableSchema) -> None:
-        table = Table(schema.name, g_metadata)
+        table = Table(schema.name, MetaData())
         columns = {x.name for x in table.columns}
         check_columns(columns, schema.list_columns())
 
