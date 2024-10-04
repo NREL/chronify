@@ -34,7 +34,6 @@ class Store:
             self._engine = create_engine("duckdb:///:memory:", **connect_kwargs)
         else:
             self._engine = engine
-        # TODO: how do we tell the engine type for engine specific functionality?
 
     # TODO
     # @classmethod
@@ -102,10 +101,9 @@ class Store:
         if not self.has_table(dst_schema.name):
             dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in rel.dtypes]
             columns = [Column(x, y) for x, y in zip(rel.columns, dtypes)]
-            # TODO: Is this really the best way? Seems weird.
             metadata = MetaData()
-            Table(dst_schema.name, metadata, *columns)
-            metadata.create_all(self._engine)
+            table = Table(dst_schema.name, metadata, *columns)
+            table.create(self._engine)
 
         values = rel.fetchall()
         with self._engine.begin() as conn:
