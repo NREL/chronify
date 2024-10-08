@@ -2,10 +2,11 @@ from datetime import datetime, timedelta
 
 import duckdb
 import pytest
-from sqlalchemy import Double
+from sqlalchemy import Double, text
+from sqlalchemy.orm import Session
+
 from chronify.csv_io import read_csv
 from chronify.duckdb.functions import unpivot
-
 from chronify.models import ColumnDType, CsvTableSchema, TableSchema
 from chronify.store import Store
 from chronify.time import TimeIntervalType, TimeZone
@@ -50,6 +51,8 @@ def test_ingest_csv(generators_schema):
     src_schema, dst_schema = generators_schema
     store = Store()
     store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
+    assert store.has_table("generators"), "store does not have table 'generators'"
+    verify_table_has_data(store)
 
 
 def test_load_parquet(tmp_path):
@@ -92,3 +95,29 @@ def test_load_parquet(tmp_path):
     rel3.to_parquet(str(out_file))
     store = Store()
     store.load_table(out_file, dst_schema)
+
+    assert store.has_table("generators"), "store does not have table 'generators'"
+    verify_table_has_data(store)
+    verify_table_timeseries(store, dst_schema.time_config)
+
+
+def verify_table_has_data(store):
+    with Session(store._engine) as session:
+        sql = "SELECT * FROM generators LIMIT 10;"
+        res = session.execute(text(sql)).fetchall()
+
+    assert len(res) == 10, "No data in table 'generators' in store"
+    assert len(res[0]) == 3, "Table 'generators' has three columns"
+
+
+def verify_table_timeseries(store, time_config):
+    with Session(store._engine) as session:
+        sql = "SELECT DISTINCT timestamp FROM generators ORDER by 1;"
+        res = session.execute(text(sql)).fetchall()
+
+    assert (
+        res[0][0] == time_config.start
+    ), "Mismatch starting timestamp between ingested and queried data"
+    assert (
+        len(res) == time_config.length
+    ), "Ingested and queried data do not have the same number of timestamps"
