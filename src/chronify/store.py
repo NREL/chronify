@@ -1,8 +1,9 @@
+import itertools
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Engine, MetaData, Table, create_engine, insert, text
+from sqlalchemy import Column, Engine, MetaData, Table, create_engine, text
 
 from chronify.exceptions import InvalidTable
 from chronify.csv_io import read_csv
@@ -111,9 +112,12 @@ class Store:
 
         values = rel.fetchall()
         columns = table.columns.keys()
-        values_as_dict = [{col: val} for col, val in zip(columns, values)]
+        placeholder = ",".join(itertools.repeat("?", len(columns)))
+        cols = ",".join(columns)
         with self._engine.begin() as conn:
-            insert(table).values(values_as_dict)
+            query = f"INSERT INTO {dst_schema.name} ({cols}) VALUES ({placeholder})"
+            conn.exec_driver_sql(query, values)
+            query = f"select * from {dst_schema.name}"
             conn.commit()
 
     def has_table(self, name: str) -> bool:
