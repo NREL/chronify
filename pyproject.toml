@@ -31,6 +31,7 @@ dependencies = [
     "loguru",
     "rich",
     "pydantic >= 2.7, < 3",
+    "pytz",
     "sqlalchemy",
     "tzdata",
 ]
