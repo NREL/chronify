@@ -1,9 +1,8 @@
-import itertools
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Engine, MetaData, Table, create_engine, text
+from sqlalchemy import Column, Engine, MetaData, Table, create_engine, insert, text
 
 from chronify.exceptions import InvalidTable
 from chronify.csv_io import read_csv
@@ -30,6 +29,7 @@ class Store:
         engine: sqlalchemy.Engine
             Optional, defaults to a DuckDB engine.
         """
+        self._metadata = MetaData()
         if engine is None:
             self._engine = create_engine("duckdb:///:memory:", **connect_kwargs)
         else:
@@ -48,11 +48,14 @@ class Store:
         """Create a view in the database from a Parquet file."""
         with self._engine.begin() as conn:
             if self._engine.name == "duckdb":
-                query = f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{path}/**/*.parquet')"
+                path_ = f"{path}/**/*.parquet" if path.is_dir() else path
+                query = f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{path_}')"
             else:
                 msg = f"create_view_from_parquet does not support engine={self._engine.name}"
                 raise NotImplementedError(msg)
             conn.execute(text(query))
+            conn.commit()
+        self.update_table_schema()
 
     # def export_csv(self, table: str, path: Path) -> None:
     #    """Export a table or view to a CSV file."""
@@ -98,24 +101,24 @@ class Store:
                 msg = f"IndexTimeRange cannot be converted to {cls_name}"
                 raise NotImplementedError(msg)
 
-        if not self.has_table(dst_schema.name):
+        if self.has_table(dst_schema.name):
+            table = Table(dst_schema.name, self._metadata)
+        else:
             dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in rel.dtypes]
             columns = [Column(x, y) for x, y in zip(rel.columns, dtypes)]
-            metadata = MetaData()
-            table = Table(dst_schema.name, metadata, *columns)
+            table = Table(dst_schema.name, self._metadata, *columns)
             table.create(self._engine)
 
         values = rel.fetchall()
+        columns = table.columns.keys()
+        values_as_dict = [{col: val} for col, val in zip(columns, values)]
         with self._engine.begin() as conn:
-            values_str = ",".join(itertools.repeat("?", len(values[0])))
-            query = f"INSERT INTO {dst_schema.name} VALUES({values_str})"
-            conn.exec_driver_sql(query, values)
+            insert(table).values(values_as_dict)
             conn.commit()
 
     def has_table(self, name: str) -> bool:
         """Return True if the database has a table with the given name."""
-        metadata = MetaData()
-        return name in metadata.tables
+        return name in self._metadata.tables
 
     def load_table(self, path: Path, schema: TableSchema) -> None:
         """Load a table into the database."""
@@ -125,7 +128,6 @@ class Store:
             raise NotImplementedError(msg)
 
         self.create_view_from_parquet(schema.name, path)
-        self.update_table_schema()
         try:
             self._check_table_schema(schema)
             self._check_timestamps(schema)
@@ -138,11 +140,10 @@ class Store:
         """Update the sqlalchemy metadata for table schema. Call this method if you add tables
         in the sqlalchemy engine outside of this class.
         """
-        metadata = MetaData()
-        metadata.reflect(self._engine, views=True, autoload_with=self._engine)
+        self._metadata.reflect(self._engine, views=True)
 
     def _check_table_schema(self, schema: TableSchema) -> None:
-        table = Table(schema.name, MetaData())
+        table = Table(schema.name, self._metadata)
         columns = {x.name for x in table.columns}
         check_columns(columns, schema.list_columns())
 
