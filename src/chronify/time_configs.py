@@ -2,7 +2,7 @@ import abc
 from collections.abc import Generator
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Union, Literal
+from typing import Any, Optional, Union, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import (
@@ -119,20 +119,20 @@ class TimeBasedDataAdjustment(BaseModel):
     leap_day_adjustment: Annotated[
         LeapDayAdjustmentType,
         Field(
+            default=LeapDayAdjustmentType.NONE,
             title="leap_day_adjustment",
             description="Leap day adjustment method applied to time data",
-            default=LeapDayAdjustmentType.NONE,
         ),
     ]
     daylight_saving_adjustment: Annotated[
         DaylightSavingAdjustment,
         Field(
-            title="daylight_saving_adjustment",
-            description="Daylight saving adjustment method applied to time data",
             default={
                 "spring_forward_hour": DaylightSavingSpringForwardType.NONE,
                 "fall_back_hour": DaylightSavingFallBackType.NONE,
             },
+            title="daylight_saving_adjustment",
+            description="Daylight saving adjustment method applied to time data",
         ),
     ]
 
@@ -171,12 +171,19 @@ class DatetimeRange(TimeBaseModel):
     """Defines a time range that uses Python datetime instances."""
 
     time_type: Literal[TimeType.DATETIME] = TimeType.DATETIME
-    time_zone: TimeZone
-    start: datetime
-    frequency: timedelta
-    time_based_data_adjustment: TimeBasedDataAdjustment
-    interval_type: TimeIntervalType
-    measurement_type: MeasurementType
+    time_zone: Annotated[
+        Optional[TimeZone],
+        Field(
+            default=None,
+            description="Time zone if the timestamps are timezone-aware. "
+            "If None, timestamps are timezone-naive.",
+        ),
+    ]
+    start: datetime  # TODO: what if the time zone is specified here?
+    resolution: timedelta
+    time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
+    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
+    measurement_type: MeasurementType = MeasurementType.TOTAL
 
     @field_validator("start")
     @classmethod
@@ -185,17 +192,21 @@ class DatetimeRange(TimeBaseModel):
             return start
         if start.tzinfo is not None:
             return start
-        return start.replace(tzinfo=get_zone_info(info.data["time_zone"]))
+        if info.data["time_zone"] is not None:
+            zone_info = get_zone_info(info.data["time_zone"])
+            return start.replace(tzinfo=zone_info)
+        return start
 
     def convert_database_timestamps(self, cur: CursorResult) -> list[datetime]:
+        assert self.time_zone is not None
         tzinfo = get_zone_info(self.time_zone)
         return [x[0].astimezone(tzinfo) for x in cur]
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         tz_info = self.start.tzinfo
         for i in range(self.length):
-            cur = self.start.astimezone(ZoneInfo("UTC")) + i * self.frequency
-            cur = adjust_timestamp_by_dst_offset(cur.astimezone(tz_info), self.frequency)
+            cur = self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution
+            cur = adjust_timestamp_by_dst_offset(cur.astimezone(tz_info), self.resolution)
             month = cur.month
             day = cur.day
             if not (
@@ -234,7 +245,7 @@ class AnnualTimeRange(TimeBaseModel):
 class IndexTimeRange(TimeBaseModel):
     time_type: Literal[TimeType.INDEX] = TimeType.INDEX
     start: int
-    frequency: timedelta
+    resolution: timedelta
     time_zone: TimeZone
     time_based_data_adjustment: TimeBasedDataAdjustment
     interval_type: TimeIntervalType
@@ -245,12 +256,12 @@ class IndexTimeRange(TimeBaseModel):
     #    cur = self.start.to_pydatetime().astimezone(ZoneInfo("UTC"))
     #    cur_idx = self.start_index
     #    end = (
-    #        self.end.to_pydatetime().astimezone(ZoneInfo("UTC")) + self.frequency
+    #        self.end.to_pydatetime().astimezone(ZoneInfo("UTC")) + self.resolution
     #    )  # to make end time inclusive
 
     #    while cur < end:
     #        cur_tz = cur.astimezone(self.tzinfo)
-    #        cur_tz = adjust_timestamp_by_dst_offset(cur_tz, self.frequency)
+    #        cur_tz = adjust_timestamp_by_dst_offset(cur_tz, self.resolution)
     #        month = cur_tz.month
     #        day = cur_tz.day
     #        if not (
@@ -272,7 +283,7 @@ class IndexTimeRange(TimeBaseModel):
     #                    and day == 1
     #                ):
     #                    yield cur_idx
-    #        cur += self.frequency
+    #        cur += self.resolution
     #        cur_idx += 1
 
 
@@ -294,14 +305,14 @@ TimeConfig = Annotated[
 ]
 
 
-def adjust_timestamp_by_dst_offset(timestamp: datetime, frequency: timedelta) -> datetime:
+def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -> datetime:
     """Reduce the timestamps within the daylight saving range by 1 hour.
-    Used to ensure that a time series at daily (or lower) frequency returns each day at the
+    Used to ensure that a time series at daily (or lower) resolution returns each day at the
     same timestamp in prevailing time, an expected behavior in most standard libraries.
     (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00...
     instead of 2018-03-11 00:00, 2018-03-12 01:00...)
     """
-    if frequency < timedelta(hours=24):
+    if resolution < timedelta(hours=24):
         return timestamp
 
     offset = timestamp.dst() or timedelta(hours=0)
