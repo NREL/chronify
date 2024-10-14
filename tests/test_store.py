@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 
 import duckdb
+import pandas as pd
 import pytest
-from sqlalchemy import Double
+from sqlalchemy import Double, Table, select
 from chronify.csv_io import read_csv
 from chronify.duckdb.functions import unpivot
 
@@ -50,6 +51,8 @@ def test_ingest_csv(generators_schema):
     src_schema, dst_schema = generators_schema
     store = Store()
     store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
+    df = store.read_table(dst_schema.name)
+    assert len(df) > 0
 
 
 def test_load_parquet(tmp_path):
@@ -92,3 +95,16 @@ def test_load_parquet(tmp_path):
     rel3.to_parquet(str(out_file))
     store = Store()
     store.load_table(out_file, dst_schema)
+
+
+def test_to_parquet(tmp_path, generators_schema):
+    src_schema, dst_schema = generators_schema
+    store = Store()
+    store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
+    filename = tmp_path / "data.parquet"
+    table = Table(dst_schema.name, store.metadata)
+    stmt = select(table).where(table.c.generator == "gen2")
+    store.write_query_to_parquet(stmt, filename)
+    assert filename.exists()
+    df = pd.read_parquet(filename)
+    assert len(df) == 8784

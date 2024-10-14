@@ -1,14 +1,15 @@
-import itertools
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Engine, MetaData, Table, create_engine, text
+import pandas as pd
+import polars as pl
+from loguru import logger
+from sqlalchemy import Column, Engine, MetaData, Selectable, Table, create_engine, text
 
-from chronify.exceptions import InvalidTable
+import chronify.duckdb.functions as ddbf
+from chronify.exceptions import ConflictingInputsError, InvalidTable
 from chronify.csv_io import read_csv
-from chronify.duckdb.functions import unpivot as duckdb_unpivot
-from chronify.duckdb.functions import add_datetime_column
 from chronify.models import (
     CsvTableSchema,
     TableSchema,
@@ -17,22 +18,44 @@ from chronify.models import (
 )
 from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import TimeSeriesChecker
+from chronify.utils.sql import make_temp_view_name
+from chronify.utils.sqlalchemy_view import create_view
 
 
 class Store:
     """Data store for time series data"""
 
-    def __init__(self, engine: Optional[Engine] = None, **connect_kwargs) -> None:
+    def __init__(
+        self, engine: Optional[Engine] = None, engine_name: Optional[str] = None, **connect_kwargs
+    ) -> None:
         """Construct the Store.
 
         Parameters
         ----------
         engine: sqlalchemy.Engine
-            Optional, defaults to a DuckDB engine.
+            Optional, defaults to a engine connected to an in-memory DuckDB database.
+
+        Examples
+        --------
+        >>> from sqlalchemy
+        >>> store1 = Store()
+        >>> store2 = Store(engine=Engine("duckdb:///time_series.db")
+        >>> store3 = Store(engine=Engine(engine_name="sqlite")
+        >>> store4 = Store(engine=Engine("sqlite:///time_series.db")
         """
         self._metadata = MetaData()
+        if engine and engine_name:
+            msg = f"{engine=} and {engine_name=} cannot both be set"
+            raise ConflictingInputsError(msg)
         if engine is None:
-            self._engine = create_engine("duckdb:///:memory:", **connect_kwargs)
+            name = engine_name or "duckdb"
+            match name:
+                case "duckdb" | "sqlite":
+                    engine_path = f"{name}:///:memory:"
+                case _:
+                    msg = f"{engine_name=}"
+                    raise NotImplementedError(msg)
+            self._engine = create_engine(engine_path, **connect_kwargs)
         else:
             self._engine = engine
 
@@ -44,6 +67,16 @@ class Store:
 
     # def add_time_series(self, data: np.ndarray) -> None:
     # """Add a time series array to the store."""
+
+    @property
+    def engine(self) -> Engine:
+        """Return the sqlalchemy engine."""
+        return self._engine
+
+    @property
+    def metadata(self) -> MetaData:
+        """Return the sqlalchemy metadata."""
+        return self._metadata
 
     def create_view_from_parquet(self, name: str, path: Path) -> None:
         """Create a view in the database from a Parquet file."""
@@ -57,12 +90,6 @@ class Store:
             conn.execute(text(query))
             conn.commit()
         self.update_table_schema()
-
-    # def export_csv(self, table: str, path: Path) -> None:
-    #    """Export a table or view to a CSV file."""
-
-    # def export_parquet(self, table: str, path: Path) -> None:
-    #    """Export a table or view to a Parquet file."""
 
     def ingest_from_csv(
         self,
@@ -79,7 +106,7 @@ class Store:
         check_schema_compatibility(src_schema, dst_schema)
 
         if src_schema.pivoted_dimension_name is not None:
-            rel = duckdb_unpivot(
+            rel = ddbf.unpivot(
                 rel,
                 src_schema.value_columns,
                 src_schema.pivoted_dimension_name,
@@ -88,7 +115,7 @@ class Store:
 
         if isinstance(src_schema.time_config, IndexTimeRange):
             if isinstance(dst_schema.time_config, DatetimeRange):
-                rel = add_datetime_column(
+                rel = ddbf.add_datetime_column(
                     rel=rel,
                     start=dst_schema.time_config.start,
                     resolution=dst_schema.time_config.resolution,
@@ -110,15 +137,52 @@ class Store:
             table = Table(dst_schema.name, self._metadata, *columns)
             table.create(self._engine)
 
-        values = rel.fetchall()
-        columns = table.columns.keys()
-        placeholder = ",".join(itertools.repeat("?", len(columns)))
-        cols = ",".join(columns)
+        df = rel.pl()
         with self._engine.begin() as conn:
-            query = f"INSERT INTO {dst_schema.name} ({cols}) VALUES ({placeholder})"
-            conn.exec_driver_sql(query, values)
-            query = f"select * from {dst_schema.name}"
+            df.write_database(dst_schema.name, connection=conn, if_table_exists="append")
             conn.commit()
+        self.update_table_schema()
+
+    def read_table(self, name: str, query: Optional[Selectable | str] = None) -> pd.DataFrame:
+        """Return the table as a pandas DataFrame, optionally applying a query."""
+        if query is None:
+            query_ = f"select * from {name}"
+        elif isinstance(query, Selectable) and self.engine.name == "duckdb":
+            # TODO: unsafe. Need duckdb_engine support.
+            # https://github.com/Mause/duckdb_engine/issues/1119
+            # https://github.com/pola-rs/polars/issues/19221
+            query_ = str(query.compile(compile_kwargs={"literal_binds": True}))
+        else:
+            query_ = query
+
+        with self._engine.begin() as conn:
+            return pl.read_database(query_, connection=conn).to_pandas()
+
+    def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
+        """Write the result of a query to a Parquet file."""
+        view_name = make_temp_view_name()
+        create_view(view_name, stmt, self._engine, self._metadata)
+        try:
+            self.write_table_to_parquet(view_name, file_path)
+        finally:
+            with self._engine.connect() as conn:
+                conn.execute(text(f"DROP VIEW {view_name}"))
+
+    def write_table_to_parquet(self, name: str, file_path: Path | str) -> None:
+        """Write a table or view to a Parquet file."""
+        match self._engine.name:
+            case "duckdb":
+                cmd = ddbf.make_write_parquet_query(name, file_path)
+            # case "spark":
+            # pass
+            case _:
+                msg = f"{self.engine.name=}"
+                raise NotImplementedError(msg)
+
+        with self._engine.connect() as conn:
+            conn.execute(text(cmd))
+
+        logger.info("Wrote table or view to {}", file_path)
 
     def has_table(self, name: str) -> bool:
         """Return True if the database has a table with the given name."""
@@ -152,7 +216,7 @@ class Store:
         check_columns(columns, schema.list_columns())
 
     def _check_timestamps(self, schema: TableSchema) -> None:
-        checker = TimeSeriesChecker(self._engine)
+        checker = TimeSeriesChecker(self._engine, self._metadata)
         checker.check_timestamps(schema)
 
 

@@ -29,9 +29,12 @@ dependencies = [
     "duckdb ~= 1.1.0",
     "duckdb_engine",
     "loguru",
-    "rich",
+    "pandas >= 2.2, < 3",
+    "polars >= 1.9, < 2",
+    "pyarrow",
     "pydantic >= 2.7, < 3",
     "pytz",
+    "rich",
     "sqlalchemy",
     "tzdata",
 ]
