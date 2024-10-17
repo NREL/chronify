@@ -5,13 +5,14 @@ from datetime import datetime, timedelta
 from typing import Any, Optional, Union, Literal
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 from pydantic import (
     BaseModel,
     Field,
     ValidationInfo,
     field_validator,
+    model_validator,
 )
-from sqlalchemy import CursorResult
 from typing_extensions import Annotated
 
 from chronify.time import (
@@ -162,9 +163,9 @@ class TimeBaseModel(BaseModel, abc.ABC):
         Type of the time is dependent on the class.
         """
 
-    def convert_database_timestamps(self, cur: CursorResult) -> list[Any]:
+    @abc.abstractmethod
+    def convert_database_timestamps(self, df: pd.DataFrame) -> list[Any]:
         """Convert timestamps from the database."""
-        return [x[0] for x in cur]
 
 
 class DatetimeRange(TimeBaseModel):
@@ -185,6 +186,13 @@ class DatetimeRange(TimeBaseModel):
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
     measurement_type: MeasurementType = MeasurementType.TOTAL
 
+    @model_validator(mode="after")
+    def check_time_columns(self) -> "DatetimeRange":
+        if len(self.time_columns) != 1:
+            msg = f"{self.time_columns=} must have one column"
+            raise ValueError(msg)
+        return self
+
     @field_validator("start")
     @classmethod
     def fix_time_zone(cls, start: datetime, info: ValidationInfo) -> datetime:
@@ -197,10 +205,15 @@ class DatetimeRange(TimeBaseModel):
             return start.replace(tzinfo=zone_info)
         return start
 
-    def convert_database_timestamps(self, cur: CursorResult) -> list[datetime]:
+    def convert_database_timestamps(self, df: pd.DataFrame) -> list[datetime]:
         assert self.time_zone is not None
         tzinfo = get_zone_info(self.time_zone)
-        return [x[0].astimezone(tzinfo) for x in cur]
+        time_column = self.get_time_column()
+        return df[time_column].apply(lambda x: x.astimezone(tzinfo)).to_list()
+
+    def get_time_column(self) -> str:
+        """Return the time column."""
+        return self.time_columns[0]
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         tz_info = self.start.tzinfo

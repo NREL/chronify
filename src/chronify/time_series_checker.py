@@ -1,7 +1,8 @@
-from sqlalchemy import Connection, Engine, MetaData, Table, text
+from sqlalchemy import Connection, Engine, MetaData, Table, select, text
 
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
+from chronify.sqlalchemy.functions import read_database_query
 from chronify.utils.sql import make_temp_view_name
 
 
@@ -13,9 +14,6 @@ class TimeSeriesChecker:
         self._metadata = metadata
 
     def check_timestamps(self, schema: TableSchema) -> None:
-        # TODO: the conn.execute calls here are slow but not vulnerable to sql injection.
-        # Data extraction should never be large.
-        # Consider changing when we have a better implementation.
         self._check_expected_timestamps(schema)
         self._check_expected_timestamps_by_time_array(schema)
 
@@ -23,11 +21,11 @@ class TimeSeriesChecker:
         expected = schema.time_config.list_timestamps()
         with self._engine.connect() as conn:
             table = Table(schema.name, self._metadata)
-            stmt = table.select().distinct()
+            stmt = select(*(table.c[x] for x in schema.time_config.time_columns)).distinct()
             for col in schema.time_config.time_columns:
                 stmt = stmt.where(table.c[col].is_not(None))
-            # This is slow, but the size should never be large.
-            actual = set(schema.time_config.convert_database_timestamps(conn.execute(stmt)))
+            df = read_database_query(stmt, conn)
+            actual = set(schema.time_config.convert_database_timestamps(df))
             diff = actual.symmetric_difference(expected)
             if diff:
                 msg = f"Actual timestamps do not match expected timestamps: {diff}"

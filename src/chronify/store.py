@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-import polars as pl
 from loguru import logger
 from sqlalchemy import Column, Engine, MetaData, Selectable, Table, create_engine, text
 
@@ -16,6 +15,7 @@ from chronify.models import (
     TableSchemaBase,
     get_sqlalchemy_type_from_duckdb,
 )
+from chronify.sqlalchemy.functions import read_database_query
 from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import TimeSeriesChecker
 from chronify.utils.sql import make_temp_view_name
@@ -143,20 +143,14 @@ class Store:
             conn.commit()
         self.update_table_schema()
 
-    def read_table(self, name: str, query: Optional[Selectable | str] = None) -> pd.DataFrame:
-        """Return the table as a pandas DataFrame, optionally applying a query."""
-        if query is None:
-            query_ = f"select * from {name}"
-        elif isinstance(query, Selectable) and self.engine.name == "duckdb":
-            # TODO: unsafe. Need duckdb_engine support.
-            # https://github.com/Mause/duckdb_engine/issues/1119
-            # https://github.com/pola-rs/polars/issues/19221
-            query_ = str(query.compile(compile_kwargs={"literal_binds": True}))
-        else:
-            query_ = query
-
+    def read_query(self, query: Selectable | str) -> pd.DataFrame:
+        """Return the query result as a pandas DataFrame."""
         with self._engine.begin() as conn:
-            return pl.read_database(query_, connection=conn).to_pandas()
+            return read_database_query(query, conn)
+
+    def read_table(self, name: str) -> pd.DataFrame:
+        """Return the table as a pandas DataFrame."""
+        return self.read_query(f"select * from {name}")
 
     def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
         """Write the result of a query to a Parquet file."""
