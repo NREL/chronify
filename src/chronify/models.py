@@ -103,17 +103,17 @@ _COLUMN_TYPES = {
 _DB_TYPES = {x for x in _COLUMN_TYPES.values()}
 
 _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
-    duckdb.typing.BIGINT.id: BigInteger,
-    duckdb.typing.BOOLEAN.id: Boolean,
-    duckdb.typing.DOUBLE.id: Double,
-    duckdb.typing.TIMESTAMP.id: DateTime,
-    duckdb.typing.VARCHAR.id: String,
+    duckdb.typing.BIGINT.id: BigInteger,  # type: ignore
+    duckdb.typing.BOOLEAN.id: Boolean,  # type: ignore
+    duckdb.typing.DOUBLE.id: Double,  # type: ignore
+    duckdb.typing.TIMESTAMP.id: DateTime,  # type: ignore
+    duckdb.typing.VARCHAR.id: String,  # type: ignore
 }
 
 _SQLALCHEMY_TYPES_TO_DUCKDB_TYPES = {v: k for k, v in _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.items()}
 
 
-def get_sqlalchemy_type_from_duckdb(duckdb_type: duckdb.typing.DuckDBPyType) -> Type:
+def get_sqlalchemy_type_from_duckdb(duckdb_type: duckdb.typing.DuckDBPyType) -> Type:  # type: ignore
     """Return the sqlalchemy type for a duckdb type."""
     sqlalchemy_type = _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.get(duckdb_type.id)
     if sqlalchemy_type is None:

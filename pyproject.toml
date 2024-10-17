@@ -41,6 +41,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "mypy",
+    "pandas-stubs",
     "pre-commit",
     "pytest",
     "pytest-cov",
@@ -51,6 +52,12 @@ dev = [
 Documentation = "https://github.com/NREL/chronify#readme"
 Issues = "https://github.com/NREL/chronify/issues"
 Source = "https://github.com/NREL/chronify"
+
+[tool.mypy]
+files = [
+  "src",
+ # "tests", # TODO: stubs not working for chronify yet
+]
 
 [tool.pytest.ini_options]
 pythonpath = "src"

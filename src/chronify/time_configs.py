@@ -64,10 +64,9 @@ class LocalTimeAsStrings(BaseModel):
         str,
         Field(
             title="data_str_format",
-            default="yyyy-MM-dd HH:mm:ssZZZZZ",
             description="Timestamp string format (for parsing the time column of the dataframe)",
         ),
-    ]
+    ] = "yyyy-MM-dd HH:mm:ssZZZZZ"
 
     # @field_validator("data_str_format")
     # @classmethod
@@ -95,18 +94,16 @@ class DaylightSavingAdjustment(BaseModel):
         Field(
             title="spring_forward_hour",
             description="Data adjustment for spring forward hour (a 2AM in March)",
-            default=DaylightSavingSpringForwardType.NONE,
         ),
-    ]
+    ] = DaylightSavingSpringForwardType.NONE
 
     fall_back_hour: Annotated[
         DaylightSavingFallBackType,
         Field(
             title="fall_back_hour",
             description="Data adjustment for spring forward hour (a 2AM in November)",
-            default=DaylightSavingFallBackType.NONE,
         ),
-    ]
+    ] = DaylightSavingFallBackType.NONE
 
 
 class TimeBasedDataAdjustment(BaseModel):
@@ -120,22 +117,17 @@ class TimeBasedDataAdjustment(BaseModel):
     leap_day_adjustment: Annotated[
         LeapDayAdjustmentType,
         Field(
-            default=LeapDayAdjustmentType.NONE,
             title="leap_day_adjustment",
             description="Leap day adjustment method applied to time data",
         ),
-    ]
+    ] = LeapDayAdjustmentType.NONE
     daylight_saving_adjustment: Annotated[
         DaylightSavingAdjustment,
         Field(
-            default={
-                "spring_forward_hour": DaylightSavingSpringForwardType.NONE,
-                "fall_back_hour": DaylightSavingFallBackType.NONE,
-            },
             title="daylight_saving_adjustment",
             description="Daylight saving adjustment method applied to time data",
         ),
-    ]
+    ] = DaylightSavingAdjustment()
 
 
 class TimeBaseModel(BaseModel, abc.ABC):
@@ -175,11 +167,10 @@ class DatetimeRange(TimeBaseModel):
     time_zone: Annotated[
         Optional[TimeZone],
         Field(
-            default=None,
             description="Time zone if the timestamps are timezone-aware. "
             "If None, timestamps are timezone-naive.",
         ),
-    ]
+    ] = None
     start: datetime  # TODO: what if the time zone is specified here?
     resolution: timedelta
     time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
