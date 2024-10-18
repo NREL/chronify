@@ -3,7 +3,7 @@ from typing import Any, Optional, Type
 
 import duckdb.typing
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import DateTime, String, Double, BigInteger, Boolean
+from sqlalchemy import BigInteger, Boolean, DateTime, Double, Integer, String
 from typing_extensions import Annotated
 
 from chronify.exceptions import InvalidParameter
@@ -96,7 +96,8 @@ _COLUMN_TYPES = {
     "bool": Boolean,
     "datetime": DateTime,
     "float": Double,
-    "int": BigInteger,
+    "int": Integer,
+    "bigint": BigInteger,
     "str": String,
 }
 
@@ -106,6 +107,7 @@ _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
     duckdb.typing.BIGINT.id: BigInteger,  # type: ignore
     duckdb.typing.BOOLEAN.id: Boolean,  # type: ignore
     duckdb.typing.DOUBLE.id: Double,  # type: ignore
+    duckdb.typing.INTEGER.id: Integer,  # type: ignore
     duckdb.typing.TIMESTAMP.id: DateTime,  # type: ignore
     duckdb.typing.VARCHAR.id: String,  # type: ignore
 }

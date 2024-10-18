@@ -54,15 +54,17 @@ class TimeSeriesChecker:
         """
         conn.execute(text(query))
         query2 = f"SELECT COUNT(DISTINCT count_by_ta) AS counts FROM {table_name}"
-        result2 = conn.execute(text(query2)).all()
+        result2 = conn.execute(text(query2)).fetchone()
+        assert result2 is not None
 
-        if len(result2) != 1:
-            msg = "All time arrays must have the same length. There are {len(result)} different lengths"
+        if result2[0] != 1:
+            msg = "All time arrays must have the same length. There are {result2[0]} different lengths"
             raise InvalidTable(msg)
 
         query3 = f"SELECT DISTINCT count_by_ta AS counts FROM {table_name}"
-        result3 = conn.execute(text(query3)).all()
-        actual_count = result3[0][0]
+        result3 = conn.execute(text(query3)).fetchone()
+        assert result3 is not None
+        actual_count = result3[0]
         if actual_count != schema.time_config.length:
             msg = (
                 "Time arrays must have length={schema.time_config.length}. Actual = {actual_count}"

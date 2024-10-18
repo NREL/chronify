@@ -3,6 +3,8 @@
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
+from chronify.exceptions import InvalidParameter
+
 
 class TimeType(StrEnum):
     """Defines the supported time formats in the load data."""
@@ -140,7 +142,11 @@ _TIME_ZONE_TO_TZ_OFFSET_AS_STR = {
 
 def get_time_zone_offset(tz: TimeZone) -> str:
     """Return the offset of the time zone from UTC."""
-    return _TIME_ZONE_TO_TZ_OFFSET_AS_STR[tz]
+    offset = _TIME_ZONE_TO_TZ_OFFSET_AS_STR.get(tz)
+    if offset is None:
+        msg = f"Cannot get time zone offset for {tz=}"
+        raise InvalidParameter(msg)
+    return offset
 
 
 def get_standard_time(tz: TimeZone) -> TimeZone:
@@ -152,7 +158,7 @@ def get_standard_time(tz: TimeZone) -> TimeZone:
             return TimeZone.HST
         case TimeZone.AST | TimeZone.APT:
             return TimeZone.AST
-        case TimeZone.PST, TimeZone.PPT:
+        case TimeZone.PST | TimeZone.PPT:
             return TimeZone.PST
         case TimeZone.MST | TimeZone.MPT:
             return TimeZone.MST
@@ -176,7 +182,7 @@ def get_prevailing_time(tz: TimeZone) -> TimeZone:
             return TimeZone.HST
         case TimeZone.AST | TimeZone.APT:
             return TimeZone.APT
-        case TimeZone.PST, TimeZone.PPT:
+        case TimeZone.PST | TimeZone.PPT:
             return TimeZone.PPT
         case TimeZone.MST | TimeZone.MPT:
             return TimeZone.MPT

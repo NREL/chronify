@@ -1,12 +1,15 @@
+import fileinput
+import shutil
+
 from datetime import datetime, timedelta
 
 import duckdb
 import pandas as pd
 import pytest
-from sqlalchemy import Double, Table, select
+from sqlalchemy import Double, Table, create_engine, select
 from chronify.csv_io import read_csv
 from chronify.duckdb.functions import unpivot
-
+from chronify.exceptions import ConflictingInputsError, InvalidTable
 from chronify.models import ColumnDType, CsvTableSchema, TableSchema
 from chronify.store import Store
 from chronify.time import TimeIntervalType, TimeZone
@@ -47,12 +50,43 @@ def generators_schema():
     yield src_schema, dst_schema
 
 
-def test_ingest_csv(generators_schema):
+def test_ingest_csv(tmp_path, generators_schema):
     src_schema, dst_schema = generators_schema
     store = Store()
     store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
     df = store.read_table(dst_schema.name)
-    assert len(df) > 0
+    assert len(df) == 8784 * 3
+
+    new_file = tmp_path / "gen2.csv"
+    shutil.copyfile(GENERATOR_TIME_SERIES_FILE, new_file)
+    with fileinput.input([new_file], inplace=True) as f:
+        for line in f:
+            new_line = line.replace("gen1", "g1b").replace("gen2", "g2b").replace("gen3", "g3b")
+            print(new_line, end="")
+
+    # Test addition of new generators to the same table.
+    src_schema2 = CsvTableSchema(
+        time_config=src_schema.time_config,
+        column_dtypes=[
+            ColumnDType(name="g1b", dtype=Double),
+            ColumnDType(name="g2b", dtype=Double),
+            ColumnDType(name="g3b", dtype=Double),
+        ],
+        value_columns=["g1b", "g2b", "g3b"],
+        pivoted_dimension_name="generator",
+        time_array_id_columns=[],
+    )
+    store.ingest_from_csv(new_file, src_schema2, dst_schema)
+    df = store.read_table(dst_schema.name)
+    assert len(df) == 8784 * 3 * 2
+
+
+def test_invalid_schema(generators_schema):
+    src_schema, dst_schema = generators_schema
+    src_schema.value_columns = ["g1", "g2", "g3"]
+    store = Store()
+    with pytest.raises(InvalidTable):
+        store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
 
 
 def test_load_parquet(tmp_path):
@@ -108,3 +142,18 @@ def test_to_parquet(tmp_path, generators_schema):
     assert filename.exists()
     df = pd.read_parquet(filename)
     assert len(df) == 8784
+
+
+def test_create_with_existing_engine():
+    engine = create_engine("duckdb:///:memory")
+    store = Store(engine=engine)
+    assert store.engine is engine
+
+
+def test_create_with_sqlite():
+    Store(engine_name="sqlite")
+
+
+def test_create_with_conflicting_parameters():
+    with pytest.raises(ConflictingInputsError):
+        Store(engine=create_engine("duckdb:///:memory"), engine_name="duckdb")
