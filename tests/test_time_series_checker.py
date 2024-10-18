@@ -40,7 +40,7 @@ def _run_test(df: pd.DataFrame, length: int, message: str) -> None:
             start=datetime(year=2020, month=1, day=1),
             resolution=timedelta(hours=1),
             length=length,
-            time_interval_type=TimeIntervalType.PERIOD_BEGINNING,
+            interval_type=TimeIntervalType.PERIOD_BEGINNING,
             time_columns=["timestamp"],
             time_zone=TimeZone.UTC,
         ),

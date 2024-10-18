@@ -56,7 +56,7 @@ Source = "https://github.com/NREL/chronify"
 [tool.mypy]
 files = [
   "src",
- # "tests", # TODO: stubs not working for chronify yet
+  "tests",
 ]
 
 [tool.pytest.ini_options]

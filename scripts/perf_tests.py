@@ -43,7 +43,7 @@ def setup():
         start=datetime(year=2020, month=1, day=1),
         resolution=timedelta(hours=1),
         length=8784,
-        time_interval_type=TimeIntervalType.PERIOD_BEGINNING,
+        interval_type=TimeIntervalType.PERIOD_BEGINNING,
         time_columns=["timestamp"],
         time_zone=TimeZone.UTC,
     )
