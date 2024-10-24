@@ -35,7 +35,7 @@ dependencies = [
     "pydantic >= 2.7, < 3",
     "pytz",
     "rich",
-    "sqlalchemy",
+    "sqlalchemy == 2.0.35",  # 2.0.36 introduced code that duckdb_engine doesn't handle.
     "tzdata",
 ]
 [project.optional-dependencies]
