@@ -25,7 +25,7 @@ class TimeSeriesChecker:
             for col in schema.time_config.time_columns:
                 stmt = stmt.where(table.c[col].is_not(None))
             df = read_database_query(stmt, conn)
-            actual = set(schema.time_config.convert_database_timestamps(df))
+            actual = set(schema.time_config.list_timestamps_from_dataframe(df))
             diff = actual.symmetric_difference(expected)
             if diff:
                 msg = f"Actual timestamps do not match expected timestamps: {diff}"

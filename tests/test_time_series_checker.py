@@ -42,7 +42,7 @@ def _run_test(df: pd.DataFrame, length: int, message: str) -> None:
             length=length,
             interval_type=TimeIntervalType.PERIOD_BEGINNING,
             time_columns=["timestamp"],
-            time_zone=TimeZone.UTC,
+            time_zone=TimeZone.EST,
         ),
         time_array_id_columns=["generator"],
         value_column="value",
@@ -53,15 +53,26 @@ def _run_test(df: pd.DataFrame, length: int, message: str) -> None:
 
 
 def _get_inputs_for_invalid_datetimes():
-    tzinfo = ZoneInfo("UTC")
+    tzinfo = ZoneInfo("EST")
+    utc_tzinfo = ZoneInfo("UTC")
     df = pd.DataFrame(
         {
             "timestamp": [
-                datetime(2020, 1, 1, 0).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 2).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 3).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 4).replace(tzinfo=tzinfo),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 2, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 3, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 4, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
             ],
             "generator": ["gen1", "gen1", "gen1", "gen1", "gen1"],
             "value": [1.0, 2.0, 3.0, 4.0, 5.0],
@@ -71,16 +82,27 @@ def _get_inputs_for_invalid_datetimes():
 
 
 def _get_inputs_for_mismatched_time_array_lengths():
-    tzinfo = ZoneInfo("UTC")
+    tzinfo = ZoneInfo("EST")
+    utc_tzinfo = ZoneInfo("UTC")
     df = pd.DataFrame(
         {
             "timestamp": [
-                datetime(2020, 1, 1, 0).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 0).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
                 # This one is duplicate.
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
             ],
             "generator": ["gen1", "gen1", "gen2", "gen2", "gen2"],
             "value": [1.0, 2.0, 3.0, 4.0, 5.0],
@@ -90,18 +112,31 @@ def _get_inputs_for_mismatched_time_array_lengths():
 
 
 def _get_inputs_for_incorrect_lengths():
-    tzinfo = ZoneInfo("UTC")
+    tzinfo = ZoneInfo("EST")
+    utc_tzinfo = ZoneInfo("UTC")
     df = pd.DataFrame(
         {
             "timestamp": [
-                datetime(2020, 1, 1, 0).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
                 # This one is duplicate.
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 0).replace(tzinfo=tzinfo),
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
                 # This one is duplicate.
-                datetime(2020, 1, 1, 1).replace(tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
+                .astimezone(tz=utc_tzinfo)
+                .replace(tzinfo=None),
             ],
             "generator": ["gen1", "gen1", "gen1", "gen2", "gen2", "gen2"],
             "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],

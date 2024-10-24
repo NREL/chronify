@@ -109,6 +109,8 @@ _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
     duckdb.typing.DOUBLE.id: Double,  # type: ignore
     duckdb.typing.INTEGER.id: Integer,  # type: ignore
     duckdb.typing.TIMESTAMP.id: DateTime,  # type: ignore
+    # TODO
+    # duckdb.typing.TIMESTAMP_TZ.id: DateTime,  # type: ignore
     duckdb.typing.VARCHAR.id: String,  # type: ignore
 }
 

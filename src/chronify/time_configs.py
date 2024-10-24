@@ -145,19 +145,25 @@ class TimeBaseModel(BaseModel, abc.ABC):
 
         Returns
         -------
-        list[datetime]
+        list[Any]
         """
         return list(self.iter_timestamps())
+
+    @abc.abstractmethod
+    def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
+        """Return a list of timestamps present in DataFrame.
+        Type of the timestamps depends on the class.
+
+        Returns
+        -------
+        list[Any]
+        """
 
     @abc.abstractmethod
     def iter_timestamps(self) -> Generator[Any, None, None]:
         """Return an iterator over all time indexes in the table.
         Type of the time is dependent on the class.
         """
-
-    @abc.abstractmethod
-    def convert_database_timestamps(self, df: pd.DataFrame) -> list[Any]:
-        """Convert timestamps from the database."""
 
 
 class DatetimeRange(TimeBaseModel):
@@ -196,21 +202,19 @@ class DatetimeRange(TimeBaseModel):
             return start.replace(tzinfo=zone_info)
         return start
 
-    def convert_database_timestamps(self, df: pd.DataFrame) -> list[datetime]:
-        assert self.time_zone is not None
-        tzinfo = get_zone_info(self.time_zone)
+    def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
         time_column = self.get_time_column()
-        return df[time_column].apply(lambda x: x.astimezone(tzinfo)).to_list()
+        return df[time_column].to_list()
 
     def get_time_column(self) -> str:
         """Return the time column."""
         return self.time_columns[0]
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
-        tz_info = self.start.tzinfo
         for i in range(self.length):
-            cur = self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution
-            cur = adjust_timestamp_by_dst_offset(cur.astimezone(tz_info), self.resolution)
+            cur = (self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution).replace(
+                tzinfo=None
+            )
             month = cur.month
             day = cur.day
             if not (

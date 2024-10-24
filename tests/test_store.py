@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import duckdb
 import pandas as pd
 import pytest
-from sqlalchemy import Double, Table, create_engine, select
+from sqlalchemy import DateTime, Double, Table, create_engine, select
 from chronify.csv_io import read_csv
 from chronify.duckdb.functions import unpivot
 from chronify.exceptions import ConflictingInputsError, InvalidTable
@@ -27,12 +27,13 @@ def generators_schema():
         length=8784,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         time_columns=["timestamp"],
-        time_zone=TimeZone.UTC,
+        time_zone=TimeZone.EST,
     )
 
     src_schema = CsvTableSchema(
         time_config=time_config,
         column_dtypes=[
+            ColumnDType(name="timestamp", dtype=DateTime),
             ColumnDType(name="gen1", dtype=Double),
             ColumnDType(name="gen2", dtype=Double),
             ColumnDType(name="gen3", dtype=Double),
@@ -68,6 +69,7 @@ def test_ingest_csv(tmp_path, generators_schema):
     src_schema2 = CsvTableSchema(
         time_config=src_schema.time_config,
         column_dtypes=[
+            ColumnDType(name="timestamp", dtype=DateTime),
             ColumnDType(name="g1b", dtype=Double),
             ColumnDType(name="g2b", dtype=Double),
             ColumnDType(name="g3b", dtype=Double),
@@ -102,6 +104,7 @@ def test_load_parquet(tmp_path):
     src_schema = CsvTableSchema(
         time_config=time_config,
         column_dtypes=[
+            ColumnDType(name="timestamp", dtype=DateTime),
             ColumnDType(name="gen1", dtype=Double),
             ColumnDType(name="gen2", dtype=Double),
             ColumnDType(name="gen3", dtype=Double),
@@ -120,7 +123,7 @@ def test_load_parquet(tmp_path):
     rel2 = unpivot(rel, ("gen1", "gen2", "gen3"), "generator", "value")  # noqa: F841
     rel3 = duckdb.sql(
         """
-            SELECT CAST(timezone('EST', timestamp) AS TIMESTAMPTZ) AS timestamp
+            SELECT timezone('UTC', timezone('EST', timestamp)) AS timestamp
             ,generator
             ,value from rel2
         """
