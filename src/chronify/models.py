@@ -90,8 +90,6 @@ _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
     duckdb.typing.DOUBLE.id: Double,  # type: ignore
     duckdb.typing.INTEGER.id: Integer,  # type: ignore
     duckdb.typing.TIMESTAMP.id: DateTime,  # type: ignore
-    # TODO
-    # duckdb.typing.TIMESTAMP_TZ.id: DateTime,  # type: ignore
     duckdb.typing.VARCHAR.id: String,  # type: ignore
 }
 
@@ -102,6 +100,10 @@ _SQLALCHEMY_TYPES_TO_DUCKDB_TYPES: dict[Any, str] = {
 
 def get_sqlalchemy_type_from_duckdb(duckdb_type: duckdb.typing.DuckDBPyType) -> Type:  # type: ignore
     """Return the sqlalchemy type for a duckdb type."""
+    if duckdb_type == duckdb.typing.TIMESTAMP_TZ:  # type: ignore
+        msg = "TIMESTAMP_TZ is not handled yet"
+        raise NotImplementedError(msg)
+
     sqlalchemy_type = _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.get(duckdb_type.id)
     if sqlalchemy_type is None:
         msg = f"There is no sqlalchemy mapping for {duckdb_type=}"
@@ -139,7 +141,7 @@ class ColumnDType(ChronifyBaseModel):
                 raise ValueError(msg)
             data["dtype"] = val
         else:
-            msg = "dtype is an unsupported type: {type(dtype)}. It must be a str or type."
+            msg = f"dtype is an unsupported type: {type(dtype)}. It must be a str or type."
             raise ValueError(msg)
         return data
 
@@ -169,7 +171,7 @@ class CsvTableSchema(TableSchemaBase):
         ),
     ]
     value_columns: Annotated[
-        list[str], Field(description="Column in the table that contain values.")
+        list[str], Field(description="Columns in the table that contain values.")
     ]
 
     @field_validator("value_columns")

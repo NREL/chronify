@@ -67,7 +67,7 @@ class TimeSeriesChecker:
         assert result2 is not None
 
         if result2[0] != 1:
-            msg = "All time arrays must have the same length. There are {result2[0]} different lengths"
+            msg = f"All time arrays must have the same length. There are {result2[0]} different lengths"
             raise InvalidTable(msg)
 
         query3 = f"SELECT DISTINCT count_by_ta AS counts FROM {table_name}"
@@ -75,7 +75,5 @@ class TimeSeriesChecker:
         assert result3 is not None
         actual_count = result3[0]
         if actual_count != schema.time_config.length:
-            msg = (
-                "Time arrays must have length={schema.time_config.length}. Actual = {actual_count}"
-            )
+            msg = f"Time arrays must have length={schema.time_config.length}. Actual = {actual_count}"
             raise InvalidTable(msg)
