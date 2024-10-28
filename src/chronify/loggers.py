@@ -23,7 +23,7 @@ def setup_logging(
     file_level: str = "DEBUG",
     mode: str = "w",
     rotation: Optional[str] = "10 MB",
-    packages: Optional[Iterable] = None,
+    packages: Optional[Iterable[str]] = None,
 ) -> None:
     """Configures logging to file and console.
 

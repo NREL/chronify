@@ -1,5 +1,7 @@
 # Copied this code from https://github.com/sqlalchemy/sqlalchemy/wiki/Views
 
+from typing import Any
+
 import sqlalchemy as sa
 from sqlalchemy import Engine, MetaData, Selectable, TableClause
 from sqlalchemy.ext import compiler
@@ -8,17 +10,17 @@ from sqlalchemy.sql import table
 
 
 class CreateView(DDLElement):
-    def __init__(self, name, selectable):
+    def __init__(self, name: str, selectable: Selectable) -> None:
         self.name = name
         self.selectable = selectable
 
 
 class DropView(DDLElement):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
 
 
-@compiler.compiles(CreateView)
+@compiler.compiles(CreateView)  # type: ignore
 def _create_view(element, compiler, **kw):
     return "CREATE VIEW %s AS %s" % (
         element.name,
@@ -26,16 +28,16 @@ def _create_view(element, compiler, **kw):
     )
 
 
-@compiler.compiles(DropView)
+@compiler.compiles(DropView)  # type: ignore
 def _drop_view(element, compiler, **kw):
     return "DROP VIEW %s" % (element.name)
 
 
-def _view_exists(ddl, target, connection, **kw):
+def _view_exists(ddl: Any, target: Any, connection: Any, **kw: Any) -> Any:
     return ddl.name in sa.inspect(connection).get_view_names()
 
 
-def _view_doesnt_exist(ddl, target, connection, **kw):
+def _view_doesnt_exist(ddl: Any, target: Any, connection: Any, **kw: Any) -> bool:
     return not _view_exists(ddl, target, connection, **kw)
 
 

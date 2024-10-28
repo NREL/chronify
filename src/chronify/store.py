@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from loguru import logger
@@ -15,7 +15,7 @@ from chronify.models import (
     TableSchemaBase,
     get_sqlalchemy_type_from_duckdb,
 )
-from chronify.sqlalchemy.functions import read_database_query
+from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import TimeSeriesChecker
 from chronify.utils.sql import make_temp_view_name
@@ -26,7 +26,10 @@ class Store:
     """Data store for time series data"""
 
     def __init__(
-        self, engine: Optional[Engine] = None, engine_name: Optional[str] = None, **connect_kwargs
+        self,
+        engine: Optional[Engine] = None,
+        engine_name: Optional[str] = None,
+        **connect_kwargs: Any,
     ) -> None:
         """Construct the Store.
 
@@ -121,8 +124,8 @@ class Store:
                     resolution=dst_schema.time_config.resolution,
                     length=dst_schema.time_config.length,
                     time_array_id_columns=src_schema.time_array_id_columns,
-                    time_column=dst_schema.time_config.time_columns[0],
-                    timestamps=list(src_schema.time_config.iter_timestamps()),
+                    time_column=dst_schema.time_config.time_column,
+                    timestamps=src_schema.time_config.list_timestamps(),
                 )
             else:
                 cls_name = dst_schema.time_config.__class__.__name__
@@ -137,20 +140,19 @@ class Store:
             table = Table(dst_schema.name, self._metadata, *columns)
             table.create(self._engine)
 
-        df = rel.pl()
         with self._engine.begin() as conn:
-            df.write_database(dst_schema.name, connection=conn, if_table_exists="append")
+            write_database(rel.to_df(), conn, dst_schema)
             conn.commit()
         self.update_table_schema()
 
-    def read_query(self, query: Selectable | str) -> pd.DataFrame:
+    def read_query(self, query: Selectable | str, schema: TableSchema) -> pd.DataFrame:
         """Return the query result as a pandas DataFrame."""
         with self._engine.begin() as conn:
-            return read_database_query(query, conn)
+            return read_database(query, conn, schema)
 
-    def read_table(self, name: str) -> pd.DataFrame:
+    def read_table(self, schema: TableSchema) -> pd.DataFrame:
         """Return the table as a pandas DataFrame."""
-        return self.read_query(f"select * from {name}")
+        return self.read_query(f"select * from {schema.name}", schema)
 
     def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
         """Write the result of a query to a Parquet file."""

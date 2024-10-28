@@ -2,19 +2,15 @@ import abc
 from collections.abc import Generator
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union, Literal
-from zoneinfo import ZoneInfo
+from typing import Any, Union, Literal
 
 import pandas as pd
 from pydantic import (
-    BaseModel,
     Field,
-    ValidationInfo,
-    field_validator,
-    model_validator,
 )
 from typing_extensions import Annotated
 
+from chronify.base_models import ChronifyBaseModel
 from chronify.time import (
     DatetimeFormat,
     DaylightSavingFallBackType,
@@ -24,7 +20,6 @@ from chronify.time import (
     TimeIntervalType,
     TimeType,
     TimeZone,
-    get_zone_info,
 )
 
 # from chronify.time_utils import (
@@ -39,7 +34,7 @@ from chronify.time import (
 logger = logging.getLogger(__name__)
 
 
-class AlignedTime(BaseModel):
+class AlignedTime(ChronifyBaseModel):
     """Data has absolute timestamps that are aligned with the same start and end
     for each geography."""
 
@@ -53,7 +48,7 @@ class AlignedTime(BaseModel):
     ]
 
 
-class LocalTimeAsStrings(BaseModel):
+class LocalTimeAsStrings(ChronifyBaseModel):
     """Data has absolute timestamps formatted as strings with offsets from UTC.
     They are aligned for each geography when adjusted for time zone but staggered
     in an absolute time scale."""
@@ -85,7 +80,7 @@ class LocalTimeAsStrings(BaseModel):
     #    return data_str_format
 
 
-class DaylightSavingAdjustment(BaseModel):
+class DaylightSavingAdjustment(ChronifyBaseModel):
     """Defines how to drop and add data along with timestamps to convert standard time
     load profiles to clock time"""
 
@@ -106,7 +101,7 @@ class DaylightSavingAdjustment(BaseModel):
     ] = DaylightSavingFallBackType.NONE
 
 
-class TimeBasedDataAdjustment(BaseModel):
+class TimeBasedDataAdjustment(ChronifyBaseModel):
     """Defines how data needs to be adjusted with respect to time.
     For leap day adjustment, up to one full day of timestamps and data are dropped.
     For daylight savings, the dataframe is adjusted alongside the timestamps.
@@ -130,13 +125,9 @@ class TimeBasedDataAdjustment(BaseModel):
     ] = DaylightSavingAdjustment()
 
 
-class TimeBaseModel(BaseModel, abc.ABC):
+class TimeBaseModel(ChronifyBaseModel, abc.ABC):
     """Defines a base model common to all time dimensions."""
 
-    time_columns: Annotated[
-        list[str],
-        Field(description="Columns in the table that represent time."),
-    ]
     length: int
 
     def list_timestamps(self) -> list[Any]:
@@ -148,6 +139,10 @@ class TimeBaseModel(BaseModel, abc.ABC):
         list[Any]
         """
         return list(self.iter_timestamps())
+
+    def needs_utc_conversion(self, engine_name: str) -> bool:
+        """Return True if the data needs its time to be converted to/from UTC."""
+        return False
 
     @abc.abstractmethod
     def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
@@ -165,56 +160,38 @@ class TimeBaseModel(BaseModel, abc.ABC):
         Type of the time is dependent on the class.
         """
 
+    @abc.abstractmethod
+    def list_time_columns(self) -> list[str]:
+        """Return the columns in the table that represent time."""
+
 
 class DatetimeRange(TimeBaseModel):
     """Defines a time range that uses Python datetime instances."""
 
+    time_column: str = Field(description="Column in the table that represents time.")
     time_type: Literal[TimeType.DATETIME] = TimeType.DATETIME
-    time_zone: Annotated[
-        Optional[TimeZone],
-        Field(
-            description="Time zone if the timestamps are timezone-aware. "
-            "If None, timestamps are timezone-naive.",
-        ),
-    ] = None
-    start: datetime  # TODO: what if the time zone is specified here?
+    start: datetime = Field(
+        description="Start time of the range. If it includes a time zone, the timestamps in "
+        "the data must also include time zones."
+    )
     resolution: timedelta
     time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
     measurement_type: MeasurementType = MeasurementType.TOTAL
 
-    @model_validator(mode="after")
-    def check_time_columns(self) -> "DatetimeRange":
-        if len(self.time_columns) != 1:
-            msg = f"{self.time_columns=} must have one column"
-            raise ValueError(msg)
-        return self
-
-    @field_validator("start")
-    @classmethod
-    def fix_time_zone(cls, start: datetime, info: ValidationInfo) -> datetime:
-        if "time_zone" not in info.data:
-            return start
-        if start.tzinfo is not None:
-            return start
-        if info.data["time_zone"] is not None:
-            zone_info = get_zone_info(info.data["time_zone"])
-            return start.replace(tzinfo=zone_info)
-        return start
+    def is_time_zone_naive(self) -> bool:
+        """Return True if the timestamps in the range do not have time zones."""
+        return self.start.tzinfo is None
 
     def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
-        time_column = self.get_time_column()
-        return df[time_column].to_list()
+        return df[self.time_column].to_list()
 
-    def get_time_column(self) -> str:
-        """Return the time column."""
-        return self.time_columns[0]
+    def list_time_columns(self) -> list[str]:
+        return [self.time_column]
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         for i in range(self.length):
-            cur = (self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution).replace(
-                tzinfo=None
-            )
+            cur = adjust_timestamp_by_dst_offset(self.start + i * self.resolution, self.resolution)
             month = cur.month
             day = cur.day
             if not (
@@ -237,10 +214,14 @@ class DatetimeRange(TimeBaseModel):
                     ):
                         yield cur
 
+    def needs_utc_conversion(self, engine_name: str) -> bool:
+        return engine_name == "sqlite" and not self.is_time_zone_naive()
+
 
 class AnnualTimeRange(TimeBaseModel):
     """Defines a time range that uses years as integers."""
 
+    time_column: str = Field(description="Column in the table that represents time.")
     time_type: Literal[TimeType.ANNUAL] = TimeType.ANNUAL
     start: int
     # TODO: measurement_type must be TOTAL
@@ -248,6 +229,9 @@ class AnnualTimeRange(TimeBaseModel):
     def iter_timestamps(self) -> Generator[int, None, None]:
         for i in range(1, self.length + 1):
             yield i
+
+    def list_time_columns(self) -> list[str]:
+        return [self.time_column]
 
 
 class IndexTimeRange(TimeBaseModel):
@@ -298,10 +282,14 @@ class IndexTimeRange(TimeBaseModel):
 class RepresentativePeriodTimeRange(TimeBaseModel):
     """Defines a representative time dimension."""
 
+    time_columns: list[str] = Field(description="Columns in the table that represent time.")
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
     measurement_type: MeasurementType
     time_interval_type: TimeIntervalType
     # TODO
+
+    def list_time_columns(self) -> list[str]:
+        return self.time_columns
 
 
 TimeConfig = Annotated[

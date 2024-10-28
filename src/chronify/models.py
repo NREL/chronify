@@ -2,32 +2,13 @@ import re
 from typing import Any, Optional, Type
 
 import duckdb.typing
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from sqlalchemy import BigInteger, Boolean, DateTime, Double, Integer, String
 from typing_extensions import Annotated
 
+from chronify.base_models import ChronifyBaseModel
 from chronify.exceptions import InvalidParameter
 from chronify.time_configs import TimeConfig
-
-
-def make_model_config(**kwargs) -> ConfigDict:
-    """Return a Pydantic config"""
-    return ConfigDict(
-        str_strip_whitespace=True,
-        validate_assignment=True,
-        validate_default=True,
-        extra="forbid",
-        use_enum_values=False,
-        arbitrary_types_allowed=True,
-        populate_by_name=True,
-        **kwargs,  # type: ignore
-    )
-
-
-class ChronifyBaseModel(BaseModel):
-    """Base model for all TSS data models"""
-
-    model_config = make_model_config()
 
 
 REGEX_NAME_REQUIREMENT = re.compile(r"^\w+$")
@@ -50,7 +31,7 @@ class TableSchemaBase(ChronifyBaseModel):
     @field_validator("time_config")
     @classmethod
     def check_time_config(cls, time_config: TimeConfig) -> TimeConfig:
-        for column in time_config.time_columns:
+        for column in time_config.list_time_columns():
             _check_name(column)
         return time_config
 
@@ -63,7 +44,7 @@ class TableSchemaBase(ChronifyBaseModel):
 
     def list_columns(self) -> list[str]:
         """Return the column names in the schema."""
-        return self.time_array_id_columns + self.time_config.time_columns
+        return self.time_array_id_columns + self.time_config.list_time_columns()
 
 
 class TableSchema(TableSchemaBase):
@@ -114,7 +95,9 @@ _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
     duckdb.typing.VARCHAR.id: String,  # type: ignore
 }
 
-_SQLALCHEMY_TYPES_TO_DUCKDB_TYPES = {v: k for k, v in _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.items()}
+_SQLALCHEMY_TYPES_TO_DUCKDB_TYPES: dict[Any, str] = {
+    v: k for k, v in _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.items()
+}
 
 
 def get_sqlalchemy_type_from_duckdb(duckdb_type: duckdb.typing.DuckDBPyType) -> Type:  # type: ignore
@@ -126,7 +109,7 @@ def get_sqlalchemy_type_from_duckdb(duckdb_type: duckdb.typing.DuckDBPyType) -> 
     return sqlalchemy_type
 
 
-def get_duckdb_type_from_sqlalchemy(sqlalchemy_type) -> str:
+def get_duckdb_type_from_sqlalchemy(sqlalchemy_type: Any) -> str:
     """Return the duckdb type for a sqlalchemy type."""
     duckdb_type = _SQLALCHEMY_TYPES_TO_DUCKDB_TYPES.get(sqlalchemy_type)
     if duckdb_type is None:
@@ -139,7 +122,7 @@ class ColumnDType(ChronifyBaseModel):
     """Defines the dtype of a column."""
 
     name: str
-    dtype: Type
+    dtype: Any
 
     @model_validator(mode="before")
     @classmethod

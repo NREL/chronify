@@ -2,17 +2,18 @@ import fileinput
 import shutil
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import duckdb
 import pandas as pd
 import pytest
-from sqlalchemy import DateTime, Double, Table, create_engine, select
+from sqlalchemy import DateTime, Double, Engine, Table, create_engine, select
 from chronify.csv_io import read_csv
 from chronify.duckdb.functions import unpivot
 from chronify.exceptions import ConflictingInputsError, InvalidTable
 from chronify.models import ColumnDType, CsvTableSchema, TableSchema
 from chronify.store import Store
-from chronify.time import TimeIntervalType, TimeZone
+from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
 
 
@@ -22,12 +23,11 @@ GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
 @pytest.fixture
 def generators_schema():
     time_config = DatetimeRange(
-        start=datetime(year=2020, month=1, day=1),
+        start=datetime(year=2020, month=1, day=1, tzinfo=ZoneInfo("EST")),
         resolution=timedelta(hours=1),
         length=8784,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
-        time_columns=["timestamp"],
-        time_zone=TimeZone.EST,
+        time_column="timestamp",
     )
 
     src_schema = CsvTableSchema(
@@ -51,11 +51,12 @@ def generators_schema():
     yield src_schema, dst_schema
 
 
-def test_ingest_csv(tmp_path, generators_schema):
+def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema):
+    engine = iter_engines
     src_schema, dst_schema = generators_schema
-    store = Store()
+    store = Store(engine=engine)
     store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
-    df = store.read_table(dst_schema.name)
+    df = store.read_table(dst_schema)
     assert len(df) == 8784 * 3
 
     new_file = tmp_path / "gen2.csv"
@@ -79,26 +80,27 @@ def test_ingest_csv(tmp_path, generators_schema):
         time_array_id_columns=[],
     )
     store.ingest_from_csv(new_file, src_schema2, dst_schema)
-    df = store.read_table(dst_schema.name)
+    df = store.read_table(dst_schema)
     assert len(df) == 8784 * 3 * 2
+    all(df.timestamp.unique() == dst_schema.time_config.list_timestamps())
 
 
-def test_invalid_schema(generators_schema):
+def test_invalid_schema(iter_engines: Engine, generators_schema):
+    engine = iter_engines
     src_schema, dst_schema = generators_schema
     src_schema.value_columns = ["g1", "g2", "g3"]
-    store = Store()
+    store = Store(engine=engine)
     with pytest.raises(InvalidTable):
         store.ingest_from_csv(GENERATOR_TIME_SERIES_FILE, src_schema, dst_schema)
 
 
 def test_load_parquet(tmp_path):
     time_config = DatetimeRange(
-        start=datetime(year=2020, month=1, day=1),
+        start=datetime(year=2020, month=1, day=1, tzinfo=ZoneInfo("EST")),
         resolution=timedelta(hours=1),
         length=8784,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
-        time_columns=["timestamp"],
-        time_zone=TimeZone.EST,
+        time_column="timestamp",
     )
 
     src_schema = CsvTableSchema(
@@ -123,15 +125,18 @@ def test_load_parquet(tmp_path):
     rel2 = unpivot(rel, ("gen1", "gen2", "gen3"), "generator", "value")  # noqa: F841
     rel3 = duckdb.sql(
         """
-            SELECT timezone('UTC', timezone('EST', timestamp)) AS timestamp
+            SELECT timezone('EST', timestamp) AS timestamp
             ,generator
             ,value from rel2
         """
     )
-    out_file = tmp_path / "gen.parquet"
+    out_file = tmp_path / "gen2.parquet"
     rel3.to_parquet(str(out_file))
     store = Store()
     store.load_table(out_file, dst_schema)
+    df = store.read_table(dst_schema)
+    assert len(df) == 8784 * 3
+    all(df.timestamp.unique() == time_config.list_timestamps())
 
 
 def test_to_parquet(tmp_path, generators_schema):

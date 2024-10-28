@@ -2,7 +2,7 @@ from sqlalchemy import Connection, Engine, MetaData, Table, select, text
 
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
-from chronify.sqlalchemy.functions import read_database_query
+from chronify.sqlalchemy.functions import read_database
 from chronify.utils.sql import make_temp_view_name
 
 
@@ -21,14 +21,21 @@ class TimeSeriesChecker:
         expected = schema.time_config.list_timestamps()
         with self._engine.connect() as conn:
             table = Table(schema.name, self._metadata)
-            stmt = select(*(table.c[x] for x in schema.time_config.time_columns)).distinct()
-            for col in schema.time_config.time_columns:
+            time_columns = schema.time_config.list_time_columns()
+            stmt = select(*(table.c[x] for x in time_columns)).distinct()
+            for col in time_columns:
                 stmt = stmt.where(table.c[col].is_not(None))
-            df = read_database_query(stmt, conn)
+            df = read_database(stmt, conn, schema)
             actual = set(schema.time_config.list_timestamps_from_dataframe(df))
-            diff = actual.symmetric_difference(expected)
-            if diff:
-                msg = f"Actual timestamps do not match expected timestamps: {diff}"
+            match = sorted(actual) == expected
+            # TODO: This check doesn't work and I'm not sure why.
+            # diff = actual.symmetric_difference(expected)
+            # if diff:
+            #     msg = f"Actual timestamps do not match expected timestamps: {diff}"
+            #     # TODO: list diff on each side.
+            #     raise InvalidTable(msg)
+            if not match:
+                msg = "Actual timestamps do not match expected timestamps"
                 # TODO: list diff on each side.
                 raise InvalidTable(msg)
 
@@ -39,9 +46,11 @@ class TimeSeriesChecker:
             conn.execute(text(f"DROP TABLE IF EXISTS {tmp_name}"))
 
     @staticmethod
-    def _run_timestamp_checks_on_tmp_table(schema: TableSchema, conn: Connection, table_name: str):
+    def _run_timestamp_checks_on_tmp_table(
+        schema: TableSchema, conn: Connection, table_name: str
+    ) -> None:
         id_cols = ",".join(schema.time_array_id_columns)
-        filters = [f"{x} IS NOT NULL" for x in schema.time_config.time_columns]
+        filters = [f"{x} IS NOT NULL" for x in schema.time_config.list_time_columns()]
         where_clause = "AND ".join(filters)
         query = f"""
             CREATE TEMP TABLE {table_name} AS

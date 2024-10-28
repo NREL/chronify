@@ -1,145 +1,169 @@
 from datetime import datetime, timedelta
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pytest
-from sqlalchemy import MetaData, create_engine
+from sqlalchemy import (
+    Engine,
+    MetaData,
+)
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
-from chronify.time import TimeIntervalType, TimeZone
+from chronify.sqlalchemy.functions import write_database
+from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
 from chronify.time_series_checker import TimeSeriesChecker
 
 
-def test_invalid_datetimes():
-    """Test the case where there are missing timestamps."""
-    _run_test(*_get_inputs_for_invalid_datetimes())
+def test_valid_datetimes_with_tz(iter_engines: Engine):
+    """Valid timestamps with time zones."""
+    _run_test(iter_engines, *_get_inputs_for_valid_datetimes_with_tz())
 
 
-def test_mismatched_time_array_lengths():
-    """Test the case where some time arrays have different lengths."""
-    _run_test(*_get_inputs_for_mismatched_time_array_lengths())
+def test_valid_datetimes_without_tz(iter_engines: Engine):
+    """Valid timestamps without time zones."""
+    _run_test(iter_engines, *_get_inputs_for_valid_datetimes_without_tz())
 
 
-def test_incorrect_lengths():
-    """Test the case where all time arrays are consistent but have the wrong length."""
-    _run_test(*_get_inputs_for_incorrect_lengths())
+def test_invalid_datetimes(iter_engines: Engine):
+    """Timestamps do not match the schema."""
+    _run_test(iter_engines, *_get_inputs_for_incorrect_datetimes())
 
 
-def _run_test(df: pd.DataFrame, length: int, message: str) -> None:
-    engine = create_engine("duckdb:///:memory:")
+def test_mismatched_time_array_lengths(iter_engines: Engine):
+    """Some time arrays have different lengths."""
+    _run_test(iter_engines, *_get_inputs_for_mismatched_time_array_lengths())
+
+
+def test_incorrect_lengths(iter_engines: Engine):
+    """All time arrays are consistent but have the wrong length."""
+    _run_test(iter_engines, *_get_inputs_for_incorrect_lengths())
+
+
+def _run_test(
+    engine: Engine,
+    df: pd.DataFrame,
+    tzinfo: Optional[ZoneInfo],
+    length: int,
+    message: Optional[str],
+) -> None:
     metadata = MetaData()
-    with engine.connect() as conn:
-        df.to_sql("generators", conn)
-        conn.commit()
-    metadata.reflect(engine)
-
     schema = TableSchema(
         name="generators",
         time_config=DatetimeRange(
-            start=datetime(year=2020, month=1, day=1),
+            start=datetime(year=2020, month=1, day=1, tzinfo=tzinfo),
             resolution=timedelta(hours=1),
             length=length,
             interval_type=TimeIntervalType.PERIOD_BEGINNING,
-            time_columns=["timestamp"],
-            time_zone=TimeZone.EST,
+            time_column="timestamp",
         ),
         time_array_id_columns=["generator"],
         value_column="value",
     )
+    with engine.connect() as conn:
+        write_database(df, conn, schema)
+        conn.commit()
+    metadata.reflect(engine)
+
     checker = TimeSeriesChecker(engine, metadata)
-    with pytest.raises(InvalidTable, match=message):
+    if message is None:
         checker.check_timestamps(schema)
+    else:
+        with pytest.raises(InvalidTable, match=message):
+            checker.check_timestamps(schema)
 
 
-def _get_inputs_for_invalid_datetimes():
+def _get_inputs_for_valid_datetimes_with_tz() -> tuple[pd.DataFrame, ZoneInfo, int, None]:
     tzinfo = ZoneInfo("EST")
-    utc_tzinfo = ZoneInfo("UTC")
     df = pd.DataFrame(
         {
             "timestamp": [
-                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 2, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 3, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 4, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 2, tzinfo=tzinfo),
+            ],
+            "generator": ["gen1", "gen1", "gen1"],
+            "value": [1.0, 2.0, 3.0],
+        }
+    )
+    return df, tzinfo, len(df), None
+
+
+def _get_inputs_for_valid_datetimes_without_tz() -> tuple[pd.DataFrame, None, int, None]:
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                datetime(2020, 1, 1, 0),
+                datetime(2020, 1, 1, 1),
+                datetime(2020, 1, 1, 2),
+            ],
+            "generator": ["gen1", "gen1", "gen1"],
+            "value": [1.0, 2.0, 3.0],
+        }
+    )
+    return df, None, len(df), None
+
+
+def _get_inputs_for_incorrect_datetimes() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
+    data_tzinfo = ZoneInfo("America/New_York")
+    schema_tzinfo = ZoneInfo("MST")
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                datetime(2020, 1, 1, 0, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 2, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 3, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 4, tzinfo=data_tzinfo),
             ],
             "generator": ["gen1", "gen1", "gen1", "gen1", "gen1"],
             "value": [1.0, 2.0, 3.0, 4.0, 5.0],
         }
     )
-    return df, 10, "Actual timestamps do not match expected timestamps"
+    return (
+        df,
+        schema_tzinfo,
+        len(df),
+        "Actual timestamps do not match expected timestamps",
+    )
 
 
-def _get_inputs_for_mismatched_time_array_lengths():
+def _get_inputs_for_mismatched_time_array_lengths() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
     tzinfo = ZoneInfo("EST")
-    utc_tzinfo = ZoneInfo("UTC")
     df = pd.DataFrame(
         {
             "timestamp": [
-                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
                 # This one is duplicate.
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
             ],
             "generator": ["gen1", "gen1", "gen2", "gen2", "gen2"],
             "value": [1.0, 2.0, 3.0, 4.0, 5.0],
         }
     )
-    return df, 2, "All time arrays must have the same length."
+    return df, tzinfo, 2, "All time arrays must have the same length."
 
 
-def _get_inputs_for_incorrect_lengths():
+def _get_inputs_for_incorrect_lengths() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
     tzinfo = ZoneInfo("EST")
-    utc_tzinfo = ZoneInfo("UTC")
     df = pd.DataFrame(
         {
             "timestamp": [
-                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
                 # This one is duplicate.
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 0, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
                 # This one is duplicate.
-                datetime(2020, 1, 1, 1, tzinfo=tzinfo)
-                .astimezone(tz=utc_tzinfo)
-                .replace(tzinfo=None),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
             ],
             "generator": ["gen1", "gen1", "gen1", "gen2", "gen2", "gen2"],
             "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
         }
     )
-    return df, 2, "Time arrays must have length="
+    return df, tzinfo, 2, "Time arrays must have length="
