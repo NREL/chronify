@@ -85,6 +85,20 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema):
     all(df.timestamp.unique() == dst_schema.time_config.list_timestamps())
 
 
+def test_ingest_csv_with_time_zones(iter_engines: Engine, tmp_path, generators_schema):
+    csv_file = tmp_path / "gen.csv"
+    df = duckdb.read_csv(GENERATOR_TIME_SERIES_FILE).to_df()
+    df["timestamp"] = df["timestamp"].dt.tz_localize("EST")
+    df.to_csv(csv_file, index=False)
+    engine = iter_engines
+    src_schema, dst_schema = generators_schema
+    store = Store(engine=engine)
+    store.ingest_from_csv(csv_file, src_schema, dst_schema)
+    df = store.read_table(dst_schema)
+    assert len(df) == 8784 * 3
+    all(df.timestamp.unique() == dst_schema.time_config.list_timestamps())
+
+
 def test_invalid_schema(iter_engines: Engine, generators_schema):
     engine = iter_engines
     src_schema, dst_schema = generators_schema
