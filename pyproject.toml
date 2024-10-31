@@ -26,16 +26,22 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "duckdb~=1.0.0",
+    "duckdb ~= 1.1.0",
     "duckdb_engine",
     "loguru",
-    "rich",
+    "pandas >= 2.2, < 3",
+    "polars ~= 1.11.0",
+    "pyarrow",
     "pydantic >= 2.7, < 3",
-    "sqlalchemy",
+    "pytz",
+    "rich",
+    "sqlalchemy == 2.0.35",  # 2.0.36 introduced code that duckdb_engine doesn't handle.
+    "tzdata",
 ]
 [project.optional-dependencies]
 dev = [
     "mypy",
+    "pandas-stubs",
     "pre-commit",
     "pytest",
     "pytest-cov",
@@ -46,6 +52,12 @@ dev = [
 Documentation = "https://github.com/NREL/chronify#readme"
 Issues = "https://github.com/NREL/chronify/issues"
 Source = "https://github.com/NREL/chronify"
+
+[tool.mypy]
+files = [
+  "src",
+]
+strict = true
 
 [tool.pytest.ini_options]
 pythonpath = "src"
