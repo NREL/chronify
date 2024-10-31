@@ -1,3 +1,29 @@
+"""Runs some performance tests with DuckDB, SQLite, Polars, and SQLAlchemy.
+
+As of October 2024, reading natively with DuckDB is fastest. Reading DuckDB with
+Polars through SQLAlchemy is close.
+
+Usage: ipython scripts/perf_tests.py
+
+Results on 10/31/2024:
+Run duckdb database with read_duckdb.
+939 μs ± 12.1 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+Run duckdb database with read_pandas.
+20.4 ms ± 304 μs per loop (mean ± std. dev. of 7 runs, 10 loops each)
+Run duckdb database with read_polars.
+1.5 ms ± 55.9 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+Run duckdb database with read_sqlalchemy.
+17.6 ms ± 107 μs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+Run sqlite database with read_duckdb.
+2 ms ± 98.4 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+Run sqlite database with read_pandas.
+15.9 ms ± 190 μs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+Run sqlite database with read_polars.
+20.9 ms ± 181 μs per loop (mean ± std. dev. of 7 runs, 10 loops each)
+Run sqlite database with read_sqlalchemy.
+13.4 ms ± 376 μs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+"""
+
 from datetime import datetime, timedelta
 
 import duckdb
@@ -8,7 +34,7 @@ from IPython import get_ipython
 from sqlalchemy import Double, text
 from chronify.models import ColumnDType, CsvTableSchema, TableSchema
 from chronify.store import Store
-from chronify.time import TimeIntervalType, TimeZone
+from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
 
 
@@ -44,8 +70,7 @@ def setup():
         resolution=timedelta(hours=1),
         length=8784,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
-        time_columns=["timestamp"],
-        time_zone=TimeZone.UTC,
+        time_column="timestamp",
     )
 
     src_schema = CsvTableSchema(
