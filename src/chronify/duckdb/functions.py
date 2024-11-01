@@ -57,3 +57,26 @@ def unpivot(
         )
         """
     return duckdb.sql(query)
+
+
+def join(
+    left_rel: DuckDBPyRelation,
+    right_rel: DuckDBPyRelation,
+    on: list[str],
+    how: str = "inner",
+) -> DuckDBPyRelation:
+    def get_join_statement(left_df, right_df, keys: list):
+        stmts = [f"{left_df.alias}.{key}={right_df.alias}.{key}" for key in keys]
+        return " and ".join(stmts)
+
+    def get_select_after_join_statement(left_df, right_df, keys: list):
+        left_cols = [f"{left_df.alias}.{x}" for x in left_df.columns]
+        right_cols = [x for x in right_df.columns if x not in keys]
+        return ", ".join(left_cols + right_cols)
+
+    join_stmt = get_join_statement(left_rel, right_rel, on)
+    select_stmt = get_select_after_join_statement(left_rel, right_rel, on)
+    query = f"SELECT {select_stmt} from {left_rel.alias} {how.upper()} JOIN {right_rel.alias} ON {join_stmt}"
+    breakpoint()
+    # return left_rel.join(right_rel, join_stmt).select(select_stmt)
+    return duckdb.sql(query)

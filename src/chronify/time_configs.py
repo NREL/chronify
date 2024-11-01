@@ -8,10 +8,12 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from pydantic import (
     Field,
+    field_validator,
 )
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
+from chronify.exceptions import InvalidParameter
 from chronify.time import (
     DatetimeFormat,
     DaylightSavingFallBackType,
@@ -296,6 +298,17 @@ class RepresentativePeriodTimeRange(TimeBaseModel):
     measurement_type: MeasurementType
     time_interval_type: TimeIntervalType
     # TODO
+
+    @field_validator("time_columns")
+    @classmethod
+    def check_columns(cls, columns: list[str]) -> list[str]:
+        type_1_columns = {"month", "day_of_week", "hour"}
+        type_2_columns = {"month", "is_weekday", "hour"}
+        if set(columns) != type_1_columns:
+            if set(columns) != type_2_columns:
+                msg = f"Unsupported {columns} for RepresentativePeriodTimeRange, expecting either {type_1_columns} or {type_2_columns}"
+                raise InvalidParameter(msg)
+        return columns
 
     def list_time_columns(self) -> list[str]:
         return self.time_columns

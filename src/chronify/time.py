@@ -149,7 +149,7 @@ def get_time_zone_offset(tz: TimeZone) -> str:
     return offset
 
 
-def get_standard_time(tz: TimeZone) -> TimeZone:
+def get_standard_timezone(tz: TimeZone) -> TimeZone:
     """Return the equivalent standard time zone."""
     match tz:
         case TimeZone.UTC:
@@ -173,7 +173,7 @@ def get_standard_time(tz: TimeZone) -> TimeZone:
             raise NotImplementedError(msg)
 
 
-def get_prevailing_time(tz: TimeZone) -> TimeZone:
+def get_prevailing_timezone(tz: TimeZone) -> TimeZone:
     """Return the equivalent prevailing time zone."""
     match tz:
         case TimeZone.UTC:
