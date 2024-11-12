@@ -17,7 +17,7 @@ from chronify.models import (
 )
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_configs import DatetimeRange, IndexTimeRange
-from chronify.time_series_checker import TimeSeriesChecker
+from chronify.time_series_checker import check_timestamps
 from chronify.utils.sql import make_temp_view_name
 from chronify.utils.sqlalchemy_view import create_view
 
@@ -132,16 +132,28 @@ class Store:
                 msg = f"IndexTimeRange cannot be converted to {cls_name}"
                 raise NotImplementedError(msg)
 
-        if self.has_table(dst_schema.name):
+        table_exists = self.has_table(dst_schema.name)
+        if table_exists:
             table = Table(dst_schema.name, self._metadata)
         else:
             dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in rel.dtypes]
-            columns = [Column(x, y) for x, y in zip(rel.columns, dtypes)]
-            table = Table(dst_schema.name, self._metadata, *columns)
+            table = Table(
+                dst_schema.name,
+                self._metadata,
+                *[Column(x, y) for x, y in zip(rel.columns, dtypes)],
+            )
             table.create(self._engine)
 
         with self._engine.begin() as conn:
             write_database(rel.to_df(), conn, dst_schema)
+            try:
+                check_timestamps(conn, table, dst_schema)
+            except Exception:
+                conn.rollback()
+                if not table_exists:
+                    table.drop(self._engine)
+                    self.update_table_schema()
+                raise
             conn.commit()
         self.update_table_schema()
 
@@ -152,7 +164,7 @@ class Store:
 
     def read_table(self, schema: TableSchema) -> pd.DataFrame:
         """Return the table as a pandas DataFrame."""
-        return self.read_query(f"select * from {schema.name}", schema)
+        return self.read_query(f"SELECT * FROM {schema.name}", schema)
 
     def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
         """Write the result of a query to a Parquet file."""
@@ -212,8 +224,9 @@ class Store:
         check_columns(columns, schema.list_columns())
 
     def _check_timestamps(self, schema: TableSchema) -> None:
-        checker = TimeSeriesChecker(self._engine, self._metadata)
-        checker.check_timestamps(schema)
+        with self._engine.connect() as conn:
+            table = Table(schema.name, self._metadata)
+            check_timestamps(conn, table, schema)
 
 
 def check_columns(table_columns: Iterable[str], schema_columns: Iterable[str]) -> None:

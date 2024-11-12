@@ -146,8 +146,8 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
         return False
 
     @abc.abstractmethod
-    def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
-        """Return a list of timestamps present in DataFrame.
+    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
+        """Return a list of distinct timestamps present in DataFrame.
         Type of the timestamps depends on the class.
 
         Returns
@@ -184,8 +184,8 @@ class DatetimeRange(TimeBaseModel):
         """Return True if the timestamps in the range do not have time zones."""
         return self.start.tzinfo is None
 
-    def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
-        return df[self.time_column].to_list()
+    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
+        return sorted(df[self.time_column].unique())
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
