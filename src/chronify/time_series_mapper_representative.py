@@ -82,6 +82,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
     def _create_mapping_dataframe_tz_naive(
         self, dft: pd.DataFrame, to_time_col: str
     ) -> pd.DataFrame:
+        """Create tz-naive time mapping dataframe"""
         dfm = dft.copy()
         dfm["month"] = dfm[to_time_col].dt.month
         dow = dfm[to_time_col].dt.day_of_week
@@ -100,6 +101,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
     def _create_mapping_dataframe_tz_aware(
         self, dft: pd.DataFrame, to_time_col: str
     ) -> pd.DataFrame:
+        """Create tz-aware time mapping dataframe according to to_schema.time_config"""
         with self._engine.connect() as conn:
             table = Table(self.from_schema.name, self._metadata)
             stmt = select(table.c["time_zone"]).distinct().where(table.c["time_zone"].is_not(None))
@@ -128,6 +130,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         return dfm
 
     def _apply_mapping(self, map_table_schema: TableSchema):
+        """Apply mapping to create result as a view according to_schema"""
         left_table = Table(self.from_schema.name, self._metadata)
         right_table = Table(map_table_schema.name, self._metadata)
         left_table_columns = [x.name for x in left_table.columns]
