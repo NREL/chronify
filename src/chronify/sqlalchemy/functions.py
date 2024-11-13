@@ -18,6 +18,9 @@ def read_database(query: Selectable | str, conn: Connection, schema: TableSchema
             df[config.time_column] = pd.to_datetime(df[config.time_column], utc=True)
         else:
             df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
+    elif conn.engine.name == "sqlite" and isinstance(config, DatetimeRange):
+        if isinstance(df[config.time_column].dtype, ObjectDType):
+            df[config.time_column] = pd.to_datetime(df[config.time_column], utc=False)
     return df
 
 
@@ -26,8 +29,8 @@ def write_database(df: pd.DataFrame, conn: Connection, schema: TableSchema) -> N
     config = schema.time_config
     if config.needs_utc_conversion(conn.engine.name):
         assert isinstance(config, DatetimeRange)
-        if isinstance(df.timestamp.dtype, DatetimeTZDtype):
+        if isinstance(df[config.time_column].dtype, DatetimeTZDtype):
             df[config.time_column] = df[config.time_column].dt.tz_convert("UTC")
         else:
             df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
-    pl.DataFrame(df).write_database(schema.name, connection=conn, if_table_exists="append")
+    pl.DataFrame(df).write_database(schema.name, connection=conn, if_table_exists="replace")

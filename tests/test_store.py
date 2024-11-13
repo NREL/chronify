@@ -95,6 +95,7 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
     )
     store.ingest_from_csv(new_file, src_schema2, dst_schema)
     df = store.read_table(dst_schema)
+    breakpoint()
     assert len(df) == 8784 * 3 * 2
     all(df.timestamp.unique() == dst_schema.time_config.list_timestamps())
 

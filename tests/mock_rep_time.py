@@ -73,6 +73,7 @@ def get_select_after_join_statement(left_df, right_df, keys: list):
 
 
 ## [4] Apply mapping in DUCKDB
+breakpoint()
 keys = ["id"]
 join_stmt = get_join_statement(ddfd, ddfg, keys)
 select_stmt = get_select_after_join_statement(ddfd, ddfg, keys)

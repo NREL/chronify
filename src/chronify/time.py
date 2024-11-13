@@ -36,6 +36,27 @@ class RepresentativePeriodFormat(StrEnum):
     )
 
 
+representative_weekday_column = {
+    RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR: "day_of_week",
+    RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR: "is_weekday",
+}
+
+representative_period_columns = {
+    RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR: [
+        "month",
+        representative_weekday_column[RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR],
+        "hour",
+    ],
+    RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR: [
+        "month",
+        representative_weekday_column[
+            RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR
+        ],
+        "hour",
+    ],
+}
+
+
 class LeapDayAdjustmentType(StrEnum):
     """Leap day adjustment enum types"""
 
@@ -149,7 +170,7 @@ def get_time_zone_offset(tz: TimeZone) -> str:
     return offset
 
 
-def get_standard_timezone(tz: TimeZone) -> TimeZone:
+def get_standard_time(tz: TimeZone) -> TimeZone:
     """Return the equivalent standard time zone."""
     match tz:
         case TimeZone.UTC:
@@ -173,7 +194,7 @@ def get_standard_timezone(tz: TimeZone) -> TimeZone:
             raise NotImplementedError(msg)
 
 
-def get_prevailing_timezone(tz: TimeZone) -> TimeZone:
+def get_prevailing_time(tz: TimeZone) -> TimeZone:
     """Return the equivalent prevailing time zone."""
     match tz:
         case TimeZone.UTC:
