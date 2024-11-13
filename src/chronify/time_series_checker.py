@@ -51,7 +51,7 @@ class TimeSeriesChecker:
     def _run_timestamp_checks_on_tmp_table(self, table_name: str) -> None:
         id_cols = ",".join(self._schema.time_array_id_columns)
         filters = [f"{x} IS NOT NULL" for x in self._schema.time_config.list_time_columns()]
-        where_clause = "AND ".join(filters)
+        where_clause = " AND ".join(filters)
         query = f"""
             CREATE TEMP TABLE {table_name} AS
                 SELECT
