@@ -3,6 +3,7 @@ from collections.abc import Generator
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Union, Literal
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from pydantic import (
@@ -191,7 +192,15 @@ class DatetimeRange(TimeBaseModel):
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         for i in range(self.length):
-            cur = adjust_timestamp_by_dst_offset(self.start + i * self.resolution, self.resolution)
+            if self.is_time_zone_naive():
+                cur = adjust_timestamp_by_dst_offset(
+                    self.start + i * self.resolution, self.resolution
+                )
+            else:
+                tz = self.start.tzinfo
+                # always step in standard time
+                cur_utc = self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution
+                cur = adjust_timestamp_by_dst_offset(cur_utc.astimezone(tz), self.resolution)
             month = cur.month
             day = cur.day
             if not (
