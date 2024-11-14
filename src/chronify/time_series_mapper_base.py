@@ -11,3 +11,7 @@ class TimeSeriesMapperBase(abc.ABC):
     @abc.abstractmethod
     def map_time(self) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
+
+    @abc.abstractmethod
+    def _check_schema_measurement_type_consistency(self) -> None:
+        """Check that measurement_type is the same between schema."""

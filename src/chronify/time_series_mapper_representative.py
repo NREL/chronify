@@ -5,10 +5,7 @@ import pandas as pd
 
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.models import TableSchema
-from chronify.exceptions import (
-    MissingParameter,
-    InvalidTable,
-)
+from chronify.exceptions import MissingParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase
 from chronify.time import (
     representative_weekday_column,
@@ -27,11 +24,22 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         self.weekday_column = representative_weekday_column[from_schema.time_config.time_format]
 
     def check_schema_consistency(self) -> None:
+        self._check_table_column_producibility()
+        self._check_schema_measurement_type_consistency()
+
+    def _check_table_column_producibility(self) -> None:
         available_cols = self.from_schema.list_columns() + [self.to_schema.time_config.time_column]
         final_cols = self.to_schema.list_columns()
         if diff := set(final_cols) - set(available_cols):
-            msg = f"source table {self.from_schema.time_config.name} cannot produce the destination table columns {diff}"
-            raise InvalidTable(msg)
+            msg = f"Source table {self.from_schema.time_config.name} cannot produce the columns: {diff}"
+            raise ConflictingInputsError(msg)
+
+    def _check_schema_measurement_type_consistency(self) -> None:
+        from_mt = self.from_schema.time_config.measurement_type
+        to_mt = self.from_schema.time_config.measurement_type
+        if from_mt != to_mt:
+            msg = f"Inconsistent measurement_types {from_mt=} vs. {to_mt=}"
+            raise ConflictingInputsError(msg)
 
     def _check_source_table_has_time_zone(self) -> None:
         if "time_zone" not in self.from_schema.time_array_id_columns:
@@ -49,8 +57,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         self.check_schema_consistency()
         if not self.to_schema.time_config.is_time_zone_naive():
             self._check_source_table_has_time_zone()
-        # TODO: check interval type (note annual has no interval type)
-        # TODO: check measurement type
+        # TODO: add interval type handling (note annual has no interval type)
 
         # Create mapping
         if self.to_schema.time_config.is_time_zone_naive():
@@ -78,6 +85,8 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
         # Apply mapping and downselect to final cols
         self._apply_mapping(map_table_schema)
+
+        # TODO write output to parquet?
 
     def _create_mapping_dataframe_tz_naive(
         self, dft: pd.DataFrame, to_time_col: str

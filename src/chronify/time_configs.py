@@ -131,6 +131,8 @@ class TimeBasedDataAdjustment(ChronifyBaseModel):
 class TimeBaseModel(ChronifyBaseModel, abc.ABC):
     """Defines a base model common to all time dimensions."""
 
+    measurement_type: MeasurementType = MeasurementType.TOTAL
+
     def list_timestamps(self) -> list[Any]:
         """Return a list of timestamps for a time range.
         Type of the timestamps depends on the class.
@@ -179,7 +181,6 @@ class DatetimeRange(TimeBaseModel):
     resolution: timedelta
     time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
-    measurement_type: MeasurementType = MeasurementType.TOTAL
 
     def is_time_zone_naive(self) -> bool:
         """Return True if the timestamps in the range do not have time zones."""
@@ -235,8 +236,7 @@ class AnnualTimeRange(TimeBaseModel):
     time_type: Literal[TimeType.ANNUAL] = TimeType.ANNUAL
     start: int
     length: int
-    measurement_type: MeasurementType = MeasurementType.TOTAL
-    # TODO: measurement_type must be TOTAL
+    # TODO: measurement_type must be TOTAL, not necessarily right?
 
     def iter_timestamps(self) -> Generator[int, None, None]:
         for i in range(1, self.length + 1):
@@ -254,7 +254,6 @@ class IndexTimeRange(TimeBaseModel):
     time_zone: TimeZone
     time_based_data_adjustment: TimeBasedDataAdjustment
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
-    measurement_type: MeasurementType = MeasurementType.TOTAL
 
     # TODO DT: totally wrong
     # def iter_timestamps(self) -> Generator[datetime, None, None]:
@@ -297,7 +296,6 @@ class RepresentativePeriodTimeRange(TimeBaseModel):
 
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
     time_format: RepresentativePeriodFormat
-    measurement_type: MeasurementType = MeasurementType.TOTAL
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
 
     def list_time_columns(self) -> list[str]:
