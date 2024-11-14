@@ -185,7 +185,7 @@ class DatetimeRange(TimeBaseModel):
         return self.start.tzinfo is None
 
     def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
-        return df[self.time_column].drop_duplicates().to_list()
+        return df[self.time_column].to_list()
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
