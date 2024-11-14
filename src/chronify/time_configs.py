@@ -297,18 +297,8 @@ class RepresentativePeriodTimeRange(TimeBaseModel):
 
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
     time_format: RepresentativePeriodFormat
-    # time_columns: list[str] = Field(description="Columns in the table that represent time.")
     measurement_type: MeasurementType = MeasurementType.TOTAL
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
-
-    # @model_validator(mode="after")
-    # def check_columns(self) -> "RepresentativePeriodTimeRange":
-    #     expected = representative_period_columns[self.time_format]
-
-    #     if set(self.time_columns) != set(expected):
-    #         msg = f"Incorrect {self.time_columns=} for {self.time_format=}, {expected=}"
-    #         raise InvalidParameter(msg)
-    #     return self
 
     def list_time_columns(self) -> list[str]:
         match self.time_format:
@@ -324,7 +314,7 @@ class RepresentativePeriodTimeRange(TimeBaseModel):
             case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
                 return OneWeekdayDayAndWeekendDayPerMonthByHourHandler().iter_timestamps()
 
-    def list_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
+    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
         return df[self.list_time_columns()].drop_duplicates().apply(tuple, axis=1).to_list()
 
 

@@ -74,7 +74,7 @@ class TimeSeriesChecker:
         result3 = self._conn.execute(text(query3)).fetchone()
         assert result3 is not None
         actual_count = result3[0]
-        expected_count = len(schema.time_config.list_timestamps())
+        expected_count = len(self._schema.time_config.list_timestamps())
         if actual_count != expected_count:
             msg = f"Time arrays must have length={expected_count}. Actual = {actual_count}"
             raise InvalidTable(msg)
