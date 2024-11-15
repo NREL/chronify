@@ -7,13 +7,14 @@ import pytest
 from sqlalchemy import (
     Engine,
     MetaData,
+    Table,
 )
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import write_database
 from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
-from chronify.time_series_checker import TimeSeriesChecker
+from chronify.time_series_checker import check_timestamps
 
 
 def test_valid_datetimes_with_tz(iter_engines: Engine):
@@ -66,12 +67,13 @@ def _run_test(
         conn.commit()
     metadata.reflect(engine)
 
-    checker = TimeSeriesChecker(engine, metadata)
-    if message is None:
-        checker.check_timestamps(schema)
-    else:
-        with pytest.raises(InvalidTable, match=message):
-            checker.check_timestamps(schema)
+    with engine.connect() as conn:
+        table = Table(schema.name, metadata)
+        if message is None:
+            check_timestamps(conn, table, schema)
+        else:
+            with pytest.raises(InvalidTable, match=message):
+                check_timestamps(conn, table, schema)
 
 
 def _get_inputs_for_valid_datetimes_with_tz() -> tuple[pd.DataFrame, ZoneInfo, int, None]:

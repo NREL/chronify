@@ -1,7 +1,8 @@
 import re
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 import duckdb.typing
+from duckdb.typing import DuckDBPyType
 from pydantic import Field, field_validator, model_validator
 from sqlalchemy import BigInteger, Boolean, DateTime, Double, Integer, String
 from typing_extensions import Annotated
@@ -51,7 +52,8 @@ class TableSchema(TableSchemaBase):
     """Defines the schema for a time series table stored in the database."""
 
     name: Annotated[
-        str, Field(description="Name of the table or view in the database.", frozen=True)
+        str,
+        Field(description="Name of the table or view in the database.", frozen=True),
     ]
     value_column: Annotated[str, Field(description="Column in the table that contain values.")]
 
@@ -89,35 +91,51 @@ _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
     duckdb.typing.BOOLEAN.id: Boolean,  # type: ignore
     duckdb.typing.DOUBLE.id: Double,  # type: ignore
     duckdb.typing.INTEGER.id: Integer,  # type: ignore
-    duckdb.typing.TIMESTAMP.id: DateTime,  # type: ignore
     duckdb.typing.VARCHAR.id: String,  # type: ignore
-}
-
-_SQLALCHEMY_TYPES_TO_DUCKDB_TYPES: dict[Any, str] = {
-    v: k for k, v in _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.items()
+    # Note: timestamp requires special handling because of timezone in sqlalchemy.
 }
 
 
-def get_sqlalchemy_type_from_duckdb(duckdb_type: duckdb.typing.DuckDBPyType) -> Type:  # type: ignore
+def get_sqlalchemy_type_from_duckdb(duckdb_type: DuckDBPyType) -> Any:
     """Return the sqlalchemy type for a duckdb type."""
-    if duckdb_type == duckdb.typing.TIMESTAMP_TZ:  # type: ignore
-        msg = "TIMESTAMP_TZ is not handled yet"
-        raise NotImplementedError(msg)
+    match duckdb_type:
+        case duckdb.typing.TIMESTAMP_TZ:  # type: ignore
+            sqlalchemy_type = DateTime(timezone=True)
+        case duckdb.typing.TIMESTAMP:  # type: ignore
+            sqlalchemy_type = DateTime(timezone=False)
+        case _:
+            cls = _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.get(duckdb_type.id)
+            if cls is None:
+                msg = f"There is no sqlalchemy mapping for {duckdb_type=}"
+                raise InvalidParameter(msg)
+            sqlalchemy_type = cls()
 
-    sqlalchemy_type = _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.get(duckdb_type.id)
-    if sqlalchemy_type is None:
-        msg = f"There is no sqlalchemy mapping for {duckdb_type=}"
-        raise InvalidParameter(msg)
     return sqlalchemy_type
 
 
-def get_duckdb_type_from_sqlalchemy(sqlalchemy_type: Any) -> str:
+def get_duckdb_type_from_sqlalchemy(sqlalchemy_type: Any) -> DuckDBPyType:
     """Return the duckdb type for a sqlalchemy type."""
-    duckdb_type = _SQLALCHEMY_TYPES_TO_DUCKDB_TYPES.get(sqlalchemy_type)
-    if duckdb_type is None:
+    if isinstance(sqlalchemy_type, DateTime):
+        duckdb_type = (
+            duckdb.typing.TIMESTAMP_TZ  # type: ignore
+            if sqlalchemy_type.timezone
+            else duckdb.typing.TIMESTAMP  # type: ignore
+        )
+    elif isinstance(sqlalchemy_type, BigInteger):
+        duckdb_type = duckdb.typing.BIGINT  # type: ignore
+    elif isinstance(sqlalchemy_type, Boolean):
+        duckdb_type = duckdb.typing.BOOLEAN  # type: ignore
+    elif isinstance(sqlalchemy_type, Double):
+        duckdb_type = duckdb.typing.DOUBLE  # type: ignore
+    elif isinstance(sqlalchemy_type, Integer):
+        duckdb_type = duckdb.typing.INTEGER  # type: ignore
+    elif isinstance(sqlalchemy_type, String):
+        duckdb_type = duckdb.typing.VARCHAR  # type: ignore
+    else:
         msg = f"There is no duckdb mapping for {sqlalchemy_type=}"
         raise InvalidParameter(msg)
-    return duckdb_type.upper()
+
+    return duckdb_type  # type: ignore
 
 
 class ColumnDType(ChronifyBaseModel):
@@ -130,7 +148,7 @@ class ColumnDType(ChronifyBaseModel):
     @classmethod
     def fix_data_type(cls, data: dict[str, Any]) -> dict[str, Any]:
         dtype = data.get("dtype")
-        if dtype is None or dtype in _DB_TYPES:
+        if dtype is None or any(map(lambda x: isinstance(dtype, x), _DB_TYPES)):
             return data
 
         if isinstance(dtype, str):
@@ -139,7 +157,7 @@ class ColumnDType(ChronifyBaseModel):
                 options = sorted(_COLUMN_TYPES.keys()) + list(_DB_TYPES)
                 msg = f"{dtype=} must be one of {options}"
                 raise ValueError(msg)
-            data["dtype"] = val
+            data["dtype"] = val()
         else:
             msg = f"dtype is an unsupported type: {type(dtype)}. It must be a str or type."
             raise ValueError(msg)
