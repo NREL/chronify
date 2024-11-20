@@ -79,7 +79,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             value_column="hour",  # this is a workaround
         )
         with self._engine.connect() as conn:
-            write_database(dfm, conn, map_table_schema)
+            write_database(dfm, conn, map_table_schema, if_table_exists="replace")
             conn.commit()
         self._metadata.reflect(self._engine, views=True)
 

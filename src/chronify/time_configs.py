@@ -143,10 +143,6 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
         """
         return list(self.iter_timestamps())
 
-    def needs_utc_conversion(self, engine_name: str) -> bool:
-        """Return True if the data needs its time to be converted to/from UTC."""
-        return False
-
     @abc.abstractmethod
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
         """Return a list of distinct timestamps present in DataFrame.
@@ -224,9 +220,6 @@ class DatetimeRange(TimeBaseModel):
                         and day == 1
                     ):
                         yield cur
-
-    def needs_utc_conversion(self, engine_name: str) -> bool:
-        return engine_name == "sqlite" and not self.is_time_zone_naive()
 
 
 class AnnualTimeRange(TimeBaseModel):
