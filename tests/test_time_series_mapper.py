@@ -7,7 +7,7 @@ import pytest
 
 from chronify.models import TableSchema
 from chronify.time import RepresentativePeriodFormat, TimeIntervalType
-from chronify.time_configs import RepresentativePeriodTimeRange, DatetimeRange
+from chronify.time_configs import RepresentativePeriodTime, DatetimeRange
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_series_mapper import map_time
 
@@ -84,7 +84,7 @@ def get_data_schema(one_week: bool = False) -> TableSchema:
         )
     schema = TableSchema(
         name="load_data",
-        time_config=RepresentativePeriodTimeRange(
+        time_config=RepresentativePeriodTime(
             interval_type=TimeIntervalType.PERIOD_BEGINNING,
             time_format=time_format,
         ),
@@ -111,9 +111,15 @@ def run_test(engine: Engine, one_week: bool = False, tzinfo: ZoneInfo | None = N
     metadata = MetaData()
     schema = get_data_schema(one_week=one_week)
     with engine.connect() as conn:
-        write_database(df, conn, schema)
+        write_database(df, conn, schema.name, schema.time_config)
         conn.commit()
     metadata.reflect(engine, views=True)
+
+    # Check time config class functions TODO: move to checker test
+    # schema.time_config.iter_timestamps()
+    # res = schema.time_config.list_distinct_timestamps_from_dataframe(df)
+    # assert isinstance(res[0], tuple), "not tuple"
+    # assert len(res[0]) == 3, "not a tuple of three elements"
 
     ## Map
     dest_schema = get_destination_schema(tzinfo=tzinfo)
@@ -122,7 +128,7 @@ def run_test(engine: Engine, one_week: bool = False, tzinfo: ZoneInfo | None = N
     # Check mapped table
     with engine.connect() as conn:
         query = f"select * from {dest_schema.name}"
-        queried = read_database(query, conn, dest_schema)
+        queried = read_database(query, conn, dest_schema.time_config)
     queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)
 
     truth = get_timeseries(dest_schema.time_config)

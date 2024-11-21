@@ -16,7 +16,7 @@ from chronify.models import (
     get_sqlalchemy_type_from_duckdb,
 )
 from chronify.sqlalchemy.functions import read_database, write_database
-from chronify.time_configs import DatetimeRange, IndexTimeRange
+from chronify.time_configs import DatetimeRange, IndexTimeRange, TimeBaseModel
 from chronify.time_series_checker import check_timestamps
 from chronify.utils.sql import make_temp_view_name
 from chronify.utils.sqlalchemy_view import create_view
@@ -145,7 +145,7 @@ class Store:
             table.create(self._engine)
 
         with self._engine.begin() as conn:
-            write_database(rel.to_df(), conn, dst_schema)
+            write_database(rel.to_df(), conn, dst_schema.name, dst_schema.time_config)
             try:
                 check_timestamps(conn, table, dst_schema)
             except Exception:
@@ -157,10 +157,10 @@ class Store:
             conn.commit()
         self.update_table_schema()
 
-    def read_query(self, query: Selectable | str, schema: TableSchema) -> pd.DataFrame:
+    def read_query(self, query: Selectable | str, config: TimeBaseModel) -> pd.DataFrame:
         """Return the query result as a pandas DataFrame."""
         with self._engine.begin() as conn:
-            return read_database(query, conn, schema)
+            return read_database(query, conn, config)
 
     def read_table(self, schema: TableSchema) -> pd.DataFrame:
         """Return the table as a pandas DataFrame."""

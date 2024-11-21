@@ -22,9 +22,7 @@ from chronify.time import (
     TimeType,
     TimeZone,
     RepresentativePeriodFormat,
-    representative_period_columns,
 )
-
 # from chronify.time_utils import (
 #    build_time_ranges,
 #    filter_to_project_timestamps,
@@ -132,6 +130,7 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
     """Defines a base model common to all time dimensions."""
 
     measurement_type: MeasurementType = MeasurementType.TOTAL
+    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_BEGINNING
 
     def list_timestamps(self) -> list[Any]:
         """Return a list of timestamps for a time range.
@@ -176,7 +175,6 @@ class DatetimeRange(TimeBaseModel):
     length: int
     resolution: timedelta
     time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
-    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
 
     def is_time_zone_naive(self) -> bool:
         """Return True if the timestamps in the range do not have time zones."""
@@ -246,7 +244,6 @@ class IndexTimeRange(TimeBaseModel):
     resolution: timedelta
     time_zone: TimeZone
     time_based_data_adjustment: TimeBasedDataAdjustment
-    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
 
     # TODO DT: totally wrong
     # def iter_timestamps(self) -> Generator[datetime, None, None]:
@@ -284,83 +281,38 @@ class IndexTimeRange(TimeBaseModel):
     #        cur_idx += 1
 
 
-class RepresentativePeriodTimeRange(TimeBaseModel):
-    """Defines a representative time dimension."""
+class RepresentativePeriodTime(TimeBaseModel):
+    """Defines a representative time dimension that covers one full year of time."""
 
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
     time_format: RepresentativePeriodFormat
-    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
 
+    # TODO - remove
     def list_time_columns(self) -> list[str]:
-        match self.time_format:
-            case RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
-                return OneWeekPerMonthByHourHandler().list_time_columns()
-            case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
-                return OneWeekdayDayAndWeekendDayPerMonthByHourHandler().list_time_columns()
+        if self.time_format == RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
+            weekday = "day_of_week"
+        else:
+            weekday = "is_weekday"
+        return ["month", weekday, "hour"]
 
     def iter_timestamps(self) -> Generator[int, None, None]:
-        match self.time_format:
-            case RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
-                return OneWeekPerMonthByHourHandler().iter_timestamps()
-            case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
-                return OneWeekdayDayAndWeekendDayPerMonthByHourHandler().iter_timestamps()
-
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
-        return df[self.list_time_columns()].drop_duplicates().apply(tuple, axis=1).to_list()
-
-
-class RepresentativeTimeFormatHandlerBase(abc.ABC):
-    """Provides implementations for different representative time formats."""
-
-    @staticmethod
-    @abc.abstractmethod
-    def list_time_columns() -> list[str]:
-        """Return the columns in the table that represent time."""
-
-    @staticmethod
-    @abc.abstractmethod
-    def iter_timestamps() -> Generator[Any, None, None]:
-        """Return an iterator over all time indexes in the table.
-        Type of the time is dependent on the class.
-        """
-
-
-class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):
-    """Handler for format with hourly data that includes one week per month."""
-
-    @staticmethod
-    def list_time_columns() -> list[str]:
-        return representative_period_columns[RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR]
-
-    @staticmethod
-    def iter_timestamps() -> Generator[Any, None, None]:
+        if self.time_format == RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
+            weekday_vals = range(7)
+        else:
+            weekday_vals = [False, True]
         for month in range(1, 13):
-            for dow in range(7):
+            for dow in weekday_vals:
                 for hour in range(24):
                     yield (month, dow, hour)
 
-
-class OneWeekdayDayAndWeekendDayPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):
-    """Handler for format with hourly data that includes one weekday day and one weekend day
-    per month.
-    """
-
-    @staticmethod
-    def list_time_columns() -> list[str]:
-        return representative_period_columns[
-            RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR
-        ]
-
-    @staticmethod
-    def iter_timestamps() -> Generator[Any, None, None]:
-        for month in range(1, 13):
-            for is_weekday in sorted([False, True]):
-                for hour in range(24):
-                    yield (month, is_weekday, hour)
+    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
+        return list(
+            df[self.list_time_columns()].drop_duplicates().itertuples(index=False, name="rep_time")
+        )
 
 
 TimeConfig = Annotated[
-    Union[AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTimeRange],
+    Union[AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTime],
     Field(
         description="Defines the times in a time series table.",
         discriminator="time_type",

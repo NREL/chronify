@@ -29,7 +29,7 @@ class TimeSeriesChecker:
         stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
         for col in time_columns:
             stmt = stmt.where(self._table.c[col].is_not(None))
-        df = read_database(stmt, self._conn, self._schema)
+        df = read_database(stmt, self._conn, self._schema.time_config)
         actual = self._schema.time_config.list_distinct_timestamps_from_dataframe(df)
         match = actual == expected
         # TODO: This check doesn't work and I'm not sure why.
