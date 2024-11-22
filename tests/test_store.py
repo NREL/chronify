@@ -16,6 +16,7 @@ from chronify.models import ColumnDType, CsvTableSchema, TableSchema
 from chronify.store import Store
 from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
+from chronify.time_range_generator_factory import make_time_range_generator
 
 
 GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
@@ -80,6 +81,9 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
             new_line = line.replace("gen1", "g1b").replace("gen2", "g2b").replace("gen3", "g3b")
             print(new_line, end="")
 
+    timestamp_generator = make_time_range_generator(dst_schema.time_config)
+    expected_timestamps = timestamp_generator.list_timestamps()
+
     # Test addition of new generators to the same table.
     src_schema2 = CsvTableSchema(
         time_config=src_schema.time_config,
@@ -96,14 +100,14 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
     store.ingest_from_csv(new_file, src_schema2, dst_schema)
     df = store.read_table(dst_schema)
     assert len(df) == 8784 * 3 * 2
-    all(df.timestamp.unique() == dst_schema.time_config.list_timestamps())
+    all(df.timestamp.unique() == expected_timestamps)
 
     # Adding the same rows should fail.
     with pytest.raises(InvalidTable):
         store.ingest_from_csv(new_file, src_schema2, dst_schema)
         df = store.read_table(dst_schema)
         assert len(df) == 8784 * 3 * 2
-        all(df.timestamp.unique() == dst_schema.time_config.list_timestamps())
+        all(df.timestamp.unique() == expected_timestamps)
 
 
 def test_ingest_invalid_csv(iter_engines: Engine, tmp_path, generators_schema):
@@ -167,7 +171,9 @@ def test_load_parquet(tmp_path):
     store.load_table(out_file, dst_schema)
     df = store.read_table(dst_schema)
     assert len(df) == 8784 * 3
-    all(df.timestamp.unique() == time_config.list_timestamps())
+    timestamp_generator = make_time_range_generator(time_config)
+    expected_timestamps = timestamp_generator.list_timestamps()
+    all(df.timestamp.unique() == expected_timestamps)
 
 
 def test_to_parquet(tmp_path, generators_schema):

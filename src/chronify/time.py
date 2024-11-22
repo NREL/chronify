@@ -36,6 +36,19 @@ class RepresentativePeriodFormat(StrEnum):
     )
 
 
+def list_representative_time_columns(format_type: RepresentativePeriodFormat) -> list[str]:
+    """Return the time columns for the format."""
+    match format_type:
+        case RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
+            columns = ["month", "day_of_week", "hour"]
+        case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
+            columns = ["month", "is_weekday", "hour"]
+        case _:
+            msg = str(format_type)
+            raise NotImplementedError(msg)
+    return columns
+
+
 class LeapDayAdjustmentType(StrEnum):
     """Leap day adjustment enum types"""
 

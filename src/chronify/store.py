@@ -16,7 +16,7 @@ from chronify.models import (
     get_sqlalchemy_type_from_duckdb,
 )
 from chronify.sqlalchemy.functions import read_database, write_database
-from chronify.time_configs import DatetimeRange, IndexTimeRange, TimeBaseModel
+from chronify.time_configs import TimeBaseModel
 from chronify.time_series_checker import check_timestamps
 from chronify.utils.sql import make_temp_view_name
 from chronify.utils.sqlalchemy_view import create_view
@@ -116,21 +116,23 @@ class Store:
                 dst_schema.value_column,
             )
 
-        if isinstance(src_schema.time_config, IndexTimeRange):
-            if isinstance(dst_schema.time_config, DatetimeRange):
-                rel = ddbf.add_datetime_column(
-                    rel=rel,
-                    start=dst_schema.time_config.start,
-                    resolution=dst_schema.time_config.resolution,
-                    length=dst_schema.time_config.length,
-                    time_array_id_columns=src_schema.time_array_id_columns,
-                    time_column=dst_schema.time_config.time_column,
-                    timestamps=src_schema.time_config.list_timestamps(),
-                )
-            else:
-                cls_name = dst_schema.time_config.__class__.__name__
-                msg = f"IndexTimeRange cannot be converted to {cls_name}"
-                raise NotImplementedError(msg)
+        # TODO
+        # if isinstance(src_schema.time_config, IndexTimeRange):
+        #    if isinstance(dst_schema.time_config, DatetimeRange):
+        #        timestamps = IndexTimeRangeGenerator(src_schema.time_config).list_timestamps()
+        #        rel = ddbf.add_datetime_column(
+        #            rel=rel,
+        #            start=dst_schema.time_config.start,
+        #            resolution=dst_schema.time_config.resolution,
+        #            length=dst_schema.time_config.length,
+        #            time_array_id_columns=src_schema.time_array_id_columns,
+        #            time_column=dst_schema.time_config.time_column,
+        #            timestamps=timestamps,
+        #        )
+        #    else:
+        #        cls_name = dst_schema.time_config.__class__.__name__
+        #        msg = f"IndexTimeRange cannot be converted to {cls_name}"
+        #        raise NotImplementedError(msg)
 
         table_exists = self.has_table(dst_schema.name)
         if table_exists:
@@ -164,7 +166,7 @@ class Store:
 
     def read_table(self, schema: TableSchema) -> pd.DataFrame:
         """Return the table as a pandas DataFrame."""
-        return self.read_query(f"SELECT * FROM {schema.name}", schema)
+        return self.read_query(f"SELECT * FROM {schema.name}", schema.time_config)
 
     def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
         """Write the result of a query to a Parquet file."""
