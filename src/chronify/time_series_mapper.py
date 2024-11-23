@@ -1,8 +1,13 @@
+from sqlalchemy import Engine, MetaData
+from chronify.models import TableSchema
+
 from chronify.time_series_mapper_representative import MapperRepresentativeTimeToDatetime
 from chronify.time_configs import RepresentativePeriodTime, DatetimeRange
 
 
-def map_time(engine, metadata, from_schema, to_schema):
+def map_time(
+    engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+) -> None:
     """Function to map time using the appropriate TimeSeriesMapper model."""
 
     if isinstance(from_schema.time_config, RepresentativePeriodTime) and isinstance(

@@ -36,17 +36,21 @@ class RepresentativePeriodFormat(StrEnum):
     )
 
 
+ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS = ("month", "day_of_week", "hour")
+ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR_COLUMNS = ("month", "is_weekday", "hour")
+
+
 def list_representative_time_columns(format_type: RepresentativePeriodFormat) -> list[str]:
     """Return the time columns for the format."""
     match format_type:
         case RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
-            columns = ["month", "day_of_week", "hour"]
+            columns = ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS
         case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
-            columns = ["month", "is_weekday", "hour"]
+            columns = ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR_COLUMNS
         case _:
             msg = str(format_type)
             raise NotImplementedError(msg)
-    return columns
+    return list(columns)
 
 
 class LeapDayAdjustmentType(StrEnum):

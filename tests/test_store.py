@@ -136,6 +136,33 @@ def test_invalid_schema(iter_engines: Engine, generators_schema):
         store.ingest_from_csv(src_file, src_schema, dst_schema)
 
 
+def test_ingest_one_week_per_month_by_hour(iter_engines: Engine, one_week_per_month_by_hour_table):
+    engine = iter_engines
+    df, num_time_arrays, schema = one_week_per_month_by_hour_table
+
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+    df2 = store.read_table(schema)
+    assert len(df2["id"].unique()) == num_time_arrays
+    assert len(df2) == 24 * 7 * 12 * num_time_arrays
+    columns = schema.time_config.list_time_columns()
+    columns.insert(0, "value")
+    assert all(df.sort_values(columns)["value"] == df2.sort_values(columns)["value"])
+
+
+def test_ingest_one_week_per_month_by_hour_invalid(
+    iter_engines: Engine, one_week_per_month_by_hour_table
+):
+    engine = iter_engines
+    df, _, schema = one_week_per_month_by_hour_table
+    df_filtered = df[df["hour"] != 5]
+    assert len(df_filtered) < len(df)
+
+    store = Store(engine=engine)
+    with pytest.raises(InvalidTable):
+        store.ingest_table(df_filtered, schema)
+
+
 def test_load_parquet(tmp_path):
     time_config = DatetimeRange(
         start=datetime(year=2020, month=1, day=1, tzinfo=ZoneInfo("EST")),
@@ -174,6 +201,48 @@ def test_load_parquet(tmp_path):
     timestamp_generator = make_time_range_generator(time_config)
     expected_timestamps = timestamp_generator.list_timestamps()
     all(df.timestamp.unique() == expected_timestamps)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # TODO: The mapper code doesn't work correctly with time zones yet.
+        # (True, 2020),
+        # (True, 2021),
+        (False, 2020),
+        (False, 2021),
+    ],
+)
+def test_map_datetime_to_one_week_per_month_by_hour(
+    iter_engines: Engine, one_week_per_month_by_hour_table, params: tuple[bool, int]
+):
+    engine = iter_engines
+    use_time_zone, year = params
+    df, num_time_arrays, src_schema = one_week_per_month_by_hour_table
+    if use_time_zone:
+        df["time_zone"] = "America/Denver"
+    tzinfo = ZoneInfo("America/Denver") if use_time_zone else None
+    time_array_len = 8784 if year % 4 else 8760
+    dst_schema = TableSchema(
+        name="ev_charging_datetime",
+        value_column="value",
+        time_config=DatetimeRange(
+            time_column="timestamp",
+            start=datetime(year, 1, 1, 0, tzinfo=tzinfo),
+            length=time_array_len,
+            resolution=timedelta(hours=1),
+        ),
+        time_array_id_columns=["id"],
+    )
+    store = Store(engine=engine)
+    store.ingest_table(df, src_schema)
+    store.map_time(src_schema, dst_schema)
+    df2 = store.read_table(dst_schema)
+    assert len(df2) == time_array_len * num_time_arrays
+    assert (
+        sorted(df2["timestamp"].unique())
+        == make_time_range_generator(dst_schema.time_config).list_timestamps()
+    )
 
 
 def test_to_parquet(tmp_path, generators_schema):

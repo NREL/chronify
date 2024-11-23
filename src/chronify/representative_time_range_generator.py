@@ -6,7 +6,11 @@ from collections import namedtuple
 
 import pandas as pd
 
-from chronify.time import RepresentativePeriodFormat
+from chronify.time import (
+    ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS,
+    ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR_COLUMNS,
+    RepresentativePeriodFormat,
+)
 from chronify.time_configs import RepresentativePeriodTime
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
@@ -38,9 +42,11 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
         return self._handler.iter_timestamps()
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
+        columns = self._model.list_time_columns()
         return list(
-            df[self._model.list_time_columns()]
+            df[columns]
             .drop_duplicates()
+            .sort_values(columns)
             .itertuples(index=False, name=self._handler.get_time_type())
         )
 
@@ -87,7 +93,7 @@ class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.time_type = namedtuple("OneWeekPerMonthByHour", ["month", "day_of_week", "hour"])
+        self.time_type = namedtuple("OneWeekPerMonthByHour", ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS)
 
     def get_time_type(self) -> str:
         return self.time_type.__name__
@@ -114,7 +120,8 @@ class OneWeekdayDayAndWeekendDayPerMonthByHourHandler(RepresentativeTimeFormatHa
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.time_type = namedtuple(
-            "OneWeekdayDayAndWeekendDayPerMonthByHour", ["month", "is_weekday", "hour"]
+            "OneWeekdayDayAndWeekendDayPerMonthByHour",
+            ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR_COLUMNS,
         )
 
     def get_time_type(self) -> str:
