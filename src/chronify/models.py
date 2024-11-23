@@ -2,6 +2,7 @@ import re
 from typing import Any, Optional
 
 import duckdb.typing
+import pandas as pd
 from duckdb.typing import DuckDBPyType
 from pydantic import Field, field_validator, model_validator
 from sqlalchemy import BigInteger, Boolean, DateTime, Double, Integer, String
@@ -136,6 +137,13 @@ def get_duckdb_type_from_sqlalchemy(sqlalchemy_type: Any) -> DuckDBPyType:
         raise InvalidParameter(msg)
 
     return duckdb_type  # type: ignore
+
+
+def get_duckdb_types_from_pandas(df: pd.DataFrame) -> list[DuckDBPyType]:
+    """Return a list of DuckDB types from a pandas dataframe."""
+    # This seems least-prone to error, but is not exactly the most efficient.
+    short_df = df.head(1)  # noqa: F841
+    return duckdb.sql("select * from short_df").dtypes
 
 
 class ColumnDType(ChronifyBaseModel):

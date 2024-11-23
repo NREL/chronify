@@ -38,9 +38,11 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
         return self._handler.iter_timestamps()
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
+        columns = self._model.list_time_columns()
         return list(
-            df[self._model.list_time_columns()]
+            df[columns]
             .drop_duplicates()
+            .sort_values(columns)
             .itertuples(index=False, name=self._handler.get_time_type())
         )
 
