@@ -1,11 +1,8 @@
 import abc
-from collections.abc import Generator
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Union, Literal
-from zoneinfo import ZoneInfo
+from typing import Union, Literal
 
-import pandas as pd
 from pydantic import (
     Field,
 )
@@ -22,6 +19,7 @@ from chronify.time import (
     TimeType,
     TimeZone,
     RepresentativePeriodFormat,
+    list_representative_time_columns,
 )
 # from chronify.time_utils import (
 #    build_time_ranges,
@@ -132,32 +130,6 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
     measurement_type: MeasurementType = MeasurementType.TOTAL
     interval_type: TimeIntervalType = TimeIntervalType.PERIOD_BEGINNING
 
-    def list_timestamps(self) -> list[Any]:
-        """Return a list of timestamps for a time range.
-        Type of the timestamps depends on the class.
-
-        Returns
-        -------
-        list[Any]
-        """
-        return list(self.iter_timestamps())
-
-    @abc.abstractmethod
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
-        """Return a list of distinct timestamps present in DataFrame.
-        Type of the timestamps depends on the class.
-
-        Returns
-        -------
-        list[Any]
-        """
-
-    @abc.abstractmethod
-    def iter_timestamps(self) -> Generator[Any, None, None]:
-        """Return an iterator over all time indexes in the table.
-        Type of the time is dependent on the class.
-        """
-
     @abc.abstractmethod
     def list_time_columns(self) -> list[str]:
         """Return the columns in the table that represent time."""
@@ -180,44 +152,8 @@ class DatetimeRange(TimeBaseModel):
         """Return True if the timestamps in the range do not have time zones."""
         return self.start.tzinfo is None
 
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
-        return sorted(df[self.time_column].unique())
-
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
-
-    def iter_timestamps(self) -> Generator[datetime, None, None]:
-        for i in range(self.length):
-            if self.is_time_zone_naive():
-                cur = adjust_timestamp_by_dst_offset(
-                    self.start + i * self.resolution, self.resolution
-                )
-            else:
-                tz = self.start.tzinfo
-                # always step in standard time
-                cur_utc = self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution
-                cur = adjust_timestamp_by_dst_offset(cur_utc.astimezone(tz), self.resolution)
-            month = cur.month
-            day = cur.day
-            if not (
-                self.time_based_data_adjustment.leap_day_adjustment
-                == LeapDayAdjustmentType.DROP_FEB29
-                and month == 2
-                and day == 29
-            ):
-                if not (
-                    self.time_based_data_adjustment.leap_day_adjustment
-                    == LeapDayAdjustmentType.DROP_DEC31
-                    and month == 12
-                    and day == 31
-                ):
-                    if not (
-                        self.time_based_data_adjustment.leap_day_adjustment
-                        == LeapDayAdjustmentType.DROP_JAN1
-                        and month == 1
-                        and day == 1
-                    ):
-                        yield cur
 
 
 class AnnualTimeRange(TimeBaseModel):
@@ -228,10 +164,6 @@ class AnnualTimeRange(TimeBaseModel):
     start: int
     length: int
     # TODO: measurement_type must be TOTAL, not necessarily right?
-
-    def iter_timestamps(self) -> Generator[int, None, None]:
-        for i in range(1, self.length + 1):
-            yield i
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
@@ -245,40 +177,9 @@ class IndexTimeRange(TimeBaseModel):
     time_zone: TimeZone
     time_based_data_adjustment: TimeBasedDataAdjustment
 
-    # TODO DT: totally wrong
-    # def iter_timestamps(self) -> Generator[datetime, None, None]:
-    #    cur = self.start.to_pydatetime().astimezone(ZoneInfo("UTC"))
-    #    cur_idx = self.start_index
-    #    end = (
-    #        self.end.to_pydatetime().astimezone(ZoneInfo("UTC")) + self.resolution
-    #    )  # to make end time inclusive
-
-    #    while cur < end:
-    #        cur_tz = cur.astimezone(self.tzinfo)
-    #        cur_tz = adjust_timestamp_by_dst_offset(cur_tz, self.resolution)
-    #        month = cur_tz.month
-    #        day = cur_tz.day
-    #        if not (
-    #            self.time_based_data_adjustment.leap_day_adjustment
-    #            == LeapDayAdjustmentType.DROP_FEB29
-    #            and month == 2
-    #            and day == 29
-    #        ):
-    #            if not (
-    #                self.time_based_data_adjustment.leap_day_adjustment
-    #                == LeapDayAdjustmentType.DROP_DEC31
-    #                and month == 12
-    #                and day == 31
-    #            ):
-    #                if not (
-    #                    self.time_based_data_adjustment.leap_day_adjustment
-    #                    == LeapDayAdjustmentType.DROP_JAN1
-    #                    and month == 1
-    #                    and day == 1
-    #                ):
-    #                    yield cur_idx
-    #        cur += self.resolution
-    #        cur_idx += 1
+    def list_time_columns(self) -> list[str]:
+        # TODO:
+        return []
 
 
 class RepresentativePeriodTime(TimeBaseModel):
@@ -287,28 +188,8 @@ class RepresentativePeriodTime(TimeBaseModel):
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
     time_format: RepresentativePeriodFormat
 
-    # TODO - remove
     def list_time_columns(self) -> list[str]:
-        if self.time_format == RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
-            weekday = "day_of_week"
-        else:
-            weekday = "is_weekday"
-        return ["month", weekday, "hour"]
-
-    def iter_timestamps(self) -> Generator[int, None, None]:
-        if self.time_format == RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
-            weekday_vals = range(7)
-        else:
-            weekday_vals = [False, True]
-        for month in range(1, 13):
-            for dow in weekday_vals:
-                for hour in range(24):
-                    yield (month, dow, hour)
-
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
-        return list(
-            df[self.list_time_columns()].drop_duplicates().itertuples(index=False, name="rep_time")
-        )
+        return list_representative_time_columns(self.time_format)
 
 
 TimeConfig = Annotated[

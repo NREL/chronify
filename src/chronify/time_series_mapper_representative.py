@@ -5,9 +5,10 @@ import pandas as pd
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.models import TableSchema
 from chronify.exceptions import MissingParameter, ConflictingInputsError
+from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_base import TimeSeriesMapperBase
 from chronify.utils.sqlalchemy_view import create_view
-from chronify.time_models import RepresentativePeriodTimeGenerator
+from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
 
 
 class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
@@ -55,11 +56,10 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         if not is_tz_naive:
             self._check_source_table_has_time_zone()
         # TODO: add interval type handling (note annual has no interval type)
+        timestamp_generator = make_time_range_generator(self.to_schema.time_config)
 
         to_time_col = self.to_schema.time_config.time_column
-        dft = (
-            pd.Series(self.to_schema.time_config.list_timestamps()).rename(to_time_col).to_frame()
-        )
+        dft = pd.Series(timestamp_generator.list_timestamps()).rename(to_time_col).to_frame()
         if is_tz_naive:
             dfm = self._generator._handler.add_time_attribute_columns(dft, to_time_col)
         else:
