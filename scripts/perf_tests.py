@@ -76,9 +76,9 @@ def setup():
     src_schema = CsvTableSchema(
         time_config=time_config,
         column_dtypes=[
-            ColumnDType(name="gen1", dtype=Double),
-            ColumnDType(name="gen2", dtype=Double),
-            ColumnDType(name="gen3", dtype=Double),
+            ColumnDType(name="gen1", dtype=Double()),
+            ColumnDType(name="gen2", dtype=Double()),
+            ColumnDType(name="gen3", dtype=Double()),
         ],
         value_columns=["gen1", "gen2", "gen3"],
         pivoted_dimension_name="generator",

@@ -56,7 +56,7 @@ def _convert_database_output_for_datetime(
     df: pd.DataFrame, conn: Connection, config: DatetimeRange
 ) -> pd.DataFrame:
     if conn.engine.name == "sqlite" and isinstance(config, DatetimeRange):
-        if not config.is_time_zone_naive():
+        if not config.is_time_zone_naive() and config.time_column in df.columns:
             if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=True)
             else:

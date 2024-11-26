@@ -7,12 +7,18 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 import pytest
-import sqlalchemy
 from sqlalchemy import DateTime, Double, Engine, Table, create_engine, select
+
 from chronify.csv_io import read_csv
 from chronify.duckdb.functions import unpivot
-from chronify.exceptions import ConflictingInputsError, InvalidTable
-from chronify.models import ColumnDType, CsvTableSchema, TableSchema
+from chronify.exceptions import (
+    ConflictingInputsError,
+    InvalidOperation,
+    InvalidParameter,
+    InvalidTable,
+    TableNotStored,
+)
+from chronify.models import ColumnDType, CsvTableSchema, PivotedTableSchema, TableSchema
 from chronify.store import Store
 from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
@@ -72,7 +78,7 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
         ).to_df().to_csv(new_src_file, index=False)
         src_file = new_src_file
     store.ingest_from_csv(src_file, src_schema, dst_schema)
-    df = store.read_table(dst_schema)
+    df = store.read_table(dst_schema.name)
     assert len(df) == 8784 * 3
 
     new_file = tmp_path / "gen2.csv"
@@ -99,16 +105,37 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
         time_array_id_columns=[],
     )
     store.ingest_from_csv(new_file, src_schema2, dst_schema)
-    df = store.read_table(dst_schema)
+    df = store.read_table(dst_schema.name)
     assert len(df) == 8784 * 3 * 2
     all(df.timestamp.unique() == expected_timestamps)
+
+    # Read a subset of the table.
+    df2 = store.read_query(
+        dst_schema.name, f"SELECT * FROM {dst_schema.name} WHERE generator = 'gen2'"
+    )
+    assert len(df2) == 8784
+    df_gen2 = df[df["generator"] == "gen2"]
+    assert all((df2.values == df_gen2.values)[0])
 
     # Adding the same rows should fail.
     with pytest.raises(InvalidTable):
         store.ingest_from_csv(new_file, src_schema2, dst_schema)
-        df = store.read_table(dst_schema)
+        df = store.read_table(dst_schema.name)
         assert len(df) == 8784 * 3 * 2
         all(df.timestamp.unique() == expected_timestamps)
+
+
+def test_ingest_pivoted_table(iter_engines: Engine, generators_schema):
+    engine = iter_engines
+    src_file, src_schema, dst_schema = generators_schema
+    pivoted_schema = PivotedTableSchema(**src_schema.model_dump(exclude={"column_dtypes"}))
+    rel = read_csv(src_file, src_schema)
+    store = Store(engine=engine)
+    store.ingest_pivoted_table(rel, pivoted_schema, dst_schema)
+    table = store.get_table(dst_schema.name)
+    stmt = select(table).where(table.c.generator == "gen1")
+    df = store.read_query(dst_schema.name, stmt)
+    assert len(df) == 8784
 
 
 def test_ingest_invalid_csv(iter_engines: Engine, tmp_path, generators_schema):
@@ -124,8 +151,8 @@ def test_ingest_invalid_csv(iter_engines: Engine, tmp_path, generators_schema):
     store = Store(engine=engine)
     with pytest.raises(InvalidTable):
         store.ingest_from_csv(new_file, src_schema, dst_schema)
-    with pytest.raises((sqlalchemy.exc.OperationalError, sqlalchemy.exc.ProgrammingError)):
-        store.read_table(dst_schema)
+    with pytest.raises(TableNotStored):
+        store.read_table(dst_schema.name)
 
 
 def test_invalid_schema(iter_engines: Engine, generators_schema):
@@ -143,7 +170,7 @@ def test_ingest_one_week_per_month_by_hour(iter_engines: Engine, one_week_per_mo
 
     store = Store(engine=engine)
     store.ingest_table(df, schema)
-    df2 = store.read_table(schema)
+    df2 = store.read_table(schema.name)
     assert len(df2["id"].unique()) == num_time_arrays
     assert len(df2) == 24 * 7 * 12 * num_time_arrays
     columns = schema.time_config.list_time_columns()
@@ -197,7 +224,7 @@ def test_load_parquet(tmp_path):
     rel2.to_parquet(str(out_file))
     store = Store()
     store.load_table(out_file, dst_schema)
-    df = store.read_table(dst_schema)
+    df = store.read_table(dst_schema.name)
     assert len(df) == 8784 * 3
     timestamp_generator = make_time_range_generator(time_config)
     expected_timestamps = timestamp_generator.list_timestamps()
@@ -240,7 +267,7 @@ def test_map_datetime_to_one_week_per_month_by_hour(
     store = Store(engine=engine)
     store.ingest_table(df, src_schema)
     store.map_time(src_schema, dst_schema)
-    df2 = store.read_table(dst_schema)
+    df2 = store.read_table(dst_schema.name)
     assert len(df2) == time_array_len * num_time_arrays
     actual = sorted(df2["timestamp"].unique())
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
@@ -262,8 +289,22 @@ def test_to_parquet(tmp_path, generators_schema):
     assert len(df) == 8784
 
 
+def test_load_existing_store(iter_engines_file, one_week_per_month_by_hour_table):
+    engine = iter_engines_file
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+    df2 = store.read_table(schema.name)
+    assert df2.equals(df)
+    file_path = Path(engine.url.database)
+    assert file_path.exists()
+    store2 = Store(engine_name=engine.name, file_path=file_path)
+    df3 = store2.read_table(schema.name)
+    assert df3.equals(df2)
+
+
 def test_create_with_existing_engine():
-    engine = create_engine("duckdb:///:memory")
+    engine = create_engine("duckdb:///:memory:")
     store = Store(engine=engine)
     assert store.engine is engine
 
@@ -274,4 +315,73 @@ def test_create_with_sqlite():
 
 def test_create_with_conflicting_parameters():
     with pytest.raises(ConflictingInputsError):
-        Store(engine=create_engine("duckdb:///:memory"), engine_name="duckdb")
+        Store(engine=create_engine("duckdb:///:memory:"), engine_name="duckdb")
+
+
+def test_backup(iter_engines_file: Engine, one_week_per_month_by_hour_table, tmp_path):
+    engine = iter_engines_file
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+    dst_file = tmp_path / "backup.db"
+    assert not dst_file.exists()
+    store.backup(dst_file)
+    assert dst_file.exists()
+    store2 = Store(engine_name=engine.name, file_path=dst_file)
+    df2 = store2.read_table(schema.name)
+    assert df2.equals(df)
+
+    with pytest.raises(InvalidParameter):
+        store.backup(dst_file)
+    dst_file2 = tmp_path / "backup2.db"
+    dst_file2.touch()
+    store.backup(dst_file2, overwrite=True)
+
+    # Make sure the original still works.
+    df3 = store.read_table(schema.name)
+    assert df3.equals(df)
+
+
+def test_backup_not_allowed(one_week_per_month_by_hour_table, tmp_path):
+    engine = create_engine("duckdb:///:memory:")
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+    dst_file = tmp_path / "backup.db"
+    assert not dst_file.exists()
+    with pytest.raises(InvalidOperation):
+        store.backup(dst_file)
+    assert not dst_file.exists()
+
+
+def test_delete_rows(iter_engines: Engine, one_week_per_month_by_hour_table):
+    engine = iter_engines
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+    df2 = store.read_table(schema.name)
+    assert df2.equals(df)
+    assert sorted(df2["id"].unique()) == [1, 2, 3]
+    store.delete_rows(schema.name, {"id": 2})
+    df3 = store.read_table(schema.name)
+    assert sorted(df3["id"].unique()) == [1, 3]
+    store.delete_rows(schema.name, {"id": 1})
+    df4 = store.read_table(schema.name)
+    assert sorted(df4["id"].unique()) == [3]
+    store.delete_rows(schema.name, {"id": 3})
+    with pytest.raises(TableNotStored):
+        store.read_table(schema.name)
+
+
+def test_drop_table(iter_engines: Engine, one_week_per_month_by_hour_table):
+    engine = iter_engines
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    assert not store.list_tables()
+    store.ingest_table(df, schema)
+    assert store.read_table(schema.name).equals(df)
+    assert store.list_tables() == [schema.name]
+    store.drop_table(schema.name)
+    with pytest.raises(TableNotStored):
+        store.read_table(schema.name)
+    assert not store.list_tables()
