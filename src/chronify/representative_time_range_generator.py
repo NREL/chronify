@@ -43,7 +43,7 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
         columns = self._model.list_time_columns()
-        return list(
+        return sorted(
             df[columns]
             .drop_duplicates()
             .sort_values(columns)
@@ -85,7 +85,7 @@ class RepresentativeTimeFormatHandlerBase(abc.ABC):
             dft = self.add_time_attribute_columns(dft, "timestamp_tmp")
             dft["time_zone"] = tz
             dfm.append(dft.drop(columns=["timestamp_tmp"]))
-        return pd.concat(dfm, axis=0, ignore_index=True)
+        return pd.concat(dfm, ignore_index=True)
 
 
 class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):

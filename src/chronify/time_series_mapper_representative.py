@@ -31,13 +31,13 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         available_cols = self.from_schema.list_columns() + [self.to_schema.time_config.time_column]
         final_cols = self.to_schema.list_columns()
         if diff := set(final_cols) - set(available_cols):
-            msg = f"Source table {self.from_schema.time_config.name} cannot produce the columns: {diff}"
+            msg = f"Source table {self.from_schema.name} cannot produce the columns: {diff}"
             raise ConflictingInputsError(msg)
 
     def _check_schema_measurement_type_consistency(self) -> None:
         """Check that measurement_type is the same between schema."""
         from_mt = self.from_schema.time_config.measurement_type
-        to_mt = self.from_schema.time_config.measurement_type
+        to_mt = self.to_schema.time_config.measurement_type
         if from_mt != to_mt:
             msg = f"Inconsistent measurement_types {from_mt=} vs. {to_mt=}"
             raise ConflictingInputsError(msg)
@@ -93,7 +93,6 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         self._metadata.reflect(self._engine, views=True)
 
         self._apply_mapping(map_table_name)
-        # TODO write output to parquet?
 
     def _apply_mapping(self, map_table_name: str):
         """Apply mapping to create result as a view according to_schema"""
@@ -112,9 +111,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         select_stmt = [left_table.c[x] for x in left_cols]
         select_stmt += [right_table.c[x] for x in right_cols]
 
-        keys = (
-            self.from_schema.time_config.list_time_columns().copy()
-        )  # TODO copy is required here not sure why
+        keys = self.from_schema.time_config.list_time_columns()
         if not self.to_schema.time_config.is_time_zone_naive():
             keys += ["time_zone"]
             assert (
@@ -129,3 +126,4 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
                 on_stmt &= left_table.c[x] == right_table.c[x]
         query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
         create_view(self.to_schema.name, query, self._engine, self._metadata)
+        self._metadata.reflect(self._engine, views=True)

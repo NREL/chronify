@@ -2,7 +2,6 @@ import abc
 import logging
 from datetime import datetime, timedelta
 from typing import Union, Literal
-
 from pydantic import (
     Field,
 )

@@ -17,6 +17,7 @@ from chronify.store import Store
 from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
 from chronify.time_range_generator_factory import make_time_range_generator
+from chronify.time_series_checker import compare_lists
 
 
 GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
@@ -206,9 +207,8 @@ def test_load_parquet(tmp_path):
 @pytest.mark.parametrize(
     "params",
     [
-        # TODO: The mapper code doesn't work correctly with time zones yet.
-        # (True, 2020),
-        # (True, 2021),
+        (True, 2020),
+        (True, 2021),
         (False, 2020),
         (False, 2021),
     ],
@@ -220,7 +220,10 @@ def test_map_datetime_to_one_week_per_month_by_hour(
     use_time_zone, year = params
     df, num_time_arrays, src_schema = one_week_per_month_by_hour_table
     if use_time_zone:
-        df["time_zone"] = "America/Denver"
+        df["time_zone"] = df["id"].map(
+            dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
+        )
+        src_schema.time_array_id_columns += ["time_zone"]
     tzinfo = ZoneInfo("America/Denver") if use_time_zone else None
     time_array_len = 8784 if year % 4 else 8760
     dst_schema = TableSchema(
@@ -239,10 +242,11 @@ def test_map_datetime_to_one_week_per_month_by_hour(
     store.map_time(src_schema, dst_schema)
     df2 = store.read_table(dst_schema)
     assert len(df2) == time_array_len * num_time_arrays
-    assert (
-        sorted(df2["timestamp"].unique())
-        == make_time_range_generator(dst_schema.time_config).list_timestamps()
-    )
+    actual = sorted(df2["timestamp"].unique())
+    expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
+    if use_time_zone:
+        expected = [pd.Timestamp(x) for x in expected]
+    compare_lists(actual, expected)
 
 
 def test_to_parquet(tmp_path, generators_schema):

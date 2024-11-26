@@ -149,6 +149,7 @@ class Store:
         create it.
         """
         df = data.to_df() if isinstance(data, DuckDBPyRelation) else data
+        check_columns(df.columns, dst_schema.list_columns())
         table_exists = self.has_table(dst_schema.name)
         if table_exists:
             table = Table(dst_schema.name, self._metadata)

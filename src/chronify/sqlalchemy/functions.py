@@ -17,7 +17,7 @@ def read_database(
     """Read a database query into a Pandas DataFrame."""
     df = pl.read_database(query, connection=conn).to_pandas()
     if isinstance(config, DatetimeRange):
-        _convert_database_output_for_datetime(df, conn, config)
+        df = _convert_database_output_for_datetime(df, conn, config)
     return df
 
 
@@ -33,7 +33,7 @@ def write_database(
     is that the dataframe is already a copy of user inputs. This could be changed if needed.
     """
     if isinstance(config, DatetimeRange):
-        _convert_database_input_for_datetime(df, conn, config)
+        df = _convert_database_input_for_datetime(df, conn, config)
     pl.DataFrame(df).write_database(table_name, connection=conn, if_table_exists=if_table_exists)
 
 
@@ -49,6 +49,7 @@ def _convert_database_input_for_datetime(
             df[config.time_column] = df[config.time_column].dt.tz_convert("UTC")
         else:
             df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
+    return df
 
 
 def _convert_database_output_for_datetime(
@@ -63,3 +64,4 @@ def _convert_database_output_for_datetime(
         else:
             if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=False)
+    return df
