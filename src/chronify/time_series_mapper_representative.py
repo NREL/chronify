@@ -44,7 +44,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
     def _check_source_table_has_time_zone(self) -> None:
         """Check source table has time_zone column."""
-        if "time_zone" not in self.from_schema.time_array_id_columns:
+        if "time_zone" not in self.from_schema.list_columns():
             msg = f"time_zone is required for tz-aware representative time mapping and it is missing from source table: {self.from_schema.name}"
             raise MissingParameter(msg)
 

@@ -68,12 +68,12 @@ def run_test(
         check_mapped_table(queried, truth)
 
 
-def check_mapped_table(dfs: pd.DataFrame, ts: pd.Series) -> None:
-    res = sorted(dfs["timestamp"].drop_duplicates().tolist())
+def check_mapped_table(df: pd.DataFrame, ts: pd.Series) -> None:
+    res = sorted(df["timestamp"].drop_duplicates().tolist())
     tru = sorted(ts)
     assert res == tru, "wrong unique timestamps"
 
-    res = dfs.groupby(["time_zone"])["timestamp"].count().unique().tolist()
+    res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
     tru = [len(ts)]
     assert res == tru, "wrong number of timestamps"
 
