@@ -24,6 +24,8 @@ from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import compare_lists
+from chronify.utils.sql import make_temp_view_name
+from chronify.utils.sqlalchemy_view import create_view
 
 
 GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
@@ -125,13 +127,15 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
         all(df.timestamp.unique() == expected_timestamps)
 
 
-def test_ingest_pivoted_table(iter_engines: Engine, generators_schema):
+@pytest.mark.parametrize("use_pandas", [False, True])
+def test_ingest_pivoted_table(iter_engines: Engine, generators_schema, use_pandas: bool):
     engine = iter_engines
     src_file, src_schema, dst_schema = generators_schema
     pivoted_schema = PivotedTableSchema(**src_schema.model_dump(exclude={"column_dtypes"}))
     rel = read_csv(src_file, src_schema)
     store = Store(engine=engine)
-    store.ingest_pivoted_table(rel, pivoted_schema, dst_schema)
+    input_table = rel.to_df() if use_pandas else rel
+    store.ingest_pivoted_table(input_table, pivoted_schema, dst_schema)
     table = store.get_table(dst_schema.name)
     stmt = select(table).where(table.c.generator == "gen1")
     df = store.read_query(dst_schema.name, stmt)
@@ -362,6 +366,8 @@ def test_delete_rows(iter_engines: Engine, one_week_per_month_by_hour_table):
     df2 = store.read_table(schema.name)
     assert df2.equals(df)
     assert sorted(df2["id"].unique()) == [1, 2, 3]
+    with pytest.raises(InvalidParameter):
+        store.delete_rows(schema.name, {})
     store.delete_rows(schema.name, {"id": 2})
     df3 = store.read_table(schema.name)
     assert sorted(df3["id"].unique()) == [1, 3]
@@ -371,6 +377,8 @@ def test_delete_rows(iter_engines: Engine, one_week_per_month_by_hour_table):
     store.delete_rows(schema.name, {"id": 3})
     with pytest.raises(TableNotStored):
         store.read_table(schema.name)
+    with pytest.raises(TableNotStored):
+        store.delete_rows(schema.name, {"id": 3})
 
 
 def test_drop_table(iter_engines: Engine, one_week_per_month_by_hour_table):
@@ -385,3 +393,19 @@ def test_drop_table(iter_engines: Engine, one_week_per_month_by_hour_table):
     with pytest.raises(TableNotStored):
         store.read_table(schema.name)
     assert not store.list_tables()
+    with pytest.raises(TableNotStored):
+        store.drop_table(schema.name)
+
+
+def test_drop_view(iter_engines: Engine, one_week_per_month_by_hour_table):
+    engine = iter_engines
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+    view_name = make_temp_view_name()
+    table = Table(schema.name, store.metadata)
+    stmt = select(table).where(table.c.id == 1)
+    create_view(view_name, stmt, store.engine, store.metadata)
+    assert view_name in store.list_tables()
+    store.drop_view(view_name)
+    assert view_name not in store.list_tables()
