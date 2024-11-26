@@ -77,9 +77,9 @@ class Store:
         --------
         >>> from sqlalchemy
         >>> store1 = Store()
-        >>> store2 = Store(engine=Engine("duckdb:///time_series.db")
-        >>> store3 = Store(engine=Engine(engine_name="sqlite")
-        >>> store4 = Store(engine=Engine("sqlite:///time_series.db")
+        >>> store2 = Store(engine=Engine("duckdb:///time_series.db"))
+        >>> store3 = Store(engine=Engine(engine_name="sqlite"))
+        >>> store4 = Store(engine=Engine("sqlite:///time_series.db"))
         """
         self._metadata = MetaData()
         if engine and engine_name:
