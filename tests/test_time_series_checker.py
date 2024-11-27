@@ -32,6 +32,11 @@ def test_invalid_datetimes(iter_engines: Engine):
     _run_test(iter_engines, *_get_inputs_for_incorrect_datetimes())
 
 
+def test_invalid_datetime_length(iter_engines: Engine):
+    """Timestamps do not match the schema."""
+    _run_test(iter_engines, *_get_inputs_for_incorrect_datetime_length())
+
+
 def test_mismatched_time_array_lengths(iter_engines: Engine):
     """Some time arrays have different lengths."""
     _run_test(iter_engines, *_get_inputs_for_mismatched_time_array_lengths())
@@ -40,6 +45,16 @@ def test_mismatched_time_array_lengths(iter_engines: Engine):
 def test_incorrect_lengths(iter_engines: Engine):
     """All time arrays are consistent but have the wrong length."""
     _run_test(iter_engines, *_get_inputs_for_incorrect_lengths())
+
+
+def test_incorrect_time_arrays(iter_engines: Engine):
+    """The time arrays form a complete set but are individually incorrect."""
+    _run_test(iter_engines, *_get_inputs_for_incorrect_time_arrays())
+
+
+def test_incorrect_time_arrays_with_duplicates(iter_engines: Engine):
+    """The time arrays form a complete set but are individually incorrect."""
+    _run_test(iter_engines, *_get_inputs_for_incorrect_time_arrays_with_duplicates())
 
 
 def _run_test(
@@ -131,6 +146,30 @@ def _get_inputs_for_incorrect_datetimes() -> tuple[pd.DataFrame, ZoneInfo, int, 
     )
 
 
+def _get_inputs_for_incorrect_datetime_length() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
+    data_tzinfo = ZoneInfo("America/New_York")
+    schema_tzinfo = ZoneInfo("MST")
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                datetime(2020, 1, 1, 0, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 2, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 3, tzinfo=data_tzinfo),
+                datetime(2020, 1, 1, 4, tzinfo=data_tzinfo),
+            ],
+            "generator": ["gen1", "gen1", "gen1", "gen1", "gen1"],
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0],
+        }
+    )
+    return (
+        df,
+        schema_tzinfo,
+        len(df) + 1,
+        "Mismatch number of timestamps",
+    )
+
+
 def _get_inputs_for_mismatched_time_array_lengths() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
     tzinfo = ZoneInfo("EST")
     df = pd.DataFrame(
@@ -147,7 +186,7 @@ def _get_inputs_for_mismatched_time_array_lengths() -> tuple[pd.DataFrame, ZoneI
             "value": [1.0, 2.0, 3.0, 4.0, 5.0],
         }
     )
-    return df, tzinfo, 2, "All time arrays must have the same length."
+    return df, tzinfo, 2, "The count of time values in each time array must be"
 
 
 def _get_inputs_for_incorrect_lengths() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
@@ -168,4 +207,63 @@ def _get_inputs_for_incorrect_lengths() -> tuple[pd.DataFrame, ZoneInfo, int, st
             "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
         }
     )
-    return df, tzinfo, 2, "Time arrays must have length="
+    return df, tzinfo, 2, "The count of time values in each time array must be"
+
+
+def _get_inputs_for_incorrect_time_arrays() -> tuple[pd.DataFrame, ZoneInfo, int, str]:
+    tzinfo = ZoneInfo("EST")
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 2, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 3, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 4, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 5, tzinfo=tzinfo),
+            ],
+            "generator": ["gen1", "gen1", "gen1", "gen2", "gen2", "gen2"],
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+    return df, tzinfo, 6, "The count of time values in each time array must be"
+
+
+def _get_inputs_for_incorrect_time_arrays_with_duplicates() -> (
+    tuple[pd.DataFrame, ZoneInfo, int, str]
+):
+    tzinfo = ZoneInfo("EST")
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 0, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 1, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 2, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 2, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 3, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 3, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 4, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 4, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 5, tzinfo=tzinfo),
+                datetime(2020, 1, 1, 5, tzinfo=tzinfo),
+            ],
+            "generator": [
+                "gen1",
+                "gen1",
+                "gen1",
+                "gen1",
+                "gen1",
+                "gen1",
+                "gen2",
+                "gen2",
+                "gen2",
+                "gen2",
+                "gen2",
+                "gen2",
+            ],
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+        }
+    )
+    return df, tzinfo, 6, "The count of time values in each time array must be"
