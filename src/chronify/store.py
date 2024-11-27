@@ -280,6 +280,13 @@ class Store:
 
         if not table_existed:
             self.update_table_schema()
+            if self._engine.name == "sqlite":
+                # It's possible that this should be a kwarg or config option.
+                id_cols = ",".join(dst_schema.time_array_id_columns)
+                query = f"CREATE INDEX {dst_schema.name}_index ON {dst_schema.name}({id_cols})"
+                with self._engine.connect() as conn:
+                    conn.execute(text(query))
+            # Indexes don't seem to matter for duckdb.
 
     def list_tables(self) -> list[str]:
         """Return a list of user tables in the database."""
