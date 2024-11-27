@@ -409,3 +409,19 @@ def test_drop_view(iter_engines: Engine, one_week_per_month_by_hour_table):
     assert view_name in store.list_tables()
     store.drop_view(view_name)
     assert view_name not in store.list_tables()
+
+
+def test_read_raw_query(iter_engines: Engine, one_week_per_month_by_hour_table):
+    engine = iter_engines
+    df, _, schema = one_week_per_month_by_hour_table
+    store = Store(engine=engine)
+    store.ingest_table(df, schema)
+
+    query = f"SELECT * FROM {schema.name}"
+    df2 = store.read_raw_query(query)
+    assert df2.equals(df)
+
+    query = f"SELECT * FROM {schema.name} where id = ?"
+    params = (2,)
+    df2 = store.read_raw_query(query, params=params)
+    assert df2.equals(df[df["id"] == 2].reset_index(drop=True))

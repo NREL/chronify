@@ -318,6 +318,26 @@ class Store:
         stmt = select(table)
         return self.read_query(name, stmt)
 
+    def read_raw_query(self, query: str, params: Any = None) -> pd.DataFrame:
+        """Execute a query directly on the backend database connection, bypassing sqlalchemy.
+        This can be significantly faster than :meth:`read_query`.
+        """
+        with self._engine.connect() as conn:
+            assert conn._dbapi_connection is not None
+            assert conn._dbapi_connection.driver_connection is not None
+            match self._engine.name:
+                case "duckdb":
+                    return conn._dbapi_connection.driver_connection.sql(
+                        query, params=params
+                    ).to_df()
+                case "sqlite":
+                    return pd.read_sql(
+                        query, conn._dbapi_connection.driver_connection, params=params
+                    )
+                case _:
+                    msg = self._engine.name
+                    raise NotImplementedError(msg)
+
     def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
         """Write the result of a query to a Parquet file."""
         view_name = make_temp_view_name()
