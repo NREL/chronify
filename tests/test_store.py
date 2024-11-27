@@ -17,7 +17,7 @@ from chronify.store import Store
 from chronify.time import TimeIntervalType
 from chronify.time_configs import DatetimeRange
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_series_checker import compare_lists
+from chronify.time_series_checker import check_timestamp_lists
 
 
 GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
@@ -246,7 +246,7 @@ def test_map_datetime_to_one_week_per_month_by_hour(
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
     if use_time_zone:
         expected = [pd.Timestamp(x) for x in expected]
-    compare_lists(actual, expected)
+    check_timestamp_lists(actual, expected)
 
 
 def test_to_parquet(tmp_path, generators_schema):

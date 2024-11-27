@@ -52,7 +52,7 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
                         and month == 1
                         and day == 1
                     ):
-                        yield cur
+                        yield pd.Timestamp(cur)
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
         return sorted(df[self._model.time_column].unique())

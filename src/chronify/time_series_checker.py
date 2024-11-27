@@ -1,12 +1,9 @@
 from sqlalchemy import Connection, Table, select, text
-import pandas as pd
-from datetime import datetime
 
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import read_database
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_configs import DatetimeRange
 from chronify.utils.sql import make_temp_view_name
 
 
@@ -36,10 +33,7 @@ class TimeSeriesChecker:
             stmt = stmt.where(self._table.c[col].is_not(None))
         df = read_database(stmt, self._conn, self._schema.time_config)
         actual = self._time_generator.list_distinct_timestamps_from_dataframe(df)
-
-        if isinstance(self._schema.time_config, DatetimeRange):
-            expected = [pd.Timestamp(x) for x in expected]
-        compare_lists(actual, expected)
+        check_timestamp_lists(actual, expected)
 
     def _check_expected_timestamps_by_time_array(self) -> None:
         tmp_name = make_temp_view_name()
@@ -78,7 +72,7 @@ class TimeSeriesChecker:
             raise InvalidTable(msg)
 
 
-def compare_lists(actual: list, expected: list) -> None:
+def check_timestamp_lists(actual: list, expected: list) -> None:
     match = actual == expected
     if not match:
         if len(actual) != len(expected):
@@ -86,25 +80,6 @@ def compare_lists(actual: list, expected: list) -> None:
             raise InvalidTable(msg1)
         missing = [x for x in expected if x not in actual]
         extra = [x for x in actual if x not in expected]
-        msg2 = "Actual timestamps do not match expected timestamps. \n"
-        msg2 += f"Missing: {missing} \n"
-        msg2 += f"Extra: {extra}"
-        raise InvalidTable(msg2)
-
-
-def compare_tz_aware_datetime_lists(
-    actual: list[datetime] | list[pd.Timestamp], expected: list[datetime] | list[pd.Timestamp]
-) -> None:
-    """Convert tz-aware timestamps to posix before comparing."""
-    expected_t = [x.timestamp() for x in expected]
-    actual_t = [x.timestamp() for x in actual]
-    match = actual_t == expected_t
-    if not match:
-        if len(actual) != len(expected):
-            msg1 = f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}"
-            raise InvalidTable(msg1)
-        missing = [expected[expected_t.index(x)] for x in expected_t if x not in actual_t]
-        extra = [actual[actual_t.index(x)] for x in actual_t if x not in expected_t]
         msg2 = "Actual timestamps do not match expected timestamps. \n"
         msg2 += f"Missing: {missing} \n"
         msg2 += f"Extra: {extra}"

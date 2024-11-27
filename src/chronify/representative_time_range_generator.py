@@ -53,6 +53,30 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
     def list_time_columns(self) -> list[str]:
         return self._model.list_time_columns()
 
+    def create_tz_naive_mapping_dataframe(
+        self,
+        df: pd.DataFrame,
+        timestamp_col: str,
+    ) -> pd.DataFrame:
+        """Create time zone-naive time mapping dataframe."""
+        return self._handler.add_time_attribute_columns(df, timestamp_col)
+
+    def create_tz_aware_mapping_dataframe(
+        self,
+        df: pd.DataFrame,
+        timestamp_col: str,
+        time_zones: list[str],
+    ) -> pd.DataFrame:
+        """Create time zone-aware time mapping dataframe."""
+        dfm = []
+        for tz in time_zones:
+            dft = df.copy()
+            dft["timestamp_tmp"] = dft[timestamp_col].dt.tz_convert(tz)
+            dft = self._handler.add_time_attribute_columns(dft, "timestamp_tmp")
+            dft["time_zone"] = tz
+            dfm.append(dft.drop(columns=["timestamp_tmp"]))
+        return pd.concat(dfm, ignore_index=True)
+
 
 class RepresentativeTimeFormatHandlerBase(abc.ABC):
     """Provides implementations for different representative time formats."""
@@ -70,22 +94,6 @@ class RepresentativeTimeFormatHandlerBase(abc.ABC):
     @abc.abstractmethod
     def add_time_attribute_columns(self, df: pd.DataFrame, timestamp_col: str) -> pd.DataFrame:
         """Extract attributes from timestamp_col as new columns."""
-
-    def create_tz_aware_mapping_dataframe(
-        self,
-        df: pd.DataFrame,
-        timestamp_col: str,
-        time_zones: list[str],
-    ) -> pd.DataFrame:
-        """Create time zone-aware time mapping dataframe."""
-        dfm = []
-        for tz in time_zones:
-            dft = df.copy()
-            dft["timestamp_tmp"] = dft[timestamp_col].dt.tz_convert(tz)
-            dft = self.add_time_attribute_columns(dft, "timestamp_tmp")
-            dft["time_zone"] = tz
-            dfm.append(dft.drop(columns=["timestamp_tmp"]))
-        return pd.concat(dfm, ignore_index=True)
 
 
 class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):

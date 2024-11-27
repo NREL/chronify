@@ -3,6 +3,7 @@ from sqlalchemy import Engine, MetaData
 from zoneinfo import ZoneInfo
 import pytest
 from datetime import datetime, timedelta
+from typing import Any
 
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_series_mapper import map_time
@@ -42,7 +43,7 @@ def run_test(
     df: pd.DataFrame,
     from_schema: TableSchema,
     to_schema: TableSchema,
-    error: tuple[any, str],
+    error: tuple[Any, str],
 ) -> None:
     # Ingest
     metadata = MetaData()
@@ -69,11 +70,11 @@ def run_test(
 
 
 def check_mapped_table(df: pd.DataFrame, ts: pd.Series) -> None:
-    res = sorted(df["timestamp"].drop_duplicates().tolist())
+    res = sorted(df["timestamp"].drop_duplicates().to_list())
     tru = sorted(ts)
     assert res == tru, "wrong unique timestamps"
 
-    res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
+    res = df.groupby(["time_zone"])["timestamp"].count().unique().to_list()
     tru = [len(ts)]
     assert res == tru, "wrong number of timestamps"
 
