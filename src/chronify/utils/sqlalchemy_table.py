@@ -7,6 +7,7 @@ from sqlalchemy import Engine, MetaData, Selectable, TableClause
 from sqlalchemy.ext import compiler
 from sqlalchemy.schema import DDLElement
 from sqlalchemy.sql import table
+from sqlalchemy.sql.sqltypes import DATETIME, TIMESTAMP, TEXT
 
 
 class CreateTable(DDLElement):
@@ -58,4 +59,15 @@ def create_table(
     sa.event.listen(metadata, "before_drop", DropTable(name).execute_if(callable_=_table_exists))  # type: ignore
     metadata.create_all(engine)
     metadata.reflect(engine, views=True)
+    mtable = metadata.tables[name]
+    if engine.name == "sqlite":
+        # This is a workaround for a case we don't understand.
+        # In some cases the datetime column schema is set to NUMERIC when the real values
+        # are strings.
+        for col in table_._columns:
+            mcol = mtable.columns[col.name]
+            if (
+                isinstance(col.type, TIMESTAMP) or isinstance(col.type, DATETIME)
+            ) and not isinstance(mcol.type, TEXT):
+                mcol.type = TEXT()
     return table_
