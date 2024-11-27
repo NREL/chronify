@@ -66,17 +66,37 @@ def run_test(
         queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)
 
         truth = generate_datetime_data(to_schema.time_config)
-        check_mapped_table(queried, truth)
+        check_mapped_timestamps(queried, truth)
+        check_mapped_values(queried, df)
 
 
-def check_mapped_table(df: pd.DataFrame, ts: pd.Series) -> None:
+def check_mapped_timestamps(df: pd.DataFrame, ts: pd.Series) -> None:
     res = sorted(df["timestamp"].drop_duplicates().to_list())
     tru = sorted(ts)
     assert res == tru, "wrong unique timestamps"
 
-    res = df.groupby(["time_zone"])["timestamp"].count().unique().to_list()
+    res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
     tru = [len(ts)]
     assert res == tru, "wrong number of timestamps"
+
+
+def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame) -> None:
+    dfr = dfo.groupby("id").sample(2, random_state=10)
+    if dfr["timestamp"].iloc[0].tzinfo is None:
+        dfr["local_time"] = dfr["timestamp"].copy()
+    else:
+        dfr["local_time"] = dfr.apply(
+            lambda x: x.timestamp.tz_convert(x.time_zone), axis=1
+        )  # obj dtype
+    dfr["month"] = dfr["local_time"].apply(lambda x: pd.Timestamp(x).month)
+    dfr["hour"] = dfr["local_time"].apply(lambda x: pd.Timestamp(x).hour)
+    dfr["day_of_week"] = dfr["local_time"].apply(lambda x: pd.Timestamp(x).day_of_week)
+    dfr["is_weekday"] = dfr["day_of_week"].map(lambda x: True if x < 5 else False)
+
+    keys = [x for x in dfi.columns if x != "value"]
+    dfr = pd.merge(dfr, dfi.rename(columns={"value": "mapped_value"}), on=keys)
+    diff = dfr["value"].compare(dfr["mapped_value"])
+    assert len(diff) == 0, f"Mapped values are inconsistent. {diff}"
 
 
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Pacific"), None])
