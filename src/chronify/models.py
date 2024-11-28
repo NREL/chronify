@@ -82,7 +82,7 @@ class PivotedTableSchema(TableSchemaBase):
         description="Use this name for the column representing the pivoted dimension during "
         "an unpivot operation.",
     )
-    value_columns: list[str] = Field(description="Column in the table that contain values.")
+    value_columns: list[str] = Field(description="Columns in the table that contain values.")
 
     @field_validator("value_columns")
     @classmethod

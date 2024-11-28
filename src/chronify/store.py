@@ -248,7 +248,6 @@ class Store:
         check_columns(df.columns, dst_schema.list_columns())
         table = self.get_table(dst_schema.name)
         if table is None:
-            table_existed = False
             duckdb_types = (
                 data.dtypes
                 if isinstance(data, DuckDBPyRelation)
@@ -261,8 +260,9 @@ class Store:
                 *[Column(x, y) for x, y in zip(df.columns, dtypes)],
             )
             table.create(self._engine)
+            created_table = True
         else:
-            table_existed = True
+            created_table = False
 
         with self._engine.begin() as conn:
             write_database(df, conn, dst_schema.name, dst_schema.time_config)
@@ -270,15 +270,15 @@ class Store:
                 check_timestamps(conn, table, dst_schema)
             except Exception:
                 conn.rollback()
-                if not table_existed:
+                if created_table:
                     table.drop(self._engine)
                     self.update_table_schema()
                 raise
-            if not table_existed:
+            if created_table:
                 self._add_schema(conn, dst_schema)
             conn.commit()
 
-        if not table_existed:
+        if created_table:
             self.update_table_schema()
 
     def list_tables(self) -> list[str]:
@@ -293,7 +293,6 @@ class Store:
         with self._engine.connect() as conn:
             self._add_schema(conn, dst_schema)
             conn.commit()
-        self.update_table_schema()
 
     def read_query(self, name: str, query: Selectable | str) -> pd.DataFrame:
         """Return the query result as a pandas DataFrame.
@@ -374,14 +373,11 @@ class Store:
             msg = "time_array_id_columns cannot be empty"
             raise InvalidParameter(msg)
 
-        stmt = None
+        assert time_array_id_columns
+        stmt = delete(table)
         for column, value in time_array_id_columns.items():
-            if stmt is None:
-                stmt = delete(table).where(table.c[column] == value)
-            else:
-                stmt = stmt.where(table.c[column] == value)
+            stmt = stmt.where(table.c[column] == value)
 
-        assert stmt is not None
         with self._engine.connect() as conn:
             conn.execute(stmt)
             conn.commit()
