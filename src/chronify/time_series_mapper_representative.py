@@ -1,4 +1,5 @@
 from sqlalchemy import Engine, MetaData, Table, select, text
+import logging
 
 import pandas as pd
 
@@ -10,6 +11,9 @@ from chronify.time_series_mapper_base import TimeSeriesMapperBase
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
 from chronify.time_series_checker import check_timestamps
+
+
+logger = logging.getLogger(__name__)
 
 
 class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
@@ -67,24 +71,28 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
                 f"table {map_table_name} already exists, delete it or use a different table name."
             )
             raise TableAlreadyExists(msg)
+
         try:
             with self._engine.connect() as conn:
                 write_database(dfm, conn, map_table_name, self._to_schema.time_config)
-                conn.commit()
-            self._metadata.reflect(self._engine, views=True)
-            self._apply_mapping(map_table_name)
-
-            mapped_table = Table(self._to_schema.name, self._metadata)
-            with self._engine.connect() as conn:
+                self._metadata.reflect(self._engine, views=True)
+                self._apply_mapping(map_table_name)
+                mapped_table = Table(self._to_schema.name, self._metadata)
                 try:
                     check_timestamps(conn, mapped_table, self._to_schema)
-                except Exception as e:
-                    print(e)
-                    print(f"check_timestamps failed, dropping mapped table {self._to_schema.name}")
-                    conn.execute(text(f"DROP TABLE {self._to_schema.name}"))
+                except Exception:
+                    logger.exception(
+                        "check_timestamps failed on mapped table {}. Drop it", self._to_schema.name
+                    )
+                    conn.rollback()
+                    raise
+                conn.commit()
         finally:
-            with self._engine.connect() as conn:
-                conn.execute(text(f"DROP TABLE {map_table_name}"))
+            if map_table_name in self._metadata.tables:
+                with self._engine.connect() as conn:
+                    conn.execute(text(f"DROP TABLE {map_table_name}"))
+                    conn.commit()
+                self._metadata.remove(Table(map_table_name, self._metadata))
 
     def _create_mapping(self, is_tz_naive) -> pd.DataFrame:
         """Create mapping dataframe"""
