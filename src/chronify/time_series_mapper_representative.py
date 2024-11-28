@@ -5,12 +5,18 @@ import pandas as pd
 
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.models import TableSchema
-from chronify.exceptions import MissingParameter, ConflictingInputsError, TableAlreadyExists
+from chronify.exceptions import (
+    MissingParameter,
+    ConflictingInputsError,
+    TableAlreadyExists,
+    InvalidParameter,
+)
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_base import TimeSeriesMapperBase
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
 from chronify.time_series_checker import check_timestamps
+from chronify.time_configs import DatetimeRange, RepresentativePeriodTime
 
 
 logger = logging.getLogger(__name__)
@@ -28,8 +34,20 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
+        self._check_src_schema_time_config()
+        self._check_dst_schema_time_config()
         self._check_table_column_producibility()
         self._check_schema_measurement_type_consistency()
+
+    def _check_src_schema_time_config(self) -> None:
+        if not isinstance(self._from_schema.time_config, RepresentativePeriodTime):
+            msg = "source schema does not have RepresentativePeriodTime time config. Use a different mapper."
+            raise InvalidParameter(msg)
+
+    def _check_dst_schema_time_config(self) -> None:
+        if not isinstance(self._to_schema.time_config, DatetimeRange):
+            msg = "destination schema does not have DatetimeRange time config. Use a different mapper."
+            raise InvalidParameter(msg)
 
     def _check_table_column_producibility(self) -> None:
         """Check columns in destination table can be produced by source table."""
@@ -94,7 +112,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
                     conn.commit()
                 self._metadata.remove(Table(map_table_name, self._metadata))
 
-    def _create_mapping(self, is_tz_naive) -> pd.DataFrame:
+    def _create_mapping(self, is_tz_naive: bool) -> pd.DataFrame:
         """Create mapping dataframe"""
         timestamp_generator = make_time_range_generator(self._to_schema.time_config)
 
@@ -116,7 +134,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             dfm = self._generator.create_tz_aware_mapping_dataframe(dft, to_time_col, time_zones)
         return dfm
 
-    def _apply_mapping(self, map_table_name: str):
+    def _apply_mapping(self, map_table_name: str) -> None:
         """Apply mapping to create result as a table according to_schema"""
         left_table = Table(self._from_schema.name, self._metadata)
         right_table = Table(map_table_name, self._metadata)

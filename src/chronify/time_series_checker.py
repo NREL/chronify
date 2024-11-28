@@ -1,5 +1,7 @@
 from sqlalchemy import Connection, Table, select, text
 
+import pandas as pd
+
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import read_database
@@ -72,7 +74,7 @@ class TimeSeriesChecker:
             raise InvalidTable(msg)
 
 
-def check_timestamp_lists(actual: list, expected: list) -> None:
+def check_timestamp_lists(actual: list[pd.Timestamp], expected: list[pd.Timestamp]) -> None:
     match = actual == expected
     if not match:
         if len(actual) != len(expected):

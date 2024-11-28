@@ -1,7 +1,7 @@
 import abc
 from collections.abc import Generator
 import logging
-from typing import Any
+from typing import Any, NamedTuple
 from collections import namedtuple
 
 import pandas as pd
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
     """Implements Behavior in the Representative Period Time."""
 
-    def __init__(self, model: RepresentativePeriodTime):
+    def __init__(self, model: RepresentativePeriodTime) -> None:
         super().__init__()
         self._model = model
         match self._model.time_format:
@@ -38,7 +38,7 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
             case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
                 self._handler = OneWeekdayDayAndWeekendDayPerMonthByHourHandler()
 
-    def iter_timestamps(self) -> Generator[tuple, None, None]:
+    def iter_timestamps(self) -> Generator[NamedTuple, None, None]:
         return self._handler.iter_timestamps()
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
@@ -82,11 +82,11 @@ class RepresentativeTimeFormatHandlerBase(abc.ABC):
     """Provides implementations for different representative time formats."""
 
     @abc.abstractmethod
-    def get_time_type() -> str:
+    def get_time_type(self) -> str:
         """Return the time type name representing the data."""
 
     @abc.abstractmethod
-    def iter_timestamps() -> Generator[Any, None, None]:
+    def iter_timestamps(self) -> Generator[Any, None, None]:
         """Return an iterator over all time indexes in the table.
         Type of the time is dependent on the class.
         """
@@ -99,14 +99,14 @@ class RepresentativeTimeFormatHandlerBase(abc.ABC):
 class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):
     """Handler for format with hourly data that includes one week per month."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.time_type = namedtuple("OneWeekPerMonthByHour", ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS)
 
     def get_time_type(self) -> str:
         return self.time_type.__name__
 
-    def iter_timestamps(self) -> Generator[tuple[int, int, int], None, None]:
+    def iter_timestamps(self) -> Generator[NamedTuple, None, None]:
         for month in range(1, 13):
             for dow in range(7):
                 for hour in range(24):
@@ -125,7 +125,7 @@ class OneWeekdayDayAndWeekendDayPerMonthByHourHandler(RepresentativeTimeFormatHa
     per month.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.time_type = namedtuple(
             "OneWeekdayDayAndWeekendDayPerMonthByHour",
@@ -135,7 +135,7 @@ class OneWeekdayDayAndWeekendDayPerMonthByHourHandler(RepresentativeTimeFormatHa
     def get_time_type(self) -> str:
         return self.time_type.__name__
 
-    def iter_timestamps(self) -> Generator[tuple[int, bool, int], None, None]:
+    def iter_timestamps(self) -> Generator[NamedTuple, None, None]:
         for month in range(1, 13):
             for is_weekday in [False, True]:
                 for hour in range(24):

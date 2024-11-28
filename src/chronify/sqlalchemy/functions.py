@@ -39,7 +39,7 @@ def write_database(
 
 def _convert_database_input_for_datetime(
     df: pd.DataFrame, conn: Connection, config: DatetimeRange
-) -> None:
+) -> pd.DataFrame:
     if (
         conn.engine.name == "sqlite"
         and isinstance(config, DatetimeRange)
@@ -54,7 +54,7 @@ def _convert_database_input_for_datetime(
 
 def _convert_database_output_for_datetime(
     df: pd.DataFrame, conn: Connection, config: DatetimeRange
-) -> None:
+) -> pd.DataFrame:
     if conn.engine.name == "sqlite" and isinstance(config, DatetimeRange):
         if not config.is_time_zone_naive():
             if isinstance(df[config.time_column].dtype, ObjectDType):
