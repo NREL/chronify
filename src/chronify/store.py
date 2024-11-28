@@ -405,32 +405,25 @@ class Store:
 
     def drop_table(self, name: str) -> None:
         """Drop a table from the database."""
-        table = self.get_table(name)
-        if table is None:
-            msg = f"{name=}"
-            raise TableNotStored(msg)
-
-        self._metadata.drop_all(self._engine, tables=[table])
-        self._metadata.remove(table)
-        with self.engine.connect() as conn:
-            self._remove_schema(conn, name)
-            conn.commit()
-
-        logger.info("Dropped table {}", name)
+        self._drop_table_or_view(name, "TABLE")
 
     def drop_view(self, name: str) -> None:
         """Drop a view from the database."""
+        self._drop_table_or_view(name, "VIEW")
+
+    def _drop_table_or_view(self, name: str, tbl_type: str):
         table = self.get_table(name)
         if table is None:
             msg = f"{name=}"
             raise TableNotStored(msg)
 
         with self._engine.connect() as conn:
-            conn.execute(text(f"DROP VIEW {name}"))
+            conn.execute(text(f"DROP {tbl_type} {name}"))
+            self._remove_schema(conn, name)
             conn.commit()
 
         self._metadata.remove(table)
-        logger.info("Dropped view {}", name)
+        logger.info("Dropped {} {}", tbl_type.lower(), name)
 
     def update_table_schema(self) -> None:
         """Update the sqlalchemy metadata for table schema. Call this method if you add tables
