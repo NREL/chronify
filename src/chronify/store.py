@@ -812,6 +812,10 @@ class Store:
         """Execute a query directly on the backend database connection, bypassing sqlalchemy, and
         return the results as a DataFrame.
 
+        Note: Unlike :meth:`read_query`, no conversion of timestamps is performed.
+        Timestamps will be in the format of the underlying database. SQLite backends will return
+        strings instead of datetime.
+
         Parameters
         ----------
         query
