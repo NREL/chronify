@@ -154,4 +154,3 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         on_stmt = reduce(and_, (left_table.c[x] == right_table.c[x] for x in keys))
         query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
         create_table(self._to_schema.name, query, self._engine, self._metadata)
-        self._metadata.reflect(self._engine, views=True)
