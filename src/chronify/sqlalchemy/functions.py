@@ -33,7 +33,7 @@ def write_database(
     is that the dataframe is already a copy of user inputs. This could be changed if needed.
     """
     if isinstance(config, DatetimeRange):
-        _convert_database_input_for_datetime(df, conn, config)
+        df = _convert_database_input_for_datetime(df, conn, config)
     pl.DataFrame(df).write_database(table_name, connection=conn, if_table_exists=if_table_exists)
 
 
@@ -45,10 +45,15 @@ def _convert_database_input_for_datetime(
         and isinstance(config, DatetimeRange)
         and not config.is_time_zone_naive()
     ):
+        df2 = df.copy()
         if isinstance(df[config.time_column].dtype, DatetimeTZDtype):
-            df[config.time_column] = df[config.time_column].dt.tz_convert("UTC")
+            df2[config.time_column] = df[config.time_column].dt.tz_convert("UTC")
         else:
-            df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
+            df2[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
+    else:
+        df2 = df
+
+    return df2
 
 
 def _convert_database_output_for_datetime(

@@ -407,7 +407,7 @@ class Store:
         """Drop a view from the database."""
         self._drop_table_or_view(name, "VIEW")
 
-    def _drop_table_or_view(self, name: str, tbl_type: str):
+    def _drop_table_or_view(self, name: str, tbl_type: str) -> None:
         table = self.get_table(name)
         if table is None:
             msg = f"{name=}"
