@@ -5,6 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import duckdb
+import numpy as np
 import pandas as pd
 import pytest
 from sqlalchemy import DateTime, Double, Engine, Table, create_engine, select
@@ -25,7 +26,6 @@ from chronify.time_configs import DatetimeRange
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import check_timestamp_lists
 from chronify.utils.sql import make_temp_view_name
-from chronify.utils.sqlalchemy_view import create_view
 
 
 GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
@@ -122,6 +122,40 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
     # Adding the same rows should fail.
     with pytest.raises(InvalidTable):
         store.ingest_from_csv(new_file, src_schema2, dst_schema)
+
+
+def test_ingest_multiple_tables(iter_engines: Engine):
+    store = Store(engine=iter_engines)
+    resolution = timedelta(hours=1)
+    df_base = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2020-01-01", "2020-12-31 23:00:00", freq=resolution),
+            "value": np.random.random(8784),
+        }
+    )
+    df1 = df_base.copy()
+    df2 = df_base.copy()
+    df1["id"] = 1
+    df2["id"] = 2
+    store.ingest_tables(
+        [df1, df2],
+        TableSchema(
+            name="devices",
+            value_column="value",
+            time_config=DatetimeRange(
+                time_column="timestamp",
+                start=datetime(2020, 1, 1, 0),
+                length=8784,
+                resolution=timedelta(hours=1),
+            ),
+            time_array_id_columns=["id"],
+        ),
+    )
+    query = "SELECT * FROM devices WHERE id = ?"
+    params = (2,)
+    df = store.read_query("devices", query, params=params)
+    df["timestamp"] = df["timestamp"].astype("datetime64[ns]")
+    assert df.equals(df2)
 
 
 @pytest.mark.parametrize("use_pandas", [False, True])
@@ -267,7 +301,7 @@ def test_map_datetime_to_one_week_per_month_by_hour(
     )
     store = Store(engine=engine)
     store.ingest_table(df, src_schema)
-    store.map_time(src_schema, dst_schema)
+    store.map_table_time_config(src_schema.name, dst_schema)
     df2 = store.read_table(dst_schema.name)
     assert len(df2) == time_array_len * num_time_arrays
     actual = sorted(df2["timestamp"].unique())
@@ -299,9 +333,20 @@ def test_load_existing_store(iter_engines_file, one_week_per_month_by_hour_table
     assert df2.equals(df)
     file_path = Path(engine.url.database)
     assert file_path.exists()
-    store2 = Store(engine_name=engine.name, file_path=file_path)
+    store2 = Store.load_from_file(engine_name=engine.name, file_path=file_path)
     df3 = store2.read_table(schema.name)
     assert df3.equals(df2)
+
+
+def test_create_methods(iter_engine_names, tmp_path):
+    path = tmp_path / "data.db"
+    assert not path.exists()
+    Store.create_file_db(engine_name=iter_engine_names, file_path=path)
+    assert path.exists()
+    with pytest.raises(InvalidOperation):
+        Store.create_file_db(engine_name=iter_engine_names, file_path=path)
+    Store.create_file_db(engine_name=iter_engine_names, file_path=path, overwrite=True)
+    Store.create_in_memory_db(engine_name=iter_engine_names)
 
 
 def test_create_with_existing_engine():
@@ -399,13 +444,15 @@ def test_drop_view(iter_engines: Engine, one_week_per_month_by_hour_table):
     df, _, schema = one_week_per_month_by_hour_table
     store = Store(engine=engine)
     store.ingest_table(df, schema)
-    view_name = make_temp_view_name()
     table = Table(schema.name, store.metadata)
     stmt = select(table).where(table.c.id == 1)
-    create_view(view_name, stmt, store.engine, store.metadata)
-    assert view_name in store.list_tables()
-    store.drop_view(view_name)
-    assert view_name not in store.list_tables()
+    inputs = schema.model_dump()
+    inputs["name"] = make_temp_view_name()
+    schema2 = TableSchema(**inputs)
+    store.create_view(schema2, stmt)
+    assert schema2.name in store.list_tables()
+    store.drop_view(schema2.name)
+    assert schema2.name not in store.list_tables()
 
 
 def test_read_raw_query(iter_engines: Engine, one_week_per_month_by_hour_table):

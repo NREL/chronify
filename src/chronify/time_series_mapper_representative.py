@@ -87,7 +87,9 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
         try:
             with self._engine.connect() as conn:
-                write_database(dfm, conn, map_table_name, self._to_schema.time_config)
+                write_database(
+                    dfm, conn, map_table_name, self._to_schema.time_config, if_table_exists="fail"
+                )
                 self._metadata.reflect(self._engine, views=True)
                 self._apply_mapping(map_table_name)
                 mapped_table = Table(self._to_schema.name, self._metadata)

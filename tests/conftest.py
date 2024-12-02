@@ -38,6 +38,12 @@ def iter_engines_file(request, tmp_path) -> Generator[Engine, None, None]:
     yield create_engine(url, *engine["connect_args"], **engine["kwargs"])
 
 
+@pytest.fixture(params=ENGINES.keys())
+def iter_engine_names(request) -> Generator[str, None, None]:
+    """Return an iterable of engine names."""
+    yield request.param
+
+
 @pytest.fixture
 def one_week_per_month_by_hour_table() -> tuple[pd.DataFrame, int, TableSchema]:
     """Return a table suitable for testing one_week_per_month_by_hour data.

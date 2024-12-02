@@ -7,6 +7,7 @@ from chronify.models import (
     PivotedTableSchema,
     TableSchema,
 )
+from chronify.time import RepresentativePeriodFormat
 from chronify.time_configs import (
     AnnualTimeRange,
     DatetimeRange,
