@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Optional
+from duckdb import DuckDBPyRelation
 
 import pandas as pd
 from loguru import logger
@@ -13,11 +14,13 @@ from chronify.models import (
     CsvTableSchema,
     TableSchema,
     TableSchemaBase,
+    get_duckdb_types_from_pandas,
     get_sqlalchemy_type_from_duckdb,
 )
 from chronify.sqlalchemy.functions import read_database, write_database
-from chronify.time_configs import DatetimeRange, IndexTimeRange
+from chronify.time_configs import TimeBaseModel, DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import check_timestamps
+from chronify.time_series_mapper import map_time
 from chronify.utils.sql import make_temp_view_name
 from chronify.utils.sqlalchemy_view import create_view
 
@@ -116,36 +119,56 @@ class Store:
                 dst_schema.value_column,
             )
 
+        # TODO
         if isinstance(src_schema.time_config, IndexTimeRange):
             if isinstance(dst_schema.time_config, DatetimeRange):
-                rel = ddbf.add_datetime_column(
-                    rel=rel,
-                    start=dst_schema.time_config.start,
-                    resolution=dst_schema.time_config.resolution,
-                    length=dst_schema.time_config.length,
-                    time_array_id_columns=src_schema.time_array_id_columns,
-                    time_column=dst_schema.time_config.time_column,
-                    timestamps=src_schema.time_config.list_timestamps(),
-                )
+                raise NotImplementedError
+                # timestamps = IndexTimeRangeGenerator(src_schema.time_config).list_timestamps()
+                # rel = ddbf.add_datetime_column(
+                #    rel=rel,
+                #    start=dst_schema.time_config.start,
+                #    resolution=dst_schema.time_config.resolution,
+                #    length=dst_schema.time_config.length,
+                #    time_array_id_columns=src_schema.time_array_id_columns,
+                #    time_column=dst_schema.time_config.time_column,
+                #    timestamps=timestamps,
+                # )
             else:
                 cls_name = dst_schema.time_config.__class__.__name__
                 msg = f"IndexTimeRange cannot be converted to {cls_name}"
                 raise NotImplementedError(msg)
 
+        self.ingest_table(rel, dst_schema)
+
+    def ingest_table(
+        self,
+        data: pd.DataFrame | DuckDBPyRelation,
+        dst_schema: TableSchema,
+    ) -> None:
+        """Ingest data into the table specifed by schema. If the table does not exist,
+        create it.
+        """
+        df = data.to_df() if isinstance(data, DuckDBPyRelation) else data
+        check_columns(df.columns, dst_schema.list_columns())
         table_exists = self.has_table(dst_schema.name)
         if table_exists:
             table = Table(dst_schema.name, self._metadata)
         else:
-            dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in rel.dtypes]
+            duckdb_types = (
+                data.dtypes
+                if isinstance(data, DuckDBPyRelation)
+                else get_duckdb_types_from_pandas(data)
+            )
+            dtypes = [get_sqlalchemy_type_from_duckdb(x) for x in duckdb_types]
             table = Table(
                 dst_schema.name,
                 self._metadata,
-                *[Column(x, y) for x, y in zip(rel.columns, dtypes)],
+                *[Column(x, y) for x, y in zip(df.columns, dtypes)],
             )
             table.create(self._engine)
 
         with self._engine.begin() as conn:
-            write_database(rel.to_df(), conn, dst_schema)
+            write_database(df, conn, dst_schema.name, dst_schema.time_config)
             try:
                 check_timestamps(conn, table, dst_schema)
             except Exception:
@@ -157,14 +180,20 @@ class Store:
             conn.commit()
         self.update_table_schema()
 
-    def read_query(self, query: Selectable | str, schema: TableSchema) -> pd.DataFrame:
+    def map_time(self, src_schema: TableSchema, dst_schema: TableSchema) -> None:
+        """Map the existing table represented by src_schema to a new table represented by
+        dst_schema.
+        """
+        map_time(self._engine, self._metadata, src_schema, dst_schema)
+
+    def read_query(self, query: Selectable | str, config: TimeBaseModel) -> pd.DataFrame:
         """Return the query result as a pandas DataFrame."""
         with self._engine.begin() as conn:
-            return read_database(query, conn, schema)
+            return read_database(query, conn, config)
 
     def read_table(self, schema: TableSchema) -> pd.DataFrame:
         """Return the table as a pandas DataFrame."""
-        return self.read_query(f"SELECT * FROM {schema.name}", schema)
+        return self.read_query(f"SELECT * FROM {schema.name}", schema.time_config)
 
     def write_query_to_parquet(self, stmt: Selectable, file_path: Path | str) -> None:
         """Write the result of a query to a Parquet file."""

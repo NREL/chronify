@@ -1,6 +1,7 @@
 """Definitions related to time"""
 
 from enum import StrEnum
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from chronify.exceptions import InvalidParameter
@@ -34,6 +35,31 @@ class RepresentativePeriodFormat(StrEnum):
     ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR = (
         "one_weekday_day_and_one_weekend_day_per_month_by_hour",
     )
+
+
+class OneWeekPerMonthByHour(NamedTuple):
+    month: int
+    day_of_week: int
+    hour: int
+
+
+class OneWeekdayDayOneWeekendDayPerMonthByHour(NamedTuple):
+    month: int
+    is_weekday: bool
+    hour: int
+
+
+def list_representative_time_columns(format_type: RepresentativePeriodFormat) -> list[str]:
+    """Return the time columns for the format."""
+    match format_type:
+        case RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
+            columns = list(OneWeekPerMonthByHour._fields)
+        case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
+            columns = list(OneWeekdayDayOneWeekendDayPerMonthByHour._fields)
+        case _:
+            msg = str(format_type)
+            raise NotImplementedError(msg)
+    return list(columns)
 
 
 class LeapDayAdjustmentType(StrEnum):

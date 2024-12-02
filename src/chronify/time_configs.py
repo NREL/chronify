@@ -1,11 +1,7 @@
 import abc
-from collections.abc import Generator
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Union, Literal
-from zoneinfo import ZoneInfo
-
-import pandas as pd
+from typing import Union, Literal
 from pydantic import (
     Field,
 )
@@ -21,8 +17,9 @@ from chronify.time import (
     TimeIntervalType,
     TimeType,
     TimeZone,
+    RepresentativePeriodFormat,
+    list_representative_time_columns,
 )
-
 # from chronify.time_utils import (
 #    build_time_ranges,
 #    filter_to_project_timestamps,
@@ -129,37 +126,8 @@ class TimeBasedDataAdjustment(ChronifyBaseModel):
 class TimeBaseModel(ChronifyBaseModel, abc.ABC):
     """Defines a base model common to all time dimensions."""
 
-    length: int
-
-    def list_timestamps(self) -> list[Any]:
-        """Return a list of timestamps for a time range.
-        Type of the timestamps depends on the class.
-
-        Returns
-        -------
-        list[Any]
-        """
-        return list(self.iter_timestamps())
-
-    def needs_utc_conversion(self, engine_name: str) -> bool:
-        """Return True if the data needs its time to be converted to/from UTC."""
-        return False
-
-    @abc.abstractmethod
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
-        """Return a list of distinct timestamps present in DataFrame.
-        Type of the timestamps depends on the class.
-
-        Returns
-        -------
-        list[Any]
-        """
-
-    @abc.abstractmethod
-    def iter_timestamps(self) -> Generator[Any, None, None]:
-        """Return an iterator over all time indexes in the table.
-        Type of the time is dependent on the class.
-        """
+    measurement_type: MeasurementType = MeasurementType.TOTAL
+    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_BEGINNING
 
     @abc.abstractmethod
     def list_time_columns(self) -> list[str]:
@@ -175,56 +143,16 @@ class DatetimeRange(TimeBaseModel):
         description="Start time of the range. If it includes a time zone, the timestamps in "
         "the data must also include time zones."
     )
+    length: int
     resolution: timedelta
     time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
-    interval_type: TimeIntervalType = TimeIntervalType.PERIOD_ENDING
-    measurement_type: MeasurementType = MeasurementType.TOTAL
 
     def is_time_zone_naive(self) -> bool:
         """Return True if the timestamps in the range do not have time zones."""
         return self.start.tzinfo is None
 
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
-        return sorted(df[self.time_column].unique())
-
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
-
-    def iter_timestamps(self) -> Generator[datetime, None, None]:
-        for i in range(self.length):
-            if self.is_time_zone_naive():
-                cur = adjust_timestamp_by_dst_offset(
-                    self.start + i * self.resolution, self.resolution
-                )
-            else:
-                tz = self.start.tzinfo
-                # always step in standard time
-                cur_utc = self.start.astimezone(ZoneInfo("UTC")) + i * self.resolution
-                cur = adjust_timestamp_by_dst_offset(cur_utc.astimezone(tz), self.resolution)
-            month = cur.month
-            day = cur.day
-            if not (
-                self.time_based_data_adjustment.leap_day_adjustment
-                == LeapDayAdjustmentType.DROP_FEB29
-                and month == 2
-                and day == 29
-            ):
-                if not (
-                    self.time_based_data_adjustment.leap_day_adjustment
-                    == LeapDayAdjustmentType.DROP_DEC31
-                    and month == 12
-                    and day == 31
-                ):
-                    if not (
-                        self.time_based_data_adjustment.leap_day_adjustment
-                        == LeapDayAdjustmentType.DROP_JAN1
-                        and month == 1
-                        and day == 1
-                    ):
-                        yield cur
-
-    def needs_utc_conversion(self, engine_name: str) -> bool:
-        return engine_name == "sqlite" and not self.is_time_zone_naive()
 
 
 class AnnualTimeRange(TimeBaseModel):
@@ -233,11 +161,8 @@ class AnnualTimeRange(TimeBaseModel):
     time_column: str = Field(description="Column in the table that represents time.")
     time_type: Literal[TimeType.ANNUAL] = TimeType.ANNUAL
     start: int
-    # TODO: measurement_type must be TOTAL
-
-    def iter_timestamps(self) -> Generator[int, None, None]:
-        for i in range(1, self.length + 1):
-            yield i
+    length: int
+    # TODO: measurement_type must be TOTAL, not necessarily right?
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
@@ -246,63 +171,28 @@ class AnnualTimeRange(TimeBaseModel):
 class IndexTimeRange(TimeBaseModel):
     time_type: Literal[TimeType.INDEX] = TimeType.INDEX
     start: int
+    length: int
     resolution: timedelta
     time_zone: TimeZone
     time_based_data_adjustment: TimeBasedDataAdjustment
-    interval_type: TimeIntervalType
-    measurement_type: MeasurementType
-
-    # TODO DT: totally wrong
-    # def iter_timestamps(self) -> Generator[datetime, None, None]:
-    #    cur = self.start.to_pydatetime().astimezone(ZoneInfo("UTC"))
-    #    cur_idx = self.start_index
-    #    end = (
-    #        self.end.to_pydatetime().astimezone(ZoneInfo("UTC")) + self.resolution
-    #    )  # to make end time inclusive
-
-    #    while cur < end:
-    #        cur_tz = cur.astimezone(self.tzinfo)
-    #        cur_tz = adjust_timestamp_by_dst_offset(cur_tz, self.resolution)
-    #        month = cur_tz.month
-    #        day = cur_tz.day
-    #        if not (
-    #            self.time_based_data_adjustment.leap_day_adjustment
-    #            == LeapDayAdjustmentType.DROP_FEB29
-    #            and month == 2
-    #            and day == 29
-    #        ):
-    #            if not (
-    #                self.time_based_data_adjustment.leap_day_adjustment
-    #                == LeapDayAdjustmentType.DROP_DEC31
-    #                and month == 12
-    #                and day == 31
-    #            ):
-    #                if not (
-    #                    self.time_based_data_adjustment.leap_day_adjustment
-    #                    == LeapDayAdjustmentType.DROP_JAN1
-    #                    and month == 1
-    #                    and day == 1
-    #                ):
-    #                    yield cur_idx
-    #        cur += self.resolution
-    #        cur_idx += 1
-
-
-class RepresentativePeriodTimeRange(TimeBaseModel):
-    """Defines a representative time dimension."""
-
-    time_columns: list[str] = Field(description="Columns in the table that represent time.")
-    time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
-    measurement_type: MeasurementType
-    time_interval_type: TimeIntervalType
-    # TODO
 
     def list_time_columns(self) -> list[str]:
-        return self.time_columns
+        # TODO:
+        return []
+
+
+class RepresentativePeriodTime(TimeBaseModel):
+    """Defines a representative time dimension that covers one full year of time."""
+
+    time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
+    time_format: RepresentativePeriodFormat
+
+    def list_time_columns(self) -> list[str]:
+        return list_representative_time_columns(self.time_format)
 
 
 TimeConfig = Annotated[
-    Union[AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTimeRange],
+    Union[AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTime],
     Field(
         description="Defines the times in a time series table.",
         discriminator="time_type",

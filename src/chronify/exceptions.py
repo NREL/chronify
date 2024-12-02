@@ -12,3 +12,11 @@ class InvalidTable(ChronifyExceptionBase):
 
 class InvalidParameter(ChronifyExceptionBase):
     """Raised when an invalid parameter is passed."""
+
+
+class MissingParameter(ChronifyExceptionBase):
+    """Raised when a parameter is not found or missing."""
+
+
+class TableAlreadyExists(ChronifyExceptionBase):
+    """Raised when a table already exists in engine."""
