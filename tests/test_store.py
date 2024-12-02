@@ -106,9 +106,6 @@ def test_ingest_csv(iter_engines: Engine, tmp_path, generators_schema, use_time_
     # Adding the same rows should fail.
     with pytest.raises(InvalidTable):
         store.ingest_from_csv(new_file, src_schema2, dst_schema)
-        df = store.read_table(dst_schema)
-        assert len(df) == 8784 * 3 * 2
-        all(df.timestamp.unique() == expected_timestamps)
 
 
 def test_ingest_invalid_csv(iter_engines: Engine, tmp_path, generators_schema):

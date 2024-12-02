@@ -6,7 +6,6 @@ from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import read_database
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.utils.sql import make_temp_view_name
 
 
 def check_timestamps(conn: Connection, table: Table, schema: TableSchema) -> None:
@@ -24,10 +23,11 @@ class TimeSeriesChecker:
         self._time_generator = make_time_range_generator(schema.time_config)
 
     def check_timestamps(self) -> None:
-        self._check_expected_timestamps_by_time_array()
-        self._check_expected_timestamps()
+        count = self._check_expected_timestamps()
+        self._check_null_consistency()
+        self._check_expected_timestamps_by_time_array(count)
 
-    def _check_expected_timestamps(self) -> None:
+    def _check_expected_timestamps(self) -> int:
         expected = self._time_generator.list_timestamps()
         time_columns = self._time_generator.list_time_columns()
         stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
@@ -36,42 +36,79 @@ class TimeSeriesChecker:
         df = read_database(stmt, self._conn, self._schema.time_config)
         actual = self._time_generator.list_distinct_timestamps_from_dataframe(df)
         check_timestamp_lists(actual, expected)
+        return len(expected)
 
-    def _check_expected_timestamps_by_time_array(self) -> None:
-        tmp_name = make_temp_view_name()
-        self._run_timestamp_checks_on_tmp_table(tmp_name)
-        self._conn.execute(text(f"DROP TABLE IF EXISTS {tmp_name}"))
+    def _check_null_consistency(self) -> None:
+        # If any time column has a NULL, all time columns must have a NULL.
+        time_columns = self._time_generator.list_time_columns()
+        if len(time_columns) == 1:
+            return
 
-    def _run_timestamp_checks_on_tmp_table(self, table_name: str) -> None:
+        all_are_null = " AND ".join((f"{x} IS NULL" for x in time_columns))
+        any_are_null = " OR ".join((f"{x} IS NULL" for x in time_columns))
+        query_all = f"SELECT COUNT(*) FROM {self._schema.name} WHERE {all_are_null}"
+        query_any = f"SELECT COUNT(*) FROM {self._schema.name} WHERE {any_are_null}"
+        res_all = self._conn.execute(text(query_all)).fetchone()
+        assert res_all is not None
+        res_any = self._conn.execute(text(query_any)).fetchone()
+        assert res_any is not None
+        if res_all[0] != res_any[0]:
+            msg = (
+                "If any time columns have a NULL value for a row, all time columns in that "
+                "row must be NULL. "
+                f"Row count where all time values are NULL: {res_all[0]}. "
+                f"Row count where any time values are NULL: {res_any[0]}. "
+            )
+            raise InvalidTable(msg)
+
+    def _check_expected_timestamps_by_time_array(self, count: int) -> None:
         id_cols = ",".join(self._schema.time_array_id_columns)
-        filters = [f"{x} IS NOT NULL" for x in self._time_generator.list_time_columns()]
-        where_clause = " AND ".join(filters)
+        time_cols = ",".join(self._schema.time_config.list_time_columns())
+        # NULL consistency was checked above.
+        where_clause = f"{self._time_generator.list_time_columns()[0]} IS NOT NULL"
+        on_expr = " AND ".join([f"t1.{x} = t2.{x}" for x in self._schema.time_array_id_columns])
+        t1_id_cols = ",".join((f"t1.{x}" for x in self._schema.time_array_id_columns))
+
         query = f"""
-            CREATE TEMP TABLE {table_name} AS
-                SELECT
-                    {id_cols}
-                    ,COUNT(*) AS count_by_ta
+            WITH distinct_time_values_by_array AS (
+                SELECT DISTINCT {time_cols}, {id_cols}
+                FROM {self._schema.name}
+                WHERE {where_clause}
+            ),
+            t1 AS (
+                SELECT {id_cols}, COUNT(*) AS distinct_count_by_ta
+                FROM distinct_time_values_by_array
+                GROUP BY {id_cols}
+            ),
+            t2 AS (
+                SELECT {id_cols}, COUNT(*) AS count_by_ta
                 FROM {self._schema.name}
                 WHERE {where_clause}
                 GROUP BY {id_cols}
+            )
+            SELECT
+                t1.distinct_count_by_ta
+                ,t2.count_by_ta
+                ,{t1_id_cols}
+            FROM t1
+            JOIN t2
+            ON {on_expr}
         """
-        self._conn.execute(text(query))
-        query2 = f"SELECT COUNT(DISTINCT count_by_ta) AS counts FROM {table_name}"
-        result2 = self._conn.execute(text(query2)).fetchone()
-        assert result2 is not None
-
-        if result2[0] != 1:
-            msg = f"All time arrays must have the same length. There are {result2[0]} different lengths"
-            raise InvalidTable(msg)
-
-        query3 = f"SELECT DISTINCT count_by_ta AS counts FROM {table_name}"
-        result3 = self._conn.execute(text(query3)).fetchone()
-        assert result3 is not None
-        actual_count = result3[0]
-        expected_count = len(self._time_generator.list_timestamps())
-        if actual_count != expected_count:
-            msg = f"Time arrays must have length={expected_count}. Actual = {actual_count}"
-            raise InvalidTable(msg)
+        for result in self._conn.execute(text(query)).fetchall():
+            distinct_count_by_ta = result[0]
+            count_by_ta = result[1]
+            if not count_by_ta == count == distinct_count_by_ta:
+                id_vals = result[2:]
+                values = ", ".join(
+                    f"{x}={y}" for x, y in zip(self._schema.time_array_id_columns, id_vals)
+                )
+                msg = (
+                    f"The count of time values in each time array must be {count}, and each "
+                    "value must be distinct. "
+                    f"Time array identifiers: {values}."
+                    f"count = {count_by_ta}, distinct count = {distinct_count_by_ta}. "
+                )
+                raise InvalidTable(msg)
 
 
 def check_timestamp_lists(actual: list[pd.Timestamp], expected: list[pd.Timestamp]) -> None:

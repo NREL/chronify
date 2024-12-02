@@ -38,8 +38,22 @@ def test_one_week_per_month_by_hour_missing_data(
 ):
     df, _, schema = one_week_per_month_by_hour_table
     df2 = df.loc[df["hour"] != 0].copy()
-    error = (InvalidTable, "Time arrays must have length")
+    error = (InvalidTable, "Mismatch number of timestamps")
     ingest_data_and_check(iter_engines, df2, schema, error)
+
+
+def test_consistent_time_nulls(iter_engines: Engine, one_week_per_month_by_hour_table):
+    df, _, schema = one_week_per_month_by_hour_table
+    df.loc[len(df)] = [4.0, None, None, None, None]
+    error = ()
+    ingest_data_and_check(iter_engines, df, schema, error)
+
+
+def test_inconsistent_time_nulls(iter_engines: Engine, one_week_per_month_by_hour_table):
+    df, _, schema = one_week_per_month_by_hour_table
+    df.loc[len(df)] = [4.0, None, 1.0, 2.0, 0.345]
+    error = (InvalidTable, "If any time columns have a NULL value for a row")
+    ingest_data_and_check(iter_engines, df, schema, error)
 
 
 def test_one_weekday_day_and_one_weekend_day_per_month_by_hour(
