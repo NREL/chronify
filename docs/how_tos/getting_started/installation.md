@@ -5,7 +5,7 @@
 
 # Installation
 
-#. Install Python 3.11 or later.
+1. Install Python 3.11 or later.
 
 #. Create a Python 3.11+ virtual environment. This example uses the ``venv`` module in the standard
 library to create a virtual environment in your home directory. You may prefer a single
@@ -18,7 +18,7 @@ or ``mamba``.
    $ python -m venv env
 ```
 
-#. Activate the virtual environment.
+2. Activate the virtual environment.
 
 ```{eval-rst}
 .. code-block:: console
@@ -28,7 +28,7 @@ or ``mamba``.
 
 Whenever you are done using chronify, you can deactivate the environment by running ``deactivate``.
 
-#. Install the Python package `chronify`.
+3. Install the Python package `chronify`.
 
 ```{eval-rst}
 .. code-block:: console
