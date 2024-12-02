@@ -1,16 +1,13 @@
 import abc
-from collections.abc import Generator
 import logging
-from typing import Any, NamedTuple
-from collections import namedtuple
+from typing import Any, Generator, NamedTuple
 
 import pandas as pd
 
 from chronify.time import (
-    ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS,
-    ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR_COLUMNS,
     RepresentativePeriodFormat,
 )
+from chronify.time import OneWeekPerMonthByHour, OneWeekdayDayOneWeekendDayPerMonthByHour
 from chronify.time_configs import RepresentativePeriodTime
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
@@ -32,6 +29,7 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
     def __init__(self, model: RepresentativePeriodTime) -> None:
         super().__init__()
         self._model = model
+        self._handler: RepresentativeTimeFormatHandlerBase
         match self._model.time_format:
             case RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR:
                 self._handler = OneWeekPerMonthByHourHandler()
@@ -101,16 +99,16 @@ class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.time_type = namedtuple("OneWeekPerMonthByHour", ONE_WEEK_PER_MONTH_BY_HOUR_COLUMNS)
 
-    def get_time_type(self) -> str:
-        return self.time_type.__name__
+    @staticmethod
+    def get_time_type() -> str:
+        return OneWeekPerMonthByHour.__name__
 
-    def iter_timestamps(self) -> Generator[NamedTuple, None, None]:
+    def iter_timestamps(self) -> Generator[OneWeekPerMonthByHour, None, None]:
         for month in range(1, 13):
             for dow in range(7):
                 for hour in range(24):
-                    yield self.time_type(month, dow, hour)
+                    yield OneWeekPerMonthByHour(month, dow, hour)
 
     def add_time_attribute_columns(self, df: pd.DataFrame, timestamp_col: str) -> pd.DataFrame:
         dfm = df.copy()
@@ -127,19 +125,16 @@ class OneWeekdayDayAndWeekendDayPerMonthByHourHandler(RepresentativeTimeFormatHa
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.time_type = namedtuple(
-            "OneWeekdayDayAndWeekendDayPerMonthByHour",
-            ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR_COLUMNS,
-        )
 
-    def get_time_type(self) -> str:
-        return self.time_type.__name__
+    @staticmethod
+    def get_time_type() -> str:
+        return OneWeekdayDayOneWeekendDayPerMonthByHour.__name__
 
-    def iter_timestamps(self) -> Generator[NamedTuple, None, None]:
+    def iter_timestamps(self) -> Generator[OneWeekdayDayOneWeekendDayPerMonthByHour, None, None]:
         for month in range(1, 13):
             for is_weekday in [False, True]:
                 for hour in range(24):
-                    yield self.time_type(month, is_weekday, hour)
+                    yield OneWeekdayDayOneWeekendDayPerMonthByHour(month, is_weekday, hour)
 
     def add_time_attribute_columns(self, df: pd.DataFrame, timestamp_col: str) -> pd.DataFrame:
         dfm = df.copy()
