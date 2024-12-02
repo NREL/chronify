@@ -5,7 +5,6 @@ import pandas as pd
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import read_database
-from chronify.time_configs import DatetimeRange
 from chronify.time_range_generator_factory import make_time_range_generator
 
 
@@ -36,9 +35,6 @@ class TimeSeriesChecker:
             stmt = stmt.where(self._table.c[col].is_not(None))
         df = read_database(stmt, self._conn, self._schema.time_config)
         actual = self._time_generator.list_distinct_timestamps_from_dataframe(df)
-
-        if isinstance(self._schema.time_config, DatetimeRange):
-            expected = [pd.Timestamp(x) for x in expected]
         check_timestamp_lists(actual, expected)
         return len(expected)
 
