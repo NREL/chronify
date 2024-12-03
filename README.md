@@ -1,7 +1,7 @@
 # chronify
 
 [![Documentation](https://img.shields.io/badge/docs-ready-blue.svg)](https://nrel.github.io/chronify)
-[![codecov](https://codecov.io/gh/nrel/chronify/branch/main/graph/badge.svg?token=W0441C9XAL)](https://codecov.io/gh/nrel/chronify)
+[![codecov](https://codecov.io/gh/nrel/chronify/graph/badge.svg?token=WIY2KAOX63)](https://codecov.io/gh/nrel/chronify)
 
 
 This package implements a store for time series data in support of Python-based
