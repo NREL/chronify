@@ -1,9 +1,11 @@
 # chronify
 
+[![Documentation](https://img.shields.io/badge/docs-ready-blue.svg)](https://nrel.github.io/chronify)
+[![codecov](https://codecov.io/gh/nrel/chronify/branch/main/graph/badge.svg?token=W0441C9XAL)](https://codecov.io/gh/nrel/chronify)
+
+
 This package implements a store for time series data in support of Python-based
 modeling packages. It supports validation and mapping across different time configurations.
-
-The package is currently non-functional and is just beginning planning and development.
 
 ## Package Developer Guide
 🚧
@@ -25,4 +27,4 @@ $ pre-commit install
 
 ## License
 chronify is developed under NREL Software Record SWR-21-52, "demand-side grid model".
-[License](https://github.com/NREL/chronify/blob/main/LICENSE.txt).
+[License](https://github.com/NREL/chronify/blob/main/LICENSE).
