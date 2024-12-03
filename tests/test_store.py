@@ -1,4 +1,5 @@
 import fileinput
+import gc
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -342,6 +343,7 @@ def test_create_methods(iter_engine_names, tmp_path):
     path = tmp_path / "data.db"
     assert not path.exists()
     Store.create_file_db(engine_name=iter_engine_names, file_path=path)
+    gc.collect()
     assert path.exists()
     with pytest.raises(InvalidOperation):
         Store.create_file_db(engine_name=iter_engine_names, file_path=path)
