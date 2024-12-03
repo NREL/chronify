@@ -35,7 +35,7 @@ dependencies = [
     "pydantic >= 2.7, < 3",
     "pytz",
     "rich",
-    "sqlalchemy == 2.0.35",  # 2.0.36 introduced code that duckdb_engine doesn't handle.
+    "sqlalchemy >= 2.0, < 3",
     "tzdata",
 ]
 [project.optional-dependencies]
@@ -46,6 +46,14 @@ dev = [
     "pytest",
     "pytest-cov",
     "ruff",
+    "furo",
+    "myst_parser",
+    "sphinx",
+    "sphinx-click",
+    "autodoc_pydantic~=2.0",
+    "sphinx-copybutton",
+    "sphinx-tabs~=3.4",
+
 ]
 
 [project.urls]
@@ -109,5 +117,5 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["E402"]
+"__init__.py" = ["E402", "F401"]
 "**/{tests,docs,tools}/*" = ["E402"]

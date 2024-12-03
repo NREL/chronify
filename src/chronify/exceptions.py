@@ -10,6 +10,10 @@ class InvalidTable(ChronifyExceptionBase):
     """Raised when a table does not match its schema."""
 
 
+class InvalidOperation(ChronifyExceptionBase):
+    """Raised when an invalid operation is requested."""
+
+
 class InvalidParameter(ChronifyExceptionBase):
     """Raised when an invalid parameter is passed."""
 
@@ -20,3 +24,7 @@ class MissingParameter(ChronifyExceptionBase):
 
 class TableAlreadyExists(ChronifyExceptionBase):
     """Raised when a table already exists in engine."""
+
+
+class TableNotStored(ChronifyExceptionBase):
+    """Raised when a table is not stored."""

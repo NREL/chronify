@@ -74,6 +74,35 @@ class TableSchema(TableSchemaBase):
         return super().list_columns() + [self.value_column]
 
 
+class PivotedTableSchema(TableSchemaBase):
+    """Defines the schema for an input table with pivoted format."""
+
+    pivoted_dimension_name: str = Field(
+        description="Use this name for the column representing the pivoted dimension during "
+        "an unpivot operation.",
+    )
+    value_columns: list[str] = Field(description="Columns in the table that contain values.")
+    time_array_id_columns: list[str] = []
+
+    @field_validator("value_columns")
+    @classmethod
+    def check_column(cls, value_columns: str) -> str:
+        for column in value_columns:
+            _check_name(column)
+        return value_columns
+
+    @field_validator("time_array_id_columns")
+    @classmethod
+    def check_time_array_id_columns(cls, value: list[str]) -> list[str]:
+        if value:
+            msg = f"PivotedTableSchema doesn't yet support time_array_id_columns: {value}"
+            raise ValueError(msg)
+        return value
+
+    def list_columns(self) -> list[str]:
+        return super().list_columns() + self.value_columns
+
+
 # TODO: print example tables here.
 
 _COLUMN_TYPES = {
@@ -102,7 +131,12 @@ def get_sqlalchemy_type_from_duckdb(duckdb_type: DuckDBPyType) -> Any:
     match duckdb_type:
         case duckdb.typing.TIMESTAMP_TZ:  # type: ignore
             sqlalchemy_type = DateTime(timezone=True)
-        case duckdb.typing.TIMESTAMP:  # type: ignore
+        case (
+            duckdb.typing.TIMESTAMP  # type: ignore
+            | duckdb.typing.TIMESTAMP_MS  # type: ignore
+            | duckdb.typing.TIMESTAMP_NS  # type: ignore
+            | duckdb.typing.TIMESTAMP_S  # type: ignore
+        ):
             sqlalchemy_type = DateTime(timezone=False)
         case _:
             cls = _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.get(duckdb_type.id)
@@ -172,12 +206,6 @@ class ColumnDType(ChronifyBaseModel):
         return data
 
 
-class PivotedFormatMetadata(ChronifyBaseModel):
-    """Defines metadata for a pivoted table."""
-
-    pivoted_dimension_name: str
-
-
 class CsvTableSchema(TableSchemaBase):
     """Defines the schema of data in a CSV file."""
 
@@ -199,6 +227,13 @@ class CsvTableSchema(TableSchemaBase):
     value_columns: Annotated[
         list[str], Field(description="Columns in the table that contain values.")
     ]
+    time_array_id_columns: list[str] = Field(
+        default=[],
+        description="Columns in the table that uniquely identify time arrays. "
+        "These could be geographic identifiers, such as county and state, or an integer ID. "
+        "Can be empty if the table is pivoted and each pivoted column denotes a time array. "
+        "Should not include time columns.",
+    )
 
     @field_validator("value_columns")
     @classmethod

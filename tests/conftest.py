@@ -24,9 +24,24 @@ def create_duckdb_engine() -> Engine:
 
 @pytest.fixture(params=ENGINES.keys())
 def iter_engines(request) -> Generator[Engine, None, None]:
-    """Return an iterable of sqlalchemy engines to test."""
+    """Return an iterable of sqlalchemy in-memory engines to test."""
     engine = ENGINES[request.param]
     yield create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
+
+
+@pytest.fixture(params=ENGINES.keys())
+def iter_engines_file(request, tmp_path) -> Generator[Engine, None, None]:
+    """Return an iterable of sqlalchemy file-based engines to test."""
+    engine = ENGINES[request.param]
+    file_path = tmp_path / "store.db"
+    url = engine["url"].replace(":memory:", str(file_path))
+    yield create_engine(url, *engine["connect_args"], **engine["kwargs"])
+
+
+@pytest.fixture(params=ENGINES.keys())
+def iter_engine_names(request) -> Generator[str, None, None]:
+    """Return an iterable of engine names."""
+    yield request.param
 
 
 @pytest.fixture
