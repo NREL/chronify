@@ -52,7 +52,6 @@ def generators_schema():
         ],
         value_columns=["gen1", "gen2", "gen3"],
         pivoted_dimension_name="generator",
-        time_array_id_columns=[],
     )
     dst_schema = TableSchema(
         name="generators",
