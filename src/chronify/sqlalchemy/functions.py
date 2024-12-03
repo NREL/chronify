@@ -80,13 +80,13 @@ def write_database(
 
 def _convert_database_input_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> pd.DataFrame:
     if config.is_time_zone_naive():
-        df2 = df
+        return df
+
+    df2 = df.copy()
+    if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
+        df2[config.time_column] = df2[config.time_column].dt.tz_convert("UTC")
     else:
-        df2 = df.copy()
-        if isinstance(df[config.time_column].dtype, DatetimeTZDtype):
-            df2[config.time_column] = df[config.time_column].dt.tz_convert("UTC")
-        else:
-            df2[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
+        df2[config.time_column] = df2[config.time_column].dt.tz_localize("UTC")
     return df2
 
 
