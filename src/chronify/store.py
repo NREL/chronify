@@ -238,7 +238,7 @@ class Store:
         path_ = path if isinstance(path, Path) else Path(path)
         with self._engine.begin() as conn:
             if self._engine.name == "duckdb":
-                str_path = f"{path}/**/*.parquet" if Path(path_).is_dir() else str(path_)
+                str_path = f"{path}/**/*.parquet" if path_.is_dir() else str(path_)
                 query = f"CREATE VIEW {schema.name} AS SELECT * FROM read_parquet('{str_path}')"
             else:
                 msg = f"create_view_from_parquet does not support engine={self._engine.name}"
