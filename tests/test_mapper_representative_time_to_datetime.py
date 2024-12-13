@@ -10,7 +10,7 @@ from chronify.time_series_mapper import map_time
 from chronify.time_configs import DatetimeRange
 from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, MeasurementType
-from chronify.exceptions import ConflictingInputsError, MissingParameter
+from chronify.exceptions import ConflictingInputsError, MissingParameter, InvalidParameter
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 
 
@@ -18,7 +18,7 @@ def generate_datetime_data(time_config: DatetimeRange) -> pd.Series:
     return pd.to_datetime(list(DatetimeRangeGenerator(time_config).iter_timestamps()))
 
 
-def get_datetime_schema(year, tzinfo) -> TableSchema:
+def get_datetime_schema(year: int, tzinfo: ZoneInfo | None) -> TableSchema:
     start = datetime(year=year, month=1, day=1, tzinfo=tzinfo)
     end = datetime(year=year + 1, month=1, day=1, tzinfo=tzinfo)
     resolution = timedelta(hours=1)
@@ -36,6 +36,14 @@ def get_datetime_schema(year, tzinfo) -> TableSchema:
         value_column="value",
     )
     return schema
+
+
+def add_time_zone_data(df: pd.DataFrame, schema: TableSchema) -> tuple[pd.DataFrame, TableSchema]:
+    df["time_zone"] = df["id"].map(
+        dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
+    )
+    schema.time_array_id_columns += ["time_zone"]
+    return df, schema
 
 
 def run_test(
@@ -69,7 +77,16 @@ def run_test(
 
         truth = generate_datetime_data(to_schema.time_config)
         check_mapped_timestamps(queried, truth)
-        check_mapped_values(queried, df)
+
+        # handles time shift
+        if from_schema.time_config.interval_type == to_schema.time_config.interval_type:
+            time_delta = timedelta(0)  # sec
+        elif from_schema.time_config.interval_type == TimeIntervalType.PERIOD_BEGINNING:
+            # datetime is period_ending, working backward, 2am pd-end >> 1am pd-beg
+            time_delta = -to_schema.time_config.resolution
+        elif from_schema.time_config.period_ending:
+            time_delta = to_schema.time_config.resolution
+        check_mapped_values(queried, df, time_delta=time_delta)
 
 
 def check_mapped_timestamps(df: pd.DataFrame, ts: pd.Series) -> None:
@@ -77,12 +94,13 @@ def check_mapped_timestamps(df: pd.DataFrame, ts: pd.Series) -> None:
     tru = sorted(ts)
     assert res == tru, "wrong unique timestamps"
 
-    res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
-    tru = [len(ts)]
-    assert res == tru, "wrong number of timestamps"
+    if "time_zone" in df.columns:
+        res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
+        tru = [len(ts)]
+        assert res == tru, "wrong number of timestamps"
 
 
-def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame) -> None:
+def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame, time_delta: timedelta) -> None:
     dfr = dfo.groupby("id").sample(2, random_state=10)
     if dfr["timestamp"].iloc[0].tzinfo is None:
         dfr["local_time"] = dfr["timestamp"].copy()
@@ -90,6 +108,7 @@ def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame) -> None:
         dfr["local_time"] = dfr.apply(
             lambda x: x.timestamp.tz_convert(x.time_zone), axis=1
         )  # obj dtype
+    dfr["local_time"] += time_delta
     dfr["month"] = dfr["local_time"].apply(lambda x: pd.Timestamp(x).month)
     dfr["hour"] = dfr["local_time"].apply(lambda x: pd.Timestamp(x).hour)
     dfr["day_of_week"] = dfr["local_time"].apply(lambda x: pd.Timestamp(x).day_of_week)
@@ -103,13 +122,12 @@ def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame) -> None:
 
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Pacific"), None])
 def test_one_week_per_month_by_hour(
-    iter_engines: Engine, one_week_per_month_by_hour_table, tzinfo
-):
+    iter_engines: Engine,
+    one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema],
+    tzinfo: ZoneInfo | None,
+) -> None:
     df, _, schema = one_week_per_month_by_hour_table
-    df["time_zone"] = df["id"].map(
-        dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
-    )
-    schema.time_array_id_columns += ["time_zone"]  # allowed in tz-naive
+    df, schema = add_time_zone_data(df, schema)  # allowed in tz-naive
 
     to_schema = get_datetime_schema(2020, tzinfo)
     to_schema.time_array_id_columns += ["time_zone"]
@@ -119,21 +137,51 @@ def test_one_week_per_month_by_hour(
 
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
 def test_one_weekday_day_and_one_weekend_day_per_month_by_hour(
-    iter_engines: Engine, one_weekday_day_and_one_weekend_day_per_month_by_hour_table, tzinfo
-):
+    iter_engines: Engine,
+    one_weekday_day_and_one_weekend_day_per_month_by_hour_table: tuple[
+        pd.DataFrame, int, TableSchema
+    ],
+    tzinfo: ZoneInfo | None,
+) -> None:
     df, _, schema = one_weekday_day_and_one_weekend_day_per_month_by_hour_table
-    df["time_zone"] = df["id"].map(
-        dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
-    )
-    schema.time_array_id_columns += ["time_zone"]  # allowed in tz-naive
-
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
+    if tzinfo is not None:
+        df, schema = add_time_zone_data(df, schema)
+        to_schema.time_array_id_columns += ["time_zone"]
     error = ()
     run_test(iter_engines, df, schema, to_schema, error)
 
 
-def test_missing_time_zone(iter_engines: Engine, one_week_per_month_by_hour_table):
+@pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
+def test_time_interval_shift(
+    iter_engines: Engine,
+    one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema],
+    tzinfo: ZoneInfo | None,
+) -> None:
+    df, _, schema = one_week_per_month_by_hour_table
+    df, schema = add_time_zone_data(df, schema)
+    to_schema = get_datetime_schema(2020, tzinfo)
+    to_schema.time_array_id_columns += ["time_zone"]
+    to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
+    error = ()
+    run_test(iter_engines, df, schema, to_schema, error)
+
+
+def test_instantaneous_interval_type(
+    iter_engines: Engine,
+    one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema],
+) -> None:
+    df, _, schema = one_week_per_month_by_hour_table
+
+    to_schema = get_datetime_schema(2020, None)
+    to_schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
+    error = (InvalidParameter, "Cannot handle")
+    run_test(iter_engines, df, schema, to_schema, error)
+
+
+def test_missing_time_zone(
+    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
+) -> None:
     df, _, schema = one_week_per_month_by_hour_table
 
     to_schema = get_datetime_schema(2020, ZoneInfo("US/Mountain"))
@@ -144,7 +192,9 @@ def test_missing_time_zone(iter_engines: Engine, one_week_per_month_by_hour_tabl
     run_test(iter_engines, df, schema, to_schema, error)
 
 
-def test_schema_compatibility(iter_engines: Engine, one_week_per_month_by_hour_table):
+def test_schema_compatibility(
+    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
+) -> None:
     df, _, schema = one_week_per_month_by_hour_table
 
     to_schema = get_datetime_schema(2020, None)
@@ -153,7 +203,9 @@ def test_schema_compatibility(iter_engines: Engine, one_week_per_month_by_hour_t
     run_test(iter_engines, df, schema, to_schema, error)
 
 
-def test_measurement_type_consistency(iter_engines: Engine, one_week_per_month_by_hour_table):
+def test_measurement_type_consistency(
+    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
+) -> None:
     df, _, schema = one_week_per_month_by_hour_table
 
     to_schema = get_datetime_schema(2020, None)
