@@ -4,7 +4,7 @@ is very slow. This code attempts to bypass Python as much as possible through Ar
 in memory.
 """
 
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, Sequence
 
 import pandas as pd
 import polars as pl
@@ -44,7 +44,7 @@ def write_database(
     df: pd.DataFrame,
     conn: Connection,
     table_name: str,
-    configs: list[TimeBaseModel],
+    configs: Sequence[TimeBaseModel],
     if_table_exists: DbWriteMode = "append",
 ) -> None:
     """Write a Pandas DataFrame to the database.

@@ -1,8 +1,8 @@
 """Functions related to time"""
 
 import logging
-
 import numpy as np
+from typing import Any
 
 import pandas as pd
 
@@ -15,8 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 def shift_time_interval(
-    df: pd.Series, from_interval_type: TimeIntervalType, to_interval_type: TimeIntervalType
-) -> pd.Series:
+    df: "pd.Series[pd.Timestamp]",
+    from_interval_type: TimeIntervalType,
+    to_interval_type: TimeIntervalType,
+) -> "pd.Series[pd.Timestamp]":
     """Shift pandas timeseries by time interval based on interval type."""
     assert (
         from_interval_type != to_interval_type
@@ -24,7 +26,7 @@ def shift_time_interval(
     arr = np.sort(df)
     freqs = set((np.roll(arr, -1) - arr)[:-1])
     assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
-    freq = list(freqs)[0]
+    freq: pd.Timedelta = list(freqs)[0]
 
     match (from_interval_type, to_interval_type):
         case (TimeIntervalType.PERIOD_BEGINNING, TimeIntervalType.PERIOD_ENDING):
@@ -40,8 +42,10 @@ def shift_time_interval(
 
 
 def roll_time_interval(
-    df: pd.Series, from_interval_type: TimeIntervalType, to_interval_type: TimeIntervalType
-) -> pd.Series:
+    df: "pd.Series[pd.Timestamp]",
+    from_interval_type: TimeIntervalType,
+    to_interval_type: TimeIntervalType,
+) -> np.typing.NDArray[Any]:
     """Roll pandas timeseries by time interval based on interval type with np.roll(),
     which includes time-wrapping.
     """
@@ -61,9 +65,11 @@ def roll_time_interval(
     return np.roll(df, shift)
 
 
-def wrap_timestamps(df: pd.Series, to_timestamps: list[pd.Timestamp]) -> pd.Series:
+def wrap_timestamps(
+    df: "pd.Series[pd.Timestamp]", to_timestamps: list[pd.Timestamp]
+) -> "pd.Series[pd.Timestamp]":
     """Wrap pandas timeseries so it conforms to a list of timestamps."""
-    arr = np.sort(to_timestamps)
+    arr = np.sort(np.array(to_timestamps))
     freqs = set((np.roll(arr, -1) - arr)[:-1])
     assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
     freq = list(freqs)[0]

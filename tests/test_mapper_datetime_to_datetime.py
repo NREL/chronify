@@ -132,7 +132,6 @@ def test_time_interval_shift(
     )
     df = generate_datetime_dataframe(from_schema)
     to_schema = get_datetime_schema(2020, tzinfo, TimeIntervalType.PERIOD_ENDING, "to_table")
-
     error = ()
     run_test(iter_engines, df, from_schema, to_schema, error)
 
