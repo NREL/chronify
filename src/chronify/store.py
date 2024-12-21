@@ -688,7 +688,7 @@ class Store:
             created_table = False
 
         try:
-            write_database(df, conn, schema.name, schema.time_config)
+            write_database(df, conn, schema.name, [schema.time_config])
         except Exception:
             if created_table:
                 table.drop(self._engine)

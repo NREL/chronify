@@ -44,10 +44,12 @@ def write_database(
     df: pd.DataFrame,
     conn: Connection,
     table_name: str,
-    config: TimeBaseModel,
+    configs: list[TimeBaseModel],
     if_table_exists: DbWriteMode = "append",
 ) -> None:
-    """Write a Pandas DataFrame to the database."""
+    """Write a Pandas DataFrame to the database.
+    configs allows sqlite formatting for more than one datetime columns.
+    """
     match conn.engine.name:
         case "duckdb":
             assert conn._dbapi_connection is not None
@@ -67,8 +69,9 @@ def write_database(
                     raise InvalidOperation(msg)
             conn._dbapi_connection.driver_connection.sql(query)
         case "sqlite":
-            if isinstance(config, DatetimeRange):
-                df = _convert_database_input_for_datetime(df, config)
+            for config in configs:
+                if isinstance(config, DatetimeRange):
+                    df = _convert_database_input_for_datetime(df, config)
             pl.DataFrame(df).write_database(
                 table_name, connection=conn, if_table_exists=if_table_exists
             )

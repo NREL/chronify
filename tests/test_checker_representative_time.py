@@ -14,7 +14,7 @@ def ingest_data_and_check(
 ) -> None:
     metadata = MetaData()
     with engine.connect() as conn:
-        write_database(df, conn, schema.name, schema.time_config, if_table_exists="replace")
+        write_database(df, conn, schema.name, [schema.time_config], if_table_exists="replace")
         conn.commit()
     metadata.reflect(engine, views=True)
 

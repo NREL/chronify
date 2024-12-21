@@ -78,7 +78,7 @@ def _run_test(
         value_column="value",
     )
     with engine.connect() as conn:
-        write_database(df, conn, schema.name, schema.time_config, if_table_exists="replace")
+        write_database(df, conn, schema.name, [schema.time_config], if_table_exists="replace")
         conn.commit()
     metadata.reflect(engine)
 

@@ -62,6 +62,10 @@ class TableSchema(TableSchemaBase):
     @classmethod
     def check_name(cls, name: str) -> str:
         _check_name(name)
+        if name.lower() == "table":
+            # Avoid for DuckdB.
+            msg = f"Table schema cannot use {name=}."
+            raise ValueError(msg)
         return name
 
     @field_validator("value_column")

@@ -57,7 +57,7 @@ def run_test(
     metadata = MetaData()
     with engine.connect() as conn:
         write_database(
-            df, conn, from_schema.name, from_schema.time_config, if_table_exists="replace"
+            df, conn, from_schema.name, [from_schema.time_config], if_table_exists="replace"
         )
         conn.commit()
     metadata.reflect(engine, views=True)
