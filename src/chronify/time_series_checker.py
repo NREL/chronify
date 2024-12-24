@@ -118,8 +118,8 @@ def check_timestamp_lists(actual: list[pd.Timestamp], expected: list[pd.Timestam
             msg = f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}\n"
         else:
             msg = ""
-        missing = [x for x in expected if x not in actual]
-        extra = [x for x in actual if x not in expected]
+        missing = set(expected).difference(set(actual))
+        extra = set(actual).difference(set(expected))
         msg += "Actual timestamps do not match expected timestamps. \n"
         msg += f"Missing: {missing} \n"
         msg += f"Extra: {extra}"

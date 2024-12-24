@@ -4,10 +4,9 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
 
 from chronify.sqlalchemy.functions import read_database
-from chronify.models import TableSchema
+from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import (
     MissingParameter,
-    ConflictingInputsError,
     InvalidParameter,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -15,7 +14,6 @@ from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
 from chronify.time_configs import DatetimeRange, RepresentativePeriodTime
 from chronify.time_utils import shift_time_interval
-from chronify.time import TimeIntervalType
 
 logger = logging.getLogger(__name__)
 
@@ -24,51 +22,16 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
     def __init__(
         self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
     ) -> None:
+        super().__init__(engine, metadata, from_schema, to_schema)
         if not isinstance(from_schema.time_config, RepresentativePeriodTime):
             msg = "source schema does not have RepresentativePeriodTime time config. Use a different mapper."
             raise InvalidParameter(msg)
         if not isinstance(to_schema.time_config, DatetimeRange):
             msg = "destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
+        self._generator = RepresentativePeriodTimeGenerator(from_schema.time_config)
         self._from_time_config = from_schema.time_config
         self._to_time_config = to_schema.time_config
-        self._from_schema = from_schema
-        self._to_schema = to_schema
-        self._engine = engine
-        self._metadata = metadata
-        self._generator = RepresentativePeriodTimeGenerator(self._from_time_config)
-
-    def check_schema_consistency(self) -> None:
-        """Check that from_schema can produce to_schema."""
-        self._check_table_columns_producibility()
-        self._check_measurement_type_consistency()
-        self._check_time_interval_type()
-
-    def _check_table_columns_producibility(self) -> None:
-        """Check columns in destination table can be produced by source table."""
-        available_cols = self._from_schema.list_columns() + [self._to_time_config.time_column]
-        final_cols = self._to_schema.list_columns()
-        if diff := set(final_cols) - set(available_cols):
-            msg = f"Source table {self._from_schema.name} cannot produce the columns: {diff}"
-            raise ConflictingInputsError(msg)
-
-    def _check_measurement_type_consistency(self) -> None:
-        """Check that measurement_type is the same between schema."""
-        from_mt = self._from_time_config.measurement_type
-        to_mt = self._to_time_config.measurement_type
-        if from_mt != to_mt:
-            msg = f"Inconsistent measurement_types {from_mt=} vs. {to_mt=}"
-            raise ConflictingInputsError(msg)
-
-    def _check_time_interval_type(self) -> None:
-        """Check time interval type consistency."""
-        from_interval = self._from_time_config.interval_type
-        to_interval = self._from_time_config.interval_type
-        if TimeIntervalType.INSTANTANEOUS in (from_interval, to_interval) and (
-            from_interval != to_interval
-        ):
-            msg = "If instantaneous time interval is used, it must exist in both from_scheme and to_schema."
-            raise ConflictingInputsError(msg)
 
     def _check_source_table_has_time_zone(self) -> None:
         """Check source table has time_zone column."""
@@ -83,13 +46,12 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         if not is_tz_naive:
             self._check_source_table_has_time_zone()
 
-        map_table_name = "mapping_table"
-        df = self._create_mapping(is_tz_naive)
+        df, mapping_schema = self._create_mapping(is_tz_naive)
         apply_mapping(
-            df, map_table_name, self._from_schema, self._to_schema, self._engine, self._metadata
+            df, mapping_schema, self._from_schema, self._to_schema, self._engine, self._metadata
         )
 
-    def _create_mapping(self, is_tz_naive: bool) -> pd.DataFrame:
+    def _create_mapping(self, is_tz_naive: bool) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe
         - Handles time interval type adjustment
         - Columns used to join the from_table are prefixed with "from_"
@@ -100,9 +62,10 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         dft = pd.Series(timestamp_generator.list_timestamps()).rename(to_time_col).to_frame()
 
         if self._from_time_config.interval_type != self._to_time_config.interval_type:
-            time_col = "mapping_" + to_time_col
-            # mapping works backward for representative time
-            # shift is correct here for extracting time info
+            time_col = "to_" + to_time_col
+            # mapping works backward for representative time by
+            # shifting interval type of to_time_config to match
+            # from_time_config before extracting time info
             dft[time_col] = shift_time_interval(
                 dft[to_time_col],
                 self._to_time_config.interval_type,
@@ -112,6 +75,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             time_col = to_time_col
 
         from_columns = self._from_time_config.list_time_columns()
+        other_columns = []
         if is_tz_naive:
             df = self._generator.create_tz_naive_mapping_dataframe(dft, time_col)
         else:
@@ -127,6 +91,15 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
                 ].to_list()
             df = self._generator.create_tz_aware_mapping_dataframe(dft, time_col, time_zones)
             from_columns.append("time_zone")
+            other_columns.append("time_zone")
 
         df = df.rename(columns={x: "from_" + x for x in from_columns})
-        return df
+
+        mapping_schema = MappingTableSchema(
+            name="mapping_table",
+            time_configs=[
+                self._to_time_config,  # only needs to pass DatetimeRange
+            ],
+            other_columns=other_columns,
+        )
+        return df, mapping_schema

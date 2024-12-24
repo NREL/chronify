@@ -9,8 +9,8 @@ from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_series_mapper import map_time
 from chronify.time_configs import DatetimeRange
 from chronify.models import TableSchema
-from chronify.time import TimeIntervalType, MeasurementType
-from chronify.exceptions import ConflictingInputsError, MissingParameter, InvalidParameter
+from chronify.time import TimeIntervalType
+from chronify.exceptions import MissingParameter
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 
 
@@ -172,10 +172,10 @@ def test_instantaneous_interval_type(
     one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema],
 ) -> None:
     df, _, schema = one_week_per_month_by_hour_table
-
+    schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
     to_schema = get_datetime_schema(2020, None)
     to_schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
-    error = (InvalidParameter, "Cannot handle")
+    error = ()
     run_test(iter_engines, df, schema, to_schema, error)
 
 
@@ -189,26 +189,4 @@ def test_missing_time_zone(
         MissingParameter,
         "time_zone is required for tz-aware representative time mapping and it is missing from source table",
     )
-    run_test(iter_engines, df, schema, to_schema, error)
-
-
-def test_schema_compatibility(
-    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
-) -> None:
-    df, _, schema = one_week_per_month_by_hour_table
-
-    to_schema = get_datetime_schema(2020, None)
-    to_schema.time_array_id_columns += ["extra_column"]
-    error = (ConflictingInputsError, ".* cannot produce the columns")
-    run_test(iter_engines, df, schema, to_schema, error)
-
-
-def test_measurement_type_consistency(
-    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
-) -> None:
-    df, _, schema = one_week_per_month_by_hour_table
-
-    to_schema = get_datetime_schema(2020, None)
-    to_schema.time_config.measurement_type = MeasurementType.MAX
-    error = (ConflictingInputsError, "Inconsistent measurement_types")
     run_test(iter_engines, df, schema, to_schema, error)

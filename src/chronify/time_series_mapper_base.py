@@ -7,11 +7,11 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select, text
 
 from chronify.sqlalchemy.functions import write_database
-from chronify.models import TableSchema
-from chronify.exceptions import TableAlreadyExists
+from chronify.models import TableSchema, MappingTableSchema
+from chronify.exceptions import TableAlreadyExists, ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
-from chronify.time_configs import DatetimeRange
+from chronify.time import TimeIntervalType
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,58 @@ logger = logging.getLogger(__name__)
 class TimeSeriesMapperBase(abc.ABC):
     """Maps time series data from one configuration to another."""
 
+    def __init__(
+        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+    ) -> None:
+        self._engine = engine
+        self._metadata = metadata
+        self._from_schema = from_schema
+        self._to_schema = to_schema
+        # self._from_time_config = from_schema.time_config
+        # self._to_time_config = to_schema.time_config
+
+    def check_schema_consistency(self) -> None:
+        """Check that from_schema can produce to_schema."""
+        self._check_table_columns_producibility()
+        self._check_measurement_type_consistency()
+        self._check_time_interval_type()
+
+    def _check_table_columns_producibility(self) -> None:
+        """Check columns in destination table can be produced by source table."""
+        available_cols = (
+            self._from_schema.list_columns() + self._to_schema.time_config.list_time_columns()
+        )
+        final_cols = self._to_schema.list_columns()
+        if diff := set(final_cols) - set(available_cols):
+            msg = f"Source table {self._from_schema.name} cannot produce the columns: {diff}"
+            raise ConflictingInputsError(msg)
+
+    def _check_measurement_type_consistency(self) -> None:
+        """Check that measurement_type is the same between schema."""
+        from_mt = self._from_schema.time_config.measurement_type
+        to_mt = self._to_schema.time_config.measurement_type
+        if from_mt != to_mt:
+            msg = f"Inconsistent measurement_types {from_mt=} vs. {to_mt=}"
+            raise ConflictingInputsError(msg)
+
+    def _check_time_interval_type(self) -> None:
+        """Check time interval type consistency."""
+        from_interval = self._from_schema.time_config.interval_type
+        to_interval = self._to_schema.time_config.interval_type
+        if TimeIntervalType.INSTANTANEOUS in (from_interval, to_interval) and (
+            from_interval != to_interval
+        ):
+            msg = "If instantaneous time interval is used, it must exist in both from_scheme and to_schema."
+            raise ConflictingInputsError(msg)
+
+    @abc.abstractmethod
+    def map_time(self) -> None:
+        """Convert time columns with from_schema to to_schema configuration."""
+
 
 def apply_mapping(
     df_mapping: pd.DataFrame,
-    mapping_table_name: str,
+    mapping_schema: MappingTableSchema,
     from_schema: TableSchema,
     to_schema: TableSchema,
     engine: Engine,
@@ -31,24 +79,23 @@ def apply_mapping(
     """
     Apply mapping to create result table with process to clean up and roll back if checks fail
     """
-    if mapping_table_name in metadata.tables:
+    if mapping_schema.name in metadata.tables:
         msg = (
-            f"table {mapping_table_name} already exists, delete it or use a different table name."
+            f"table {mapping_schema.name} already exists, delete it or use a different table name."
         )
         raise TableAlreadyExists(msg)
 
-    time_configs = [to_schema.time_config]
-    if isinstance(from_schema.time_config, DatetimeRange):
-        from_time_config = from_schema.time_config.model_copy()
-        from_time_config.time_column = "from_" + from_time_config.time_column
-        time_configs.append(from_time_config)
     try:
         with engine.connect() as conn:
             write_database(
-                df_mapping, conn, mapping_table_name, time_configs, if_table_exists="fail"
+                df_mapping,
+                conn,
+                mapping_schema.name,
+                mapping_schema.time_configs,
+                if_table_exists="fail",
             )
             metadata.reflect(engine, views=True)
-            _apply_mapping(mapping_table_name, from_schema, to_schema, engine, metadata)
+            _apply_mapping(mapping_schema.name, from_schema, to_schema, engine, metadata)
             mapped_table = Table(to_schema.name, metadata)
             try:
                 check_timestamps(conn, mapped_table, to_schema)
@@ -60,11 +107,11 @@ def apply_mapping(
                 raise
             conn.commit()
     finally:
-        if mapping_table_name in metadata.tables:
+        if mapping_schema.name in metadata.tables:
             with engine.connect() as conn:
-                conn.execute(text(f"DROP TABLE {mapping_table_name}"))
+                conn.execute(text(f"DROP TABLE {mapping_schema.name}"))
                 conn.commit()
-            metadata.remove(Table(mapping_table_name, metadata))
+            metadata.remove(Table(mapping_schema.name, metadata))
 
 
 def _apply_mapping(

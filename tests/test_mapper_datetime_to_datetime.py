@@ -17,7 +17,7 @@ from chronify.datetime_range_generator import DatetimeRangeGenerator
 from chronify.time_utils import shift_time_interval, roll_time_interval, wrap_timestamps
 
 
-def generate_datetime_data(time_config: DatetimeRange) -> pd.Series:
+def generate_datetime_data(time_config: DatetimeRange) -> pd.Series:  # type: ignore
     return pd.to_datetime(list(DatetimeRangeGenerator(time_config).iter_timestamps()))
 
 
@@ -63,6 +63,8 @@ def check_dataframes(
             shift = 1
         case TimeIntervalType.PERIOD_ENDING, TimeIntervalType.PERIOD_BEGINNING:
             shift = -1
+        case TimeIntervalType.INSTANTANEOUS, TimeIntervalType.INSTANTANEOUS:
+            shift = 0
     assert (np.array(dfo["value"]) == np.roll(dfi["value"], shift)).all()
 
 
@@ -139,10 +141,10 @@ def test_time_interval_shift(
 def test_instantaneous_interval_type(
     iter_engines: Engine,
 ) -> None:
-    from_schema = get_datetime_schema(2020, None, TimeIntervalType.INSTANTANEOUS, "from_table")
+    from_schema = get_datetime_schema(2020, None, TimeIntervalType.PERIOD_BEGINNING, "from_table")
     df = generate_datetime_dataframe(from_schema)
-    to_schema = get_datetime_schema(2020, None, TimeIntervalType.PERIOD_ENDING, "to_table")
-    error = (InvalidParameter, "Cannot handle")
+    to_schema = get_datetime_schema(2020, None, TimeIntervalType.INSTANTANEOUS, "to_table")
+    error = (ConflictingInputsError, "If instantaneous time interval is used")
     run_test(iter_engines, df, from_schema, to_schema, error)
 
 
@@ -166,3 +168,19 @@ def test_measurement_type_consistency(
     to_schema.time_config.measurement_type = MeasurementType.MAX
     error = (ConflictingInputsError, "Inconsistent measurement_types")
     run_test(iter_engines, df, from_schema, to_schema, error)
+
+
+def test_duplicated_configs_in_write_database(
+    iter_engines: Engine,
+) -> None:
+    schema = get_datetime_schema(2020, None, TimeIntervalType.PERIOD_BEGINNING, "from_table")
+    df = generate_datetime_dataframe(schema)
+    configs = [schema.time_config, schema.time_config]
+
+    # Ingest
+    with iter_engines.connect() as conn:
+        if conn.engine.name == "sqlite":
+            with pytest.raises(InvalidParameter, match="More than one datetime config found"):
+                write_database(df, conn, schema.name, configs, if_table_exists="replace")
+        else:
+            write_database(df, conn, schema.name, configs, if_table_exists="replace")

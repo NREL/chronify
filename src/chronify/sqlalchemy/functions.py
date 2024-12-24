@@ -5,6 +5,7 @@ in memory.
 """
 
 from typing import Any, Literal, TypeAlias, Sequence
+from collections import Counter
 
 import pandas as pd
 import polars as pl
@@ -12,7 +13,7 @@ from numpy.dtypes import ObjectDType
 from pandas import DatetimeTZDtype
 from sqlalchemy import Connection, Selectable
 
-from chronify.exceptions import InvalidOperation
+from chronify.exceptions import InvalidOperation, InvalidParameter
 from chronify.time_configs import DatetimeRange, TimeBaseModel
 
 # Copied from Polars, which doesn't export the type.
@@ -69,6 +70,7 @@ def write_database(
                     raise InvalidOperation(msg)
             conn._dbapi_connection.driver_connection.sql(query)
         case "sqlite":
+            _check_one_config_per_datetime_column(configs)
             for config in configs:
                 if isinstance(config, DatetimeRange):
                     df = _convert_database_input_for_datetime(df, config)
@@ -81,15 +83,27 @@ def write_database(
             )
 
 
+def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> None:
+    time_col_count = Counter(
+        [config.time_column for config in configs if isinstance(config, DatetimeRange)]
+    )
+    time_col_dup = {k: v for k, v in time_col_count.items() if v > 1}
+    if len(time_col_dup) > 0:
+        msg = f"More than one datetime config found for: {time_col_dup}"
+        raise InvalidParameter(msg)
+
+
 def _convert_database_input_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> pd.DataFrame:
     if config.is_time_zone_naive():
         return df
 
-    df2 = df.copy()
-    if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
-        df2[config.time_column] = df2[config.time_column].dt.tz_convert("UTC")
+    columns = df.columns
+    if isinstance(df[config.time_column].dtype, DatetimeTZDtype):
+        dfs = df[config.time_column].dt.tz_convert("UTC")
     else:
-        df2[config.time_column] = df2[config.time_column].dt.tz_localize("UTC")
+        dfs = df[config.time_column].dt.tz_localize("UTC")
+
+    df2 = pd.concat([df.drop(columns=[config.time_column]), dfs], axis=1)[columns]
     return df2
 
 
