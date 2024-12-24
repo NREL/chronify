@@ -52,12 +52,60 @@ def get_datetime_schema(
     return schema
 
 
-def check_dataframes(
+def ingest_data(
+    engine: Engine,
+    df: pd.DataFrame,
+    schema: TableSchema,
+) -> None:
+    metadata = MetaData()
+    with engine.connect() as conn:
+        write_database(df, conn, schema.name, [schema.time_config], if_table_exists="replace")
+        conn.commit()
+    metadata.reflect(engine, views=True)
+
+
+def run_test_with_error(
+    engine: Engine,
+    df: pd.DataFrame,
+    from_schema: TableSchema,
+    to_schema: TableSchema,
+    error: tuple[Any, str],
+) -> None:
+    metadata = MetaData()
+    ingest_data(engine, df, from_schema)
+    with pytest.raises(error[0], match=error[1]):
+        map_time(engine, metadata, from_schema, to_schema)
+
+
+def get_mapped_results(
+    engine: Engine,
+    df: pd.DataFrame,
+    from_schema: TableSchema,
+    to_schema: TableSchema,
+) -> pd.DataFrame:
+    metadata = MetaData()
+    ingest_data(engine, df, from_schema)
+    map_time(engine, metadata, from_schema, to_schema)
+
+    with engine.connect() as conn:
+        query = f"select * from {to_schema.name}"
+        queried = read_database(query, conn, to_schema.time_config)
+    queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)[df.columns]
+
+    return queried
+
+
+def check_time_shift_timestamps(
     dfi: pd.DataFrame, dfo: pd.DataFrame, from_schema: TableSchema, to_schema: TableSchema
 ) -> None:
-    assert (
-        dfo[to_schema.time_config.time_column] == dfi[from_schema.time_config.time_column]
-    ).all()
+    assert not dfo.equals(dfi)
+    df_truth = generate_datetime_data(to_schema.time_config)
+    assert (dfo[to_schema.time_config.time_column] == df_truth).all()
+
+
+def check_time_shift_values(
+    dfi: pd.DataFrame, dfo: pd.DataFrame, from_schema: TableSchema, to_schema: TableSchema
+) -> None:
     match from_schema.time_config.interval_type, to_schema.time_config.interval_type:
         case TimeIntervalType.PERIOD_BEGINNING, TimeIntervalType.PERIOD_ENDING:
             shift = 1
@@ -66,38 +114,6 @@ def check_dataframes(
         case TimeIntervalType.INSTANTANEOUS, TimeIntervalType.INSTANTANEOUS:
             shift = 0
     assert (np.array(dfo["value"]) == np.roll(dfi["value"], shift)).all()
-
-
-def run_test(
-    engine: Engine,
-    df: pd.DataFrame,
-    from_schema: TableSchema,
-    to_schema: TableSchema,
-    error: tuple[Any, str],
-) -> None:
-    # Ingest
-    metadata = MetaData()
-    with engine.connect() as conn:
-        write_database(
-            df, conn, from_schema.name, [from_schema.time_config], if_table_exists="replace"
-        )
-        conn.commit()
-    metadata.reflect(engine, views=True)
-
-    # Map
-    if error:
-        with pytest.raises(error[0], match=error[1]):
-            map_time(engine, metadata, from_schema, to_schema)
-    else:
-        map_time(engine, metadata, from_schema, to_schema)
-
-        # Check mapped table
-        with engine.connect() as conn:
-            query = f"select * from {to_schema.name}"
-            queried = read_database(query, conn, to_schema.time_config)
-        queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)[df.columns]
-        assert not queried.equals(df)
-        check_dataframes(df, queried, from_schema, to_schema)
 
 
 def test_roll_time_using_shift_and_wrap(iter_engines: Engine) -> None:
@@ -134,8 +150,34 @@ def test_time_interval_shift(
     )
     df = generate_datetime_dataframe(from_schema)
     to_schema = get_datetime_schema(2020, tzinfo, TimeIntervalType.PERIOD_ENDING, "to_table")
-    error = ()
-    run_test(iter_engines, df, from_schema, to_schema, error)
+
+    queried = get_mapped_results(iter_engines, df, from_schema, to_schema)
+    check_time_shift_timestamps(df, queried, from_schema, to_schema)
+    check_time_shift_values(df, queried, from_schema, to_schema)
+
+
+@pytest.mark.parametrize(
+    "tzinfo_tuple",
+    [
+        (ZoneInfo("US/Eastern"), None),
+        (None, ZoneInfo("EST")),
+        (ZoneInfo("US/Eastern"), ZoneInfo("US/Mountain")),
+    ],
+)
+def test_mapping_different_timezones(
+    iter_engines: Engine, tzinfo_tuple: tuple[ZoneInfo | None]
+) -> None:
+    from_schema = get_datetime_schema(
+        2020, tzinfo_tuple[0], TimeIntervalType.PERIOD_BEGINNING, "from_table"
+    )
+    df = generate_datetime_dataframe(from_schema)
+    to_schema = get_datetime_schema(
+        2020, tzinfo_tuple[1], TimeIntervalType.PERIOD_ENDING, "to_table"
+    )
+
+    queried = get_mapped_results(iter_engines, df, from_schema, to_schema)
+    check_time_shift_timestamps(df, queried, from_schema, to_schema)
+    check_time_shift_values(df, queried, from_schema, to_schema)
 
 
 def test_instantaneous_interval_type(
@@ -145,7 +187,7 @@ def test_instantaneous_interval_type(
     df = generate_datetime_dataframe(from_schema)
     to_schema = get_datetime_schema(2020, None, TimeIntervalType.INSTANTANEOUS, "to_table")
     error = (ConflictingInputsError, "If instantaneous time interval is used")
-    run_test(iter_engines, df, from_schema, to_schema, error)
+    run_test_with_error(iter_engines, df, from_schema, to_schema, error)
 
 
 def test_schema_compatibility(
@@ -156,7 +198,7 @@ def test_schema_compatibility(
     to_schema = get_datetime_schema(2020, None, TimeIntervalType.PERIOD_ENDING, "to_table")
     to_schema.time_array_id_columns += ["extra_column"]
     error = (ConflictingInputsError, ".* cannot produce the columns")
-    run_test(iter_engines, df, from_schema, to_schema, error)
+    run_test_with_error(iter_engines, df, from_schema, to_schema, error)
 
 
 def test_measurement_type_consistency(
@@ -167,7 +209,7 @@ def test_measurement_type_consistency(
     to_schema = get_datetime_schema(2020, None, TimeIntervalType.PERIOD_ENDING, "to_table")
     to_schema.time_config.measurement_type = MeasurementType.MAX
     error = (ConflictingInputsError, "Inconsistent measurement_types")
-    run_test(iter_engines, df, from_schema, to_schema, error)
+    run_test_with_error(iter_engines, df, from_schema, to_schema, error)
 
 
 def test_duplicated_configs_in_write_database(

@@ -63,7 +63,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
         if self._from_time_config.interval_type != self._to_time_config.interval_type:
             time_col = "to_" + to_time_col
-            # mapping works backward for representative time by
+            # Mapping works backward for representative time by
             # shifting interval type of to_time_config to match
             # from_time_config before extracting time info
             dft[time_col] = shift_time_interval(
@@ -75,7 +75,6 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             time_col = to_time_col
 
         from_columns = self._from_time_config.list_time_columns()
-        other_columns = []
         if is_tz_naive:
             df = self._generator.create_tz_naive_mapping_dataframe(dft, time_col)
         else:
@@ -91,15 +90,14 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
                 ].to_list()
             df = self._generator.create_tz_aware_mapping_dataframe(dft, time_col, time_zones)
             from_columns.append("time_zone")
-            other_columns.append("time_zone")
 
         df = df.rename(columns={x: "from_" + x for x in from_columns})
 
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[
-                self._to_time_config,  # only needs to pass DatetimeRange
+                self._to_time_config,  # only DatetimeRange
             ],
-            other_columns=other_columns,
+            other_columns=from_columns,  # passing representative time here
         )
         return df, mapping_schema
