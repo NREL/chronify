@@ -7,15 +7,27 @@ import pandas as pd
 from chronify.time import (
     LeapDayAdjustmentType,
 )
-from chronify.time_configs import DatetimeRange, adjust_timestamp_by_dst_offset
+from chronify.time_configs import (
+    DatetimeRange,
+    adjust_timestamp_by_dst_offset,
+    TimeBasedDataAdjustment,
+)
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
 
 class DatetimeRangeGenerator(TimeRangeGeneratorBase):
     """Generates datetime ranges based on a DatetimeRange model."""
 
-    def __init__(self, model: DatetimeRange) -> None:
+    def __init__(
+        self,
+        model: DatetimeRange,
+        time_based_data_adjustment: TimeBasedDataAdjustment | None = None,
+    ) -> None:
         self._model = model
+        if time_based_data_adjustment is None:
+            self._adjustment = TimeBasedDataAdjustment()
+        else:
+            self._adjustment = time_based_data_adjustment
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         for i in range(self._model.length):
@@ -35,20 +47,17 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
             month = cur.month
             day = cur.day
             if not (
-                self._model.time_based_data_adjustment.leap_day_adjustment
-                == LeapDayAdjustmentType.DROP_FEB29
+                self._adjustment.leap_day_adjustment == LeapDayAdjustmentType.DROP_FEB29
                 and month == 2
                 and day == 29
             ):
                 if not (
-                    self._model.time_based_data_adjustment.leap_day_adjustment
-                    == LeapDayAdjustmentType.DROP_DEC31
+                    self._adjustment.leap_day_adjustment == LeapDayAdjustmentType.DROP_DEC31
                     and month == 12
                     and day == 31
                 ):
                     if not (
-                        self._model.time_based_data_adjustment.leap_day_adjustment
-                        == LeapDayAdjustmentType.DROP_JAN1
+                        self._adjustment.leap_day_adjustment == LeapDayAdjustmentType.DROP_JAN1
                         and month == 1
                         and day == 1
                     ):

@@ -33,6 +33,12 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         self._from_time_config = from_schema.time_config
         self._to_time_config = to_schema.time_config
 
+    def check_schema_consistency(self) -> None:
+        """Check that from_schema can produce to_schema."""
+        self._check_table_columns_producibility()
+        self._check_measurement_type_consistency()
+        self._check_time_interval_type()
+
     def _check_source_table_has_time_zone(self) -> None:
         """Check source table has time_zone column."""
         if "time_zone" not in self._from_schema.list_columns():

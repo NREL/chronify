@@ -29,11 +29,9 @@ class TimeSeriesMapperBase(abc.ABC):
         # self._from_time_config = from_schema.time_config
         # self._to_time_config = to_schema.time_config
 
+    @abc.abstractmethod
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
-        self._check_table_columns_producibility()
-        self._check_measurement_type_consistency()
-        self._check_time_interval_type()
 
     def _check_table_columns_producibility(self) -> None:
         """Check columns in destination table can be produced by source table."""

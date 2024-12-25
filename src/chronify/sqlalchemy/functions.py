@@ -71,9 +71,10 @@ def write_database(
             conn._dbapi_connection.driver_connection.sql(query)
         case "sqlite":
             _check_one_config_per_datetime_column(configs)
+            copied = False
             for config in configs:
                 if isinstance(config, DatetimeRange):
-                    df = _convert_database_input_for_datetime(df, config)
+                    df, copied = _convert_database_input_for_datetime(df, config, copied)
             pl.DataFrame(df).write_database(
                 table_name, connection=conn, if_table_exists=if_table_exists
             )
@@ -93,18 +94,24 @@ def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> N
         raise InvalidParameter(msg)
 
 
-def _convert_database_input_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> pd.DataFrame:
+def _convert_database_input_for_datetime(
+    df: pd.DataFrame, config: DatetimeRange, copied: bool
+) -> tuple[pd.DataFrame, bool]:
     if config.is_time_zone_naive():
-        return df
+        return df, copied
 
-    columns = df.columns
-    if isinstance(df[config.time_column].dtype, DatetimeTZDtype):
-        dfs = df[config.time_column].dt.tz_convert("UTC")
+    if copied:
+        df2 = df
     else:
-        dfs = df[config.time_column].dt.tz_localize("UTC")
+        df2 = df.copy()
+        copied = True
 
-    df2 = pd.concat([df.drop(columns=[config.time_column]), dfs], axis=1)[columns]
-    return df2
+    if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
+        df2[config.time_column] = df2[config.time_column].dt.tz_convert("UTC")
+    else:
+        df2[config.time_column] = df2[config.time_column].dt.tz_localize("UTC")
+
+    return df2, copied
 
 
 def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> None:
