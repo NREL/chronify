@@ -253,24 +253,16 @@ class ColumnDType(ChronifyBaseModel):
 class CsvTableSchema(TableSchemaBase):
     """Defines the schema of data in a CSV file."""
 
-    pivoted_dimension_name: Annotated[
-        Optional[str],
-        Field(
-            default=None,
-            description="Only set if the table is pivoted. Use this name for the column "
-            "representing that dimension when unpivoting.",
-        ),
-    ]
-    column_dtypes: Annotated[
-        Optional[list[ColumnDType]],
-        Field(
-            default=None,
-            description="Column types. Will try to infer types of any column not listed.",
-        ),
-    ]
-    value_columns: Annotated[
-        list[str], Field(description="Columns in the table that contain values.")
-    ]
+    pivoted_dimension_name: Optional[str] = Field(
+        default=None,
+        description="Only set if the table is pivoted. Use this name for the column "
+        "representing that dimension when unpivoting.",
+    )
+    column_dtypes: Optional[list[ColumnDType]] = Field(
+        default=None,
+        description="Column types. Will try to infer types of any column not listed.",
+    )
+    value_columns: list[str] = Field(description="Columns in the table that contain values.")
     time_array_id_columns: list[str] = Field(
         default=[],
         description="Columns in the table that uniquely identify time arrays. "

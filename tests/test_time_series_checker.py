@@ -77,9 +77,8 @@ def _run_test(
         time_array_id_columns=["generator"],
         value_column="value",
     )
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         write_database(df, conn, schema.name, [schema.time_config], if_table_exists="replace")
-        conn.commit()
     metadata.reflect(engine)
 
     with engine.connect() as conn:

@@ -55,11 +55,10 @@ def run_test(
 ) -> None:
     # Ingest
     metadata = MetaData()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         write_database(
             df, conn, from_schema.name, [from_schema.time_config], if_table_exists="replace"
         )
-        conn.commit()
     metadata.reflect(engine, views=True)
 
     # Map

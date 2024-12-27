@@ -4,19 +4,22 @@ is very slow. This code attempts to bypass Python as much as possible through Ar
 in memory.
 """
 
+import atexit
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Literal, TypeAlias, Sequence
 from collections import Counter
 
 import pandas as pd
-import polars as pl
-from numpy.dtypes import ObjectDType
+from numpy.dtypes import DateTime64DType, ObjectDType
 from pandas import DatetimeTZDtype
-from sqlalchemy import Connection, Selectable
+from sqlalchemy import Connection, Selectable, text
 
 from chronify.exceptions import InvalidOperation, InvalidParameter
 from chronify.time_configs import DatetimeRange, TimeBaseModel
+from chronify.utils.path_utils import delete_if_exists
 
-# Copied from Polars, which doesn't export the type.
+# Copied from Pandas/Polars
 DbWriteMode: TypeAlias = Literal["replace", "append", "fail"]
 
 
@@ -24,20 +27,20 @@ def read_database(
     query: Selectable | str, conn: Connection, config: TimeBaseModel, params: Any = None
 ) -> pd.DataFrame:
     """Read a database query into a Pandas DataFrame."""
-    if conn.engine.name == "duckdb":
-        if isinstance(query, str):
-            df = conn._dbapi_connection.driver_connection.sql(query, params=params).to_df()  # type: ignore
-        else:
-            df = conn.execute(query).cursor.fetch_df()  # type: ignore
-    elif conn.engine.name == "sqlite":
-        df = pd.read_sql(query, conn, params=params)
-        if isinstance(config, DatetimeRange):
-            _convert_database_output_for_datetime(df, config)
-    else:
-        if params is not None:
-            msg = "Passing params to a Polars query is not supported yet."
-            raise InvalidOperation(msg)
-        df = pl.read_database(query, connection=conn).to_pandas()
+    match conn.engine.name:
+        case "duckdb":
+            if isinstance(query, str):
+                df = conn._dbapi_connection.driver_connection.sql(query, params=params).to_df()  # type: ignore
+            else:
+                df = conn.execute(query).cursor.fetch_df()  # type: ignore
+        case "sqlite":
+            df = pd.read_sql(query, conn, params=params)
+            if isinstance(config, DatetimeRange):
+                _convert_database_output_for_datetime(df, config)
+        case "hive":
+            df = _read_from_hive(query, conn, config, params)
+        case _:
+            df = pd.read_sql(query, conn, params=params)
     return df  # type: ignore
 
 
@@ -53,35 +56,13 @@ def write_database(
     """
     match conn.engine.name:
         case "duckdb":
-            assert conn._dbapi_connection is not None
-            assert conn._dbapi_connection.driver_connection is not None
-            match if_table_exists:
-                case "append":
-                    query = f"INSERT INTO {table_name} SELECT * FROM df"
-                case "replace":
-                    conn._dbapi_connection.driver_connection.sql(
-                        f"DROP TABLE IF EXISTS {table_name}"
-                    )
-                    query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
-                case "fail":
-                    query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
-                case _:
-                    msg = f"{if_table_exists=}"
-                    raise InvalidOperation(msg)
-            conn._dbapi_connection.driver_connection.sql(query)
+            _write_to_duckdb(df, conn, table_name, if_table_exists)
         case "sqlite":
-            _check_one_config_per_datetime_column(configs)
-            copied = False
-            for config in configs:
-                if isinstance(config, DatetimeRange):
-                    df, copied = _convert_database_input_for_datetime(df, config, copied)
-            pl.DataFrame(df).write_database(
-                table_name, connection=conn, if_table_exists=if_table_exists
-            )
+            _write_to_sqlite(df, conn, table_name, configs, if_table_exists)
+        case "hive":
+            _write_to_hive(df, conn, table_name, configs, if_table_exists)
         case _:
-            pl.DataFrame(df).write_database(
-                table_name, connection=conn, if_table_exists=if_table_exists
-            )
+            df.to_sql(table_name, conn, if_exists=if_table_exists, index=False)
 
 
 def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> None:
@@ -124,3 +105,94 @@ def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRang
         else:
             if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=False)
+
+
+def _write_to_duckdb(
+    df: pd.DataFrame,
+    conn: Connection,
+    table_name: str,
+    if_table_exists: DbWriteMode,
+) -> None:
+    assert conn._dbapi_connection is not None
+    assert conn._dbapi_connection.driver_connection is not None
+    match if_table_exists:
+        case "append":
+            query = f"INSERT INTO {table_name} SELECT * FROM df"
+        case "replace":
+            conn._dbapi_connection.driver_connection.sql(f"DROP TABLE IF EXISTS {table_name}")
+            query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
+        case "fail":
+            query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
+        case _:
+            msg = f"{if_table_exists=}"
+            raise InvalidOperation(msg)
+    conn._dbapi_connection.driver_connection.sql(query)
+
+
+def _write_to_hive(
+    df: pd.DataFrame,
+    conn: Connection,
+    table_name: str,
+    configs: Sequence[TimeBaseModel],
+    if_table_exists: DbWriteMode,
+) -> None:
+    df2 = df.copy()
+    for config in configs:
+        if isinstance(config, DatetimeRange):
+            if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
+                # Spark doesn't like ns.
+                # TODO: is there a better way to change from ns to us?
+                new_dtype = df2[config.time_column].dtype.name.replace(
+                    "datetime64[ns", "datetime64[us"
+                )
+                df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
+            elif isinstance(df2[config.time_column].dtype, DateTime64DType):
+                new_dtype = "datetime64[us]"
+                df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
+
+    with NamedTemporaryFile(suffix=".parquet") as f:
+        f.close()
+        output = Path(f.name)
+    df2.to_parquet(output)
+    atexit.register(lambda: delete_if_exists(output))
+    select_stmt = f"SELECT * FROM parquet.`{output}`"
+    # TODO: CREATE TABLE causes DST fallback timestamps to get dropped
+    match if_table_exists:
+        case "append":
+            msg = "INSERT INTO is not supported with write_to_hive"
+            raise InvalidOperation(msg)
+        case "replace":
+            conn.execute(text(f"DROP VIEW IF EXISTS {table_name}"))
+            query = f"CREATE VIEW {table_name} AS {select_stmt}"
+        case "fail":
+            query = f"CREATE VIEW {table_name} AS {select_stmt}"
+        case _:
+            msg = f"{if_table_exists=}"
+            raise InvalidOperation(msg)
+    conn.execute(text(query))
+
+
+def _read_from_hive(
+    query: Selectable | str, conn: Connection, config: TimeBaseModel, params: Any = None
+) -> pd.DataFrame:
+    df = pd.read_sql_query(query, conn, params=params)
+    if isinstance(config, DatetimeRange) and not config.is_time_zone_naive():
+        # This is tied to the fact that we set the Spark session to UTC.
+        # Otherwise, there is confusion with the computer's local time zone.
+        df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
+    return df
+
+
+def _write_to_sqlite(
+    df: pd.DataFrame,
+    conn: Connection,
+    table_name: str,
+    configs: Sequence[TimeBaseModel],
+    if_table_exists: DbWriteMode,
+) -> None:
+    _check_one_config_per_datetime_column(configs)
+    copied = False
+    for config in configs:
+        if isinstance(config, DatetimeRange):
+            df, copied = _convert_database_input_for_datetime(df, config, copied)
+    df.to_sql(table_name, conn, if_exists=if_table_exists, index=False)
