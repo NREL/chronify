@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, Double, Integer, String
 from chronify.models import ColumnDType, _check_name
 
 
-def test_column_dtypes():
+def test_column_dtypes() -> None:
     ColumnDType(name="col1", dtype=Integer())
     for dtype in (BigInteger, Boolean, DateTime, Double, String):
         ColumnDType(name="col1", dtype=dtype())
@@ -16,6 +16,6 @@ def test_column_dtypes():
         ColumnDType(name="col1", dtype="invalid")
 
 
-def test_invalid_column_name():
+def test_invalid_column_name() -> None:
     with pytest.raises(ValueError):
         _check_name(name="invalid - name")

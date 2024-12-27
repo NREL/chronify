@@ -62,6 +62,9 @@ class TableSchema(TableSchemaBase):
     @classmethod
     def check_name(cls, name: str) -> str:
         _check_name(name)
+        if name.lower() == "table":
+            msg = f"Table schema cannot use {name=}."
+            raise ValueError(msg)
         return name
 
     @field_validator("value_column")
@@ -101,6 +104,47 @@ class PivotedTableSchema(TableSchemaBase):
 
     def list_columns(self) -> list[str]:
         return super().list_columns() + self.value_columns
+
+
+class MappingTableSchema(ChronifyBaseModel):
+    """Defines the schema for a mapping table for time conversion."""
+
+    name: Annotated[
+        str,
+        Field(description="Name of the table or view in the database.", frozen=True),
+    ]
+    time_configs: list[TimeConfig]
+    other_columns: list[str] = []
+
+    @field_validator("name")
+    @classmethod
+    def check_name(cls, name: str) -> str:
+        _check_name(name)
+        if name.lower() == "table":
+            msg = f"Table schema cannot use {name=}."
+            raise ValueError(msg)
+        return name
+
+    @field_validator("time_configs")
+    @classmethod
+    def check_time_configs(cls, time_configs: list[TimeConfig]) -> list[TimeConfig]:
+        for config in time_configs:
+            for column in config.list_time_columns():
+                _check_name(column)
+        return time_configs
+
+    @field_validator("other_columns")
+    @classmethod
+    def check_columns(cls, columns: list[str]) -> list[str]:
+        for column in columns:
+            _check_name(column)
+        return columns
+
+    def list_columns(self) -> list[str]:
+        time_columns = []
+        for config in self.time_configs:
+            time_columns += config.list_time_columns()
+        return time_columns + self.other_columns
 
 
 # TODO: print example tables here.

@@ -20,13 +20,6 @@ from chronify.time import (
     RepresentativePeriodFormat,
     list_representative_time_columns,
 )
-# from chronify.time_utils import (
-#    build_time_ranges,
-#    filter_to_project_timestamps,
-#    shift_time_interval,
-#    time_difference,
-#    apply_time_wrap,
-# )
 
 
 logger = logging.getLogger(__name__)
@@ -145,7 +138,6 @@ class DatetimeRange(TimeBaseModel):
     )
     length: int
     resolution: timedelta
-    time_based_data_adjustment: TimeBasedDataAdjustment = TimeBasedDataAdjustment()
 
     def is_time_zone_naive(self) -> bool:
         """Return True if the timestamps in the range do not have time zones."""
@@ -174,7 +166,6 @@ class IndexTimeRange(TimeBaseModel):
     length: int
     resolution: timedelta
     time_zone: TimeZone
-    time_based_data_adjustment: TimeBasedDataAdjustment
 
     def list_time_columns(self) -> list[str]:
         # TODO:

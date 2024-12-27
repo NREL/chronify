@@ -4,7 +4,8 @@ is very slow. This code attempts to bypass Python as much as possible through Ar
 in memory.
 """
 
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, Sequence
+from collections import Counter
 
 import pandas as pd
 import polars as pl
@@ -12,7 +13,7 @@ from numpy.dtypes import ObjectDType
 from pandas import DatetimeTZDtype
 from sqlalchemy import Connection, Selectable
 
-from chronify.exceptions import InvalidOperation
+from chronify.exceptions import InvalidOperation, InvalidParameter
 from chronify.time_configs import DatetimeRange, TimeBaseModel
 
 # Copied from Polars, which doesn't export the type.
@@ -44,10 +45,12 @@ def write_database(
     df: pd.DataFrame,
     conn: Connection,
     table_name: str,
-    config: TimeBaseModel,
+    configs: Sequence[TimeBaseModel],
     if_table_exists: DbWriteMode = "append",
 ) -> None:
-    """Write a Pandas DataFrame to the database."""
+    """Write a Pandas DataFrame to the database.
+    configs allows sqlite formatting for more than one datetime columns.
+    """
     match conn.engine.name:
         case "duckdb":
             assert conn._dbapi_connection is not None
@@ -67,8 +70,11 @@ def write_database(
                     raise InvalidOperation(msg)
             conn._dbapi_connection.driver_connection.sql(query)
         case "sqlite":
-            if isinstance(config, DatetimeRange):
-                df = _convert_database_input_for_datetime(df, config)
+            _check_one_config_per_datetime_column(configs)
+            copied = False
+            for config in configs:
+                if isinstance(config, DatetimeRange):
+                    df, copied = _convert_database_input_for_datetime(df, config, copied)
             pl.DataFrame(df).write_database(
                 table_name, connection=conn, if_table_exists=if_table_exists
             )
@@ -78,16 +84,34 @@ def write_database(
             )
 
 
-def _convert_database_input_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> pd.DataFrame:
-    if config.is_time_zone_naive():
-        return df
+def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> None:
+    time_col_count = Counter(
+        [config.time_column for config in configs if isinstance(config, DatetimeRange)]
+    )
+    time_col_dup = {k: v for k, v in time_col_count.items() if v > 1}
+    if len(time_col_dup) > 0:
+        msg = f"More than one datetime config found for: {time_col_dup}"
+        raise InvalidParameter(msg)
 
-    df2 = df.copy()
+
+def _convert_database_input_for_datetime(
+    df: pd.DataFrame, config: DatetimeRange, copied: bool
+) -> tuple[pd.DataFrame, bool]:
+    if config.is_time_zone_naive():
+        return df, copied
+
+    if copied:
+        df2 = df
+    else:
+        df2 = df.copy()
+        copied = True
+
     if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
         df2[config.time_column] = df2[config.time_column].dt.tz_convert("UTC")
     else:
         df2[config.time_column] = df2[config.time_column].dt.tz_localize("UTC")
-    return df2
+
+    return df2, copied
 
 
 def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> None:

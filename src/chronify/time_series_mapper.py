@@ -2,6 +2,7 @@ from sqlalchemy import Engine, MetaData
 from chronify.models import TableSchema
 
 from chronify.time_series_mapper_representative import MapperRepresentativeTimeToDatetime
+from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
 from chronify.time_configs import RepresentativePeriodTime, DatetimeRange
 
 
@@ -14,6 +15,10 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperRepresentativeTimeToDatetime(engine, metadata, from_schema, to_schema).map_time()
+    elif isinstance(from_schema.time_config, DatetimeRange) and isinstance(
+        to_schema.time_config, DatetimeRange
+    ):
+        MapperDatetimeToDatetime(engine, metadata, from_schema, to_schema).map_time()
     else:
         msg = f"No mapping function for {from_schema.time_config.__class__=} >> {to_schema.time_config.__class__=}"
         raise NotImplementedError(msg)
