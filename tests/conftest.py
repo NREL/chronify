@@ -1,4 +1,5 @@
 from typing import Any, Generator
+from datetime import timedelta, datetime
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,8 @@ from sqlalchemy import Engine, create_engine
 from chronify.models import TableSchema
 from chronify.time import RepresentativePeriodFormat
 
-from chronify.time_configs import RepresentativePeriodTime
+from chronify.time_configs import RepresentativePeriodTime, TimeZone
+from chronify.time_range_generator_factory import IndexTimeRange
 
 
 ENGINES: dict[str, dict[str, Any]] = {
@@ -98,6 +100,95 @@ def one_weekday_day_and_one_weekend_day_per_month_by_hour_table() -> (
         value_column="value",
         time_config=RepresentativePeriodTime(
             time_format=RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR,
+        ),
+        time_array_id_columns=["id"],
+    )
+    return pd.DataFrame(data), num_time_arrays, schema
+
+@pytest.fixture
+def one_year_index_time_by_hour():
+
+    """
+    time_column: str = Field(description="Column in the table that represents time.")
+    time_type: Literal[TimeType.INDEX] = TimeType.INDEX
+    start: int
+    length: int
+    resolution: timedelta
+    time_zone: TimeZone
+    time_based_data_adjustment: TimeBasedDataAdjustment
+    """
+    hours_per_year = 24 * 365
+    num_time_arrays = 3
+    # id 1 based index, t_idx 0 based index
+    data = {
+        "id": np.repeat(np.arange(1, num_time_arrays + 1), hours_per_year),
+        "t_idx": np.tile(np.arange(hours_per_year), num_time_arrays),
+        "value": np.random.random(hours_per_year * num_time_arrays),
+    }
+    schema = TableSchema(
+        name="ev_charging",
+        value_column="value",
+        time_config=IndexTimeRange(
+            time_column="t_idx",
+            start=0,
+            start_timestamp=datetime(2019, 1, 1),
+            length=hours_per_year + 1,
+            resolution=timedelta(hours=1),
+            time_zone=TimeZone.EST,  # standard time zone
+        ),
+        time_array_id_columns=["id"],
+    )
+
+    return pd.DataFrame(data), num_time_arrays, schema
+
+
+@pytest.fixture
+def one_year_index_time_subhourly():
+    hours_per_year = 24 * 365
+    index_length = hours_per_year * 2
+    num_time_arrays = 3
+    # id 1 based index, t_idx 0 based index
+    data = {
+        "id": np.repeat(np.arange(1, num_time_arrays + 1), hours_per_year),
+        "t_idx": np.tile(np.arange(hours_per_year), num_time_arrays),
+        "value": np.random.random(hours_per_year * num_time_arrays),
+    }
+    schema = TableSchema(
+        name="ev_charging",
+        value_column="value",
+        time_config=IndexTimeRange(
+            time_column="t_idx",
+            start=0,
+            start_timestamp=datetime(2019, 1, 1),
+            length=index_length,
+            resolution=timedelta(minutes=30),
+            time_zone=TimeZone.EPT,  # prevaling time zone
+        ),
+        time_array_id_columns=["id"],
+    )
+    return pd.DataFrame(data), num_time_arrays, schema
+
+@pytest.fixture
+def one_year_index_time_by_hour_leapyear():
+    hours_per_year = (24 * 366) + 1
+    num_time_arrays = 3
+    # id 1 based index, t_idx 0 based index
+    data = {
+        "id": np.repeat(np.arange(1, num_time_arrays + 1), hours_per_year),
+        "t_idx": np.tile(np.arange(hours_per_year), num_time_arrays),
+        "value": np.random.random(hours_per_year * num_time_arrays),
+    }
+    # breakpoint()
+    schema = TableSchema(
+        name="ev_charging",
+        value_column="value",
+        time_config=IndexTimeRange(
+            time_column="t_idx",
+            start=0,
+            start_timestamp=datetime(2020, 1, 1),
+            length=hours_per_year,
+            resolution=timedelta(hours=1),
+            time_zone=TimeZone.UTC,  # utc time zone
         ),
         time_array_id_columns=["id"],
     )

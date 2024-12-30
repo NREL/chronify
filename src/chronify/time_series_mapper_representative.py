@@ -10,7 +10,7 @@ from chronify.exceptions import (
     InvalidParameter,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
+from chronify.time_series_mapper_base import CheckSchemaMixins, TimeSeriesMapperBase, apply_mapping
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
 from chronify.time_configs import DatetimeRange, RepresentativePeriodTime
 from chronify.time_utils import shift_time_interval
@@ -18,7 +18,7 @@ from chronify.time_utils import shift_time_interval
 logger = logging.getLogger(__name__)
 
 
-class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
+class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
     def __init__(
         self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
     ) -> None:
@@ -35,8 +35,8 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
-        self._check_table_columns_producibility()
-        self._check_measurement_type_consistency()
+        self._check_table_column_producibility()
+        self._check_schema_measurement_type_consistency()
         self._check_time_interval_type()
 
     def _check_source_table_has_time_zone(self) -> None:
@@ -49,6 +49,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         """Convert time columns with from_schema to to_schema configuration."""
         is_tz_naive = self._to_time_config.is_time_zone_naive()
         self.check_schema_consistency()
+        # breakpoint()
         if not is_tz_naive:
             self._check_source_table_has_time_zone()
 

@@ -14,42 +14,55 @@ from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
 
 logger = logging.getLogger(__name__)
+from chronify.exceptions import ConflictingInputsError, MissingParameter
+from chronify.time_configs import DatetimeRange
+from chronify.schema_manager import TableSchema
 
 
 class TimeSeriesMapperBase(abc.ABC):
     """Maps time series data from one configuration to another."""
 
     def __init__(
-        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
         self._from_schema = from_schema
         self._to_schema = to_schema
-        # self._from_time_config = from_schema.time_config
-        # self._to_time_config = to_schema.time_config
 
-    @abc.abstractmethod
+class CheckSchemaMixins:
+    """ schema validation mixins. """
+
+    _to_time_config: DatetimeRange
+    _from_schema: TableSchema
+    _to_schema: TableSchema
+
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
+        self._check_table_column_producibility()
+        self._check_schema_measurement_type_consistency()
 
-    def _check_table_columns_producibility(self) -> None:
+    def _check_table_column_producibility(self) -> None:
         """Check columns in destination table can be produced by source table."""
-        available_cols = (
-            self._from_schema.list_columns() + self._to_schema.time_config.list_time_columns()
-        )
+        available_cols = self._from_schema.list_columns() + [self._to_time_config.time_column]
         final_cols = self._to_schema.list_columns()
         if diff := set(final_cols) - set(available_cols):
             msg = f"Source table {self._from_schema.name} cannot produce the columns: {diff}"
             raise ConflictingInputsError(msg)
 
-    def _check_measurement_type_consistency(self) -> None:
+    def _check_schema_measurement_type_consistency(self) -> None:
         """Check that measurement_type is the same between schema."""
         from_mt = self._from_schema.time_config.measurement_type
         to_mt = self._to_schema.time_config.measurement_type
         if from_mt != to_mt:
             msg = f"Inconsistent measurement_types {from_mt=} vs. {to_mt=}"
             raise ConflictingInputsError(msg)
+
+    def _check_source_table_has_time_zone(self) -> None:
+        """Check source table has time_zone column."""
+        if "time_zone" not in self._from_schema.list_columns():
+            msg = f"time_zone is required for tz-aware representative time mapping and it is missing from source table: {self._from_schema.name}"
+            raise MissingParameter(msg)
 
     def _check_time_interval_type(self) -> None:
         """Check time interval type consistency."""
