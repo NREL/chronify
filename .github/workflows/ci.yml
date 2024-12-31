@@ -34,9 +34,7 @@ jobs:
         tar -xzf spark-3.5.4-bin-hadoop3.tgz
         export SPARK_HOME=$(pwd)/spark-3.5.4-bin-hadoop3
         export PATH=$SPARK_HOME/sbin:$PATH
-        start-master.sh
-        start-worker.sh spark://$(hostname):7077
-        start-thriftserver.sh --master=spark://$(hostname):7077
+        start-thriftserver.sh
     - name: Run pytest with coverage
       run: |
         CHRONIFY_HIVE_URL=hive://localhost:10000/default pytest -v --cov --cov-report=xml
