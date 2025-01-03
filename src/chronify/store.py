@@ -123,7 +123,10 @@ class Store:
 
     @classmethod
     def create_new_hive_store(
-        cls, url: str, drop_tables: bool = False, **connect_kwargs: Any
+        cls,
+        url: str,
+        drop_schema: bool = True,
+        **connect_kwargs: Any,
     ) -> "Store":
         """Create a new Store in a Hive database.
         Recommended usage is to create views from Parquet files. Ingesting data into tables
@@ -135,8 +138,8 @@ class Store:
         ----------
         url
             Thrift server URL
-        drop_tables
-            If True, drop all existing tables.
+        drop_schema
+            If True, drop the schema table if it's already there.
 
         Examples
         --------
@@ -155,17 +158,20 @@ class Store:
         metadata = MetaData()
         metadata.reflect(engine, views=True)
         with engine.begin() as conn:
-            if drop_tables:
-                for table in metadata.tables:
-                    try:
-                        conn.execute(text(f"DROP TABLE {table}"))
-                    except Exception:
-                        conn.execute(text(f"DROP VIEW {table}"))
             # Workaround for ambiguity of time zones in the read path.
             conn.execute(text("SET TIME ZONE 'UTC'"))
             # Workaround for the fact that Spark uses a non-standard format for timestamps
             # in Parquet files. Pandas/DuckDB can't interpret them properly.
             conn.execute(text("SET spark.sql.parquet.outputTimestampType=TIMESTAMP_MICROS"))
+
+            if drop_schema:
+                name = SchemaManager.SCHEMAS_TABLE
+                if name in metadata.tables:
+                    try:
+                        conn.execute(text(f"DROP TABLE {name}"))
+                    except Exception:
+                        conn.execute(text(f"DROP VIEW {name}"))
+
         return cls(engine=engine)
 
     @classmethod
@@ -316,6 +322,11 @@ class Store:
     def metadata(self) -> MetaData:
         """Return the sqlalchemy metadata."""
         return self._metadata
+
+    @property
+    def schema_manager(self) -> SchemaManager:
+        """Return the store's schema manager."""
+        return self._schema_mgr
 
     def create_view_from_parquet(self, path: Path, schema: TableSchema) -> None:
         """Load a table into the database."""
@@ -486,9 +497,8 @@ class Store:
                 created_table = self._ingest_from_csvs(connection, paths, src_schema, dst_schema)
         except Exception:
             # TODO:
-            # 1. Not sure why this is necessary. The implicit rollback does not remove
-            #    tables from the metadata. Maybe we need to change the connection configuration.
-            #    This also means that the metadata object could be out-of-date if the user
+            # 1. The implicit rollback does not remove tables from our sqlalchemy metadata object.
+            #    This means that the metadata object could be out-of-date if the user
             #    is self-managing the connection.
             # 2. Python sqlite3 does not appear to support rollbacks with DDL statements.
             #    See discussion at https://bugs.python.org/issue10740.
@@ -716,6 +726,7 @@ class Store:
         data: pd.DataFrame | DuckDBPyRelation,
         schema: TableSchema,
         connection: Optional[Connection] = None,
+        **kwargs,
     ) -> bool:
         """Ingest data into the table specifed by schema. If the table does not exist,
         create it.
@@ -776,13 +787,14 @@ class Store:
         --------
         ingest_tables
         """
-        return self.ingest_tables((data,), schema, connection=connection)
+        return self.ingest_tables((data,), schema, connection=connection, **kwargs)
 
     def ingest_tables(
         self,
         data: Iterable[pd.DataFrame | DuckDBPyRelation],
         schema: TableSchema,
         connection: Optional[Connection] = None,
+        **kwargs,
     ) -> bool:
         """Ingest multiple input tables to the same database table.
         All tables must have the same schema.
@@ -821,7 +833,7 @@ class Store:
                 with self._engine.begin() as conn:
                     created_table = self._ingest_tables(conn, data, schema)
             else:
-                created_table = self._ingest_tables(connection, data, schema)
+                created_table = self._ingest_tables(connection, data, schema, **kwargs)
         except Exception:
             self._handle_sqlite_error_case(schema.name, connection)
             if schema.name in self._metadata.tables:
@@ -835,12 +847,14 @@ class Store:
         conn: Connection,
         data: Iterable[pd.DataFrame | DuckDBPyRelation],
         schema: TableSchema,
+        bypass_time_checks: bool = False,
     ) -> bool:
         created_table = False
         for table in data:
             if self._ingest_table(conn, table, schema):
                 created_table = True
-        check_timestamps(conn, Table(schema.name, self._metadata), schema)
+        if not bypass_time_checks:
+            check_timestamps(conn, Table(schema.name, self._metadata), schema)
         return created_table
 
     def _ingest_table(
@@ -1177,7 +1191,10 @@ class Store:
             self.drop_table(name, connection=connection)
 
     def drop_table(
-        self, name: str, connection: Optional[Connection] = None, if_exists: bool = False
+        self,
+        name: str,
+        connection: Optional[Connection] = None,
+        if_exists: bool = False,
     ) -> None:
         """Drop a table from the database."""
         if self._engine.name == "hive":
@@ -1195,7 +1212,10 @@ class Store:
             self._schema_mgr.add_schema(conn, schema)
 
     def drop_view(
-        self, name: str, connection: Optional[Connection] = None, if_exists: bool = False
+        self,
+        name: str,
+        connection: Optional[Connection] = None,
+        if_exists: bool = False,
     ) -> None:
         """Drop a view from the database."""
         if self._engine.name == "hive":
@@ -1207,7 +1227,11 @@ class Store:
             self._drop_table_or_view(name, "VIEW", connection, if_exists)
 
     def _drop_table_or_view(
-        self, name: str, tbl_type: str, connection: Optional[Connection], if_exists: bool
+        self,
+        name: str,
+        tbl_type: str,
+        connection: Optional[Connection],
+        if_exists: bool,
     ) -> None:
         table = self.get_table(name)
         if_exists_str = " IF EXISTS" if if_exists else ""
