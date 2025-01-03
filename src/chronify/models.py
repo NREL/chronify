@@ -5,7 +5,7 @@ import duckdb.typing
 import pandas as pd
 from duckdb.typing import DuckDBPyType
 from pydantic import Field, field_validator, model_validator
-from sqlalchemy import BigInteger, Boolean, DateTime, Double, Integer, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Double, Float, Integer, SmallInteger, String
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
@@ -164,7 +164,9 @@ _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
     duckdb.typing.BIGINT.id: BigInteger,  # type: ignore
     duckdb.typing.BOOLEAN.id: Boolean,  # type: ignore
     duckdb.typing.DOUBLE.id: Double,  # type: ignore
+    duckdb.typing.FLOAT.id: Float,  # type: ignore
     duckdb.typing.INTEGER.id: Integer,  # type: ignore
+    duckdb.typing.TINYINT.id: SmallInteger,  # type: ignore
     duckdb.typing.VARCHAR.id: String,  # type: ignore
     # Note: timestamp requires special handling because of timezone in sqlalchemy.
 }
