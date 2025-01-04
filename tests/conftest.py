@@ -105,9 +105,9 @@ def one_weekday_day_and_one_weekend_day_per_month_by_hour_table() -> (
     )
     return pd.DataFrame(data), num_time_arrays, schema
 
+
 @pytest.fixture
 def one_year_index_time_by_hour():
-
     """
     time_column: str = Field(description="Column in the table that represents time.")
     time_type: Literal[TimeType.INDEX] = TimeType.INDEX
@@ -168,6 +168,7 @@ def one_year_index_time_subhourly():
     )
     return pd.DataFrame(data), num_time_arrays, schema
 
+
 @pytest.fixture
 def one_year_index_time_by_hour_leapyear():
     hours_per_year = (24 * 366) + 1
@@ -178,7 +179,6 @@ def one_year_index_time_by_hour_leapyear():
         "t_idx": np.tile(np.arange(hours_per_year), num_time_arrays),
         "value": np.random.random(hours_per_year * num_time_arrays),
     }
-    # breakpoint()
     schema = TableSchema(
         name="ev_charging",
         value_column="value",

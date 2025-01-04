@@ -49,7 +49,6 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins
         """Convert time columns with from_schema to to_schema configuration."""
         is_tz_naive = self._to_time_config.is_time_zone_naive()
         self.check_schema_consistency()
-        # breakpoint()
         if not is_tz_naive:
             self._check_source_table_has_time_zone()
 

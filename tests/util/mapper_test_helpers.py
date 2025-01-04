@@ -12,7 +12,6 @@ from chronify.models import TableSchema
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 
 
-
 def generate_datetime_data(time_config: DatetimeRange) -> pd.DatetimeIndex:
     return pd.to_datetime(list(DatetimeRangeGenerator(time_config).iter_timestamps()))
 
@@ -73,8 +72,11 @@ def run_test(
             truth = generate_datetime_data(to_schema.time_config)
             check_mapped_timestamps(queried, truth)
 
+
 def check_representative_mapping(queried, df, to_schema: TableSchema):
-    assert isinstance(to_schema.time_config, DatetimeRange), "Mapping to_schema must have DatetimeRange time config"
+    assert isinstance(
+        to_schema.time_config, DatetimeRange
+    ), "Mapping to_schema must have DatetimeRange time config"
     truth = generate_datetime_data(to_schema.time_config)
     check_mapped_timestamps(queried, truth)
     check_mapped_values(queried, df)
@@ -85,10 +87,8 @@ def check_mapped_timestamps(df: pd.DataFrame, ts: pd.Series) -> None:
     tru = sorted(ts)
     assert res == tru, "wrong unique timestamps"
 
-    breakpoint()
     res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
 
-    breakpoint()
     tru = [len(ts)]
     assert res == tru, "wrong number of timestamps"
 
