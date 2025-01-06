@@ -37,7 +37,12 @@ from chronify.models import (
     get_duckdb_types_from_pandas,
     get_sqlalchemy_type_from_duckdb,
 )
-from chronify.sqlalchemy.functions import read_database, write_database
+from chronify.sqlalchemy.functions import (
+    create_view_from_parquet,
+    read_database,
+    write_database,
+    write_query_to_parquet,
+)
 from chronify.schema_manager import SchemaManager
 from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import check_timestamps
@@ -328,14 +333,17 @@ class Store:
         """Return the store's schema manager."""
         return self._schema_mgr
 
-    def create_view_from_parquet(self, path: Path, schema: TableSchema) -> None:
+    def create_view_from_parquet(
+        self, path: Path, schema: TableSchema, bypass_checks: bool = False
+    ) -> None:
         """Load a table into the database."""
         # TODO: support unpivoting a pivoted table
         self._create_view_from_parquet(path, schema)
         try:
             with self._engine.connect() as conn:
                 table = self.get_table(schema.name)
-                check_timestamps(conn, table, schema)
+                if not bypass_checks:
+                    check_timestamps(conn, table, schema)
         except InvalidTable:
             # This doesn't use conn.rollback because we can't update the sqlalchemy metadata
             # for this view inside the connection.
@@ -375,17 +383,8 @@ class Store:
         ...     "table.parquet",
         ... )
         """
-        path_ = to_path(path)
         with self._engine.begin() as conn:
-            if self._engine.name == "duckdb":
-                str_path = f"{path}/**/*.parquet" if path_.is_dir() else str(path_)
-                query = f"CREATE VIEW {schema.name} AS SELECT * FROM read_parquet('{str_path}')"
-            elif self._engine.name == "hive":
-                query = f"CREATE VIEW {schema.name} AS SELECT * FROM parquet.`{path}`"
-            else:
-                msg = f"create_view_from_parquet does not support engine={self._engine.name}"
-                raise NotImplementedError(msg)
-            conn.execute(text(query))
+            create_view_from_parquet(conn, schema.name, to_path(path))
             self._schema_mgr.add_schema(conn, schema)
 
         self.update_metadata()
@@ -726,7 +725,7 @@ class Store:
         data: pd.DataFrame | DuckDBPyRelation,
         schema: TableSchema,
         connection: Optional[Connection] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> bool:
         """Ingest data into the table specifed by schema. If the table does not exist,
         create it.
@@ -794,7 +793,7 @@ class Store:
         data: Iterable[pd.DataFrame | DuckDBPyRelation],
         schema: TableSchema,
         connection: Optional[Connection] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> bool:
         """Ingest multiple input tables to the same database table.
         All tables must have the same schema.
@@ -891,7 +890,12 @@ class Store:
         return created_table
 
     def map_table_time_config(
-        self, src_name: str, dst_schema: TableSchema, scratch_dir: Optional[Path] = None
+        self,
+        src_name: str,
+        dst_schema: TableSchema,
+        scratch_dir: Optional[Path] = None,
+        output_file: Optional[Path] = None,
+        check_mapped_timestamps: bool = True,
     ) -> None:
         """Map the existing table represented by src_name to a new table represented by
         dst_schema with a different time configuration.
@@ -961,6 +965,8 @@ class Store:
             src_schema,
             dst_schema,
             scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
         with self._engine.begin() as conn:
             self._schema_mgr.add_schema(conn, dst_schema)
@@ -1086,36 +1092,13 @@ class Store:
             msg = f"table {name=} is not stored"
             raise TableNotStored(msg)
 
-        output = to_path(file_path)
-        check_overwrite(output, overwrite)
-        match self._engine.name:
-            case "duckdb":
-                if partition_columns:
-                    cols = ",".join(partition_columns)
-                    query = f"COPY {name} TO '{file_path}' (FORMAT PARQUET, PARTITION_BY ({cols}))"
-                else:
-                    query = f"COPY {name} TO '{file_path}' (FORMAT PARQUET)"
-            case "hive":
-                if not overwrite:
-                    msg = "write_table_to_parquet with Hive requires overwrite=True"
-                    raise InvalidOperation(msg)
-                # TODO: partition columns
-                if partition_columns:
-                    msg = "write_table_to_parquet with Hive doesn't support partition_columns"
-                    raise InvalidOperation(msg)
-                query = f"""
-                    INSERT OVERWRITE DIRECTORY
-                        '{output}'
-                        USING parquet
-                        SELECT * FROM {name}
-                """
-            case _:
-                msg = f"{self.engine.name=}"
-                raise NotImplementedError(msg)
-
-        with self._engine.connect() as conn:
-            conn.execute(text(query))
-
+        write_query_to_parquet(
+            self._engine,
+            f"SELECT * FROM {name}",
+            to_path(file_path),
+            overwrite=overwrite,
+            partition_columns=partition_columns,
+        )
         logger.info("Wrote table or view to {}", file_path)
 
     def delete_rows(

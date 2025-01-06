@@ -52,7 +52,12 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen}"
             raise ConflictingInputsError(msg)
 
-    def map_time(self, scratch_dir: Optional[Path] = None) -> None:
+    def map_time(
+        self,
+        scratch_dir: Optional[Path] = None,
+        output_file: Optional[Path] = None,
+        check_mapped_timestamps: bool = True,
+    ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         self.check_schema_consistency()
         df, mapping_schema = self._create_mapping()
@@ -64,6 +69,8 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             self._engine,
             self._metadata,
             scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
         # TODO - add handling for changing resolution - Issue #30
 

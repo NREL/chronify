@@ -4,7 +4,7 @@ from typing import Any, Generator
 import numpy as np
 import pandas as pd
 import pytest
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from chronify.models import TableSchema
 from chronify.store import Store
 from chronify.time import RepresentativePeriodFormat
@@ -51,12 +51,27 @@ def iter_stores_by_engine_no_data_ingestion(request) -> Generator[Store, None, N
     engine = ENGINES[request.param]
     if engine["url"].startswith("hive"):
         store = Store.create_new_hive_store(
-            engine["url"], *engine["connect_args"], drop_tables=True, **engine["kwargs"]
+            engine["url"], *engine["connect_args"], drop_schema=True, **engine["kwargs"]
         )
+        orig_tables_and_views = set()
+        with store.engine.begin() as conn:
+            for row in conn.execute(text("SHOW TABLES")).all():
+                orig_tables_and_views.add(row[1])
     else:
-        engine = create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
-        store = Store(engine=engine)
+        eng = create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
+        store = Store(engine=eng)
+        orig_tables_and_views = None
     yield store
+    if engine["url"].startswith("hive"):
+        with store.engine.begin() as conn:
+            for row in conn.execute(text("SHOW VIEWS")).all():
+                name = row[1]
+                if name not in orig_tables_and_views:
+                    conn.execute(text(f"DROP VIEW {name}"))
+            for row in conn.execute(text("SHOW TABLES")).all():
+                name = row[1]
+                if name not in orig_tables_and_views:
+                    conn.execute(text(f"DROP TABLE {name}"))
 
 
 @pytest.fixture(params=[x for x in ENGINES.keys() if x != "hive"])
