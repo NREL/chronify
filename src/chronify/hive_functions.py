@@ -1,11 +1,8 @@
-import atexit
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Optional
 
 from sqlalchemy import Engine, MetaData, text
-
-from chronify.utils.path_utils import delete_if_exists
 
 
 def create_materialized_view(
@@ -17,6 +14,9 @@ def create_materialized_view(
 ) -> None:
     """Create a materialized view with a Parquet file. This is a workaround for an undiagnosed
     problem with timestamps and time zones with hive.
+
+    The Parquet file will be written to scratch_dir. Callers must ensure that the directory
+    persists for the duration of the work.
     """
     with NamedTemporaryFile(dir=scratch_dir, suffix=".parquet") as f:
         f.close()
@@ -29,7 +29,6 @@ def create_materialized_view(
     """
     with engine.begin() as conn:
         conn.execute(text(write_query))
-        atexit.register(lambda: delete_if_exists(output))
         view_query = f"CREATE VIEW {dst_table} AS SELECT * FROM parquet.`{output}`"
         conn.execute(text(view_query))
     metadata.reflect(engine, views=True)

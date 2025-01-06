@@ -7,17 +7,17 @@ in memory.
 import atexit
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Literal, TypeAlias, Sequence
+from typing import Any, Literal, Optional, TypeAlias, Sequence
 from collections import Counter
 
 import pandas as pd
 from numpy.dtypes import DateTime64DType, ObjectDType
 from pandas import DatetimeTZDtype
-from sqlalchemy import Connection, Selectable, text
+from sqlalchemy import Connection, Engine, Selectable, text
 
 from chronify.exceptions import InvalidOperation, InvalidParameter
 from chronify.time_configs import DatetimeRange, TimeBaseModel
-from chronify.utils.path_utils import delete_if_exists
+from chronify.utils.path_utils import check_overwrite, delete_if_exists
 
 # Copied from Pandas/Polars
 DbWriteMode: TypeAlias = Literal["replace", "append", "fail"]
@@ -196,3 +196,51 @@ def _write_to_sqlite(
         if isinstance(config, DatetimeRange):
             df, copied = _convert_database_input_for_datetime(df, config, copied)
     df.to_sql(table_name, conn, if_exists=if_table_exists, index=False)
+
+
+def create_view_from_parquet(conn: Connection, view_name: str, filename: Path) -> None:
+    """Create a view from a Parquet file."""
+    if conn.engine.name == "duckdb":
+        str_path = f"{filename}/**/*.parquet" if filename.is_dir() else str(filename)
+        query = f"CREATE VIEW {view_name} AS SELECT * FROM read_parquet('{str_path}')"
+    elif conn.engine.name == "hive":
+        query = f"CREATE VIEW {view_name} AS SELECT * FROM parquet.`{filename}`"
+    else:
+        msg = f"create_view_from_parquet does not support engine={conn.engine.name}"
+        raise NotImplementedError(msg)
+    conn.execute(text(query))
+
+
+def write_query_to_parquet(
+    engine: Engine,
+    query: str,
+    output_file: Path,
+    overwrite: bool = False,
+    partition_columns: Optional[list[str]] = None,
+) -> None:
+    """Write the query to a Parquet file."""
+    check_overwrite(output_file, overwrite)
+    match engine.name:
+        case "duckdb":
+            if partition_columns:
+                cols = ",".join(partition_columns)
+                query = (
+                    f"COPY ({query}) TO '{output_file}' (FORMAT PARQUET, PARTITION_BY ({cols}))"
+                )
+            else:
+                query = f"COPY ({query}) TO '{output_file}' (FORMAT PARQUET)"
+        case "hive":
+            if not overwrite:
+                msg = "write_table_to_parquet with Hive requires overwrite=True"
+                raise InvalidOperation(msg)
+            # TODO: partition columns
+            if partition_columns:
+                msg = "write_table_to_parquet with Hive doesn't support partition_columns"
+                raise InvalidOperation(msg)
+            query = f"INSERT OVERWRITE DIRECTORY '{output_file}' USING parquet {query}"
+        case _:
+            msg = f"{engine.name=}"
+            raise NotImplementedError(msg)
+
+    with engine.connect() as conn:
+        conn.execute(text(query))

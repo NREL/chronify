@@ -22,7 +22,7 @@ def get_datetime_schema(year: int, tzinfo: ZoneInfo | None) -> TableSchema:
     start = datetime(year=year, month=1, day=1, tzinfo=tzinfo)
     end = datetime(year=year + 1, month=1, day=1, tzinfo=tzinfo)
     resolution = timedelta(hours=1)
-    length = (end - start) / resolution + 1
+    length = (end - start) / resolution
     schema = TableSchema(
         name="mapped_data",
         time_config=DatetimeRange(

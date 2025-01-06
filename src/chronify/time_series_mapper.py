@@ -15,6 +15,8 @@ def map_time(
     from_schema: TableSchema,
     to_schema: TableSchema,
     scratch_dir: Optional[Path] = None,
+    output_file: Optional[Path] = None,
+    check_mapped_timestamps: bool = True,
 ) -> None:
     """Function to map time using the appropriate TimeSeriesMapper model."""
 
@@ -22,13 +24,17 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperRepresentativeTimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
-            scratch_dir=scratch_dir
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
     elif isinstance(from_schema.time_config, DatetimeRange) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
         MapperDatetimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
-            scratch_dir=scratch_dir
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
     else:
         msg = f"No mapping function for {from_schema.time_config.__class__=} >> {to_schema.time_config.__class__=}"

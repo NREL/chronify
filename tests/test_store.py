@@ -473,8 +473,15 @@ def test_map_datetime_to_datetime(
     else:
         store.ingest_table(rel2, src_schema)
 
-    store.map_table_time_config(src_schema.name, dst_schema)
-    df2 = store.read_table(dst_schema.name)
+    if tzinfo is None and store.engine.name != "sqlite":
+        output_file = tmp_path / "mapped_data"
+    else:
+        output_file = None
+    store.map_table_time_config(src_schema.name, dst_schema, output_file=output_file)
+    if output_file is None or store.engine.name == "sqlite":
+        df2 = store.read_table(dst_schema.name)
+    else:
+        df2 = pd.read_parquet(output_file)
     assert len(df2) == time_array_len * 3
     actual = sorted(df2["timestamp"].unique())
     assert isinstance(src_schema.time_config, DatetimeRange)
