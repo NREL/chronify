@@ -72,7 +72,7 @@ schema = TableSchema(
 from chronify import Store
 
 store = Store.create_new_hive_store("hive://localhost:10000/default")
-store.create_view_from_parquet()
+store.create_view_from_parquet("data.parquet")
 ```
 
 Verify the data:
@@ -92,9 +92,5 @@ store.read_table(schema.name).head()
 The primary use case for Spark is to map datasets that are larger than can be processed by DuckDB
 on one computer. In such a workflow a user would call
 ```python
-store.map_table_time_config(src_table_name, dst_schema)
-```
-followed by
-```python
-store.write_table_to_parquet(dst_schema.name, "mapped_data.parquet")
+store.map_table_time_config(src_table_name, dst_schema, output_file="mapped_data.parquet")
 ```

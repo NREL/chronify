@@ -53,6 +53,10 @@ def write_database(
 ) -> None:
     """Write a Pandas DataFrame to the database.
     configs allows sqlite formatting for more than one datetime columns.
+
+    Note: Writing persistent data with Hive as the backend is not supported.
+    This function will write the dataframe to a temporary Parquet file and then create
+    a view into that file. This is only to support ephemeral tables, such as for mapping tables.
     """
     match conn.engine.name:
         case "duckdb":
