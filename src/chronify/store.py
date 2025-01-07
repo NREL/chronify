@@ -535,7 +535,7 @@ class Store:
     ) -> bool:
         rel = read_csv(path, src_schema)
         columns = set(src_schema.list_columns())
-        check_columns(rel.columns, columns)
+        check_columns(rel.columns, columns, set(src_schema.ignore_columns))
 
         # TODO
         if isinstance(src_schema.time_config, IndexTimeRange):
@@ -866,7 +866,7 @@ class Store:
             msg = "Data ingestion through Hive is not supported"
             raise NotImplementedError(msg)
         df = data.to_df() if isinstance(data, DuckDBPyRelation) else data
-        check_columns(df.columns, schema.list_columns())
+        check_columns(df.columns, schema.list_columns(), schema.ignore_columns)
 
         table = self.try_get_table(schema.name)
         if table is None:
@@ -1235,7 +1235,9 @@ class Store:
                 conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
 
 
-def check_columns(table_columns: Iterable[str], schema_columns: Iterable[str]) -> None:
+def check_columns(
+    table_columns: Iterable[str], schema_columns: Iterable[str], ignore_columns: Iterable[str]
+) -> None:
     """Check if the columns match the schema.
 
     Raises
@@ -1243,8 +1245,9 @@ def check_columns(table_columns: Iterable[str], schema_columns: Iterable[str]) -
     InvalidTable
         Raised if the columns don't match the schema.
     """
+    columns_to_inspect = set(table_columns).difference(ignore_columns)
     expected_columns = schema_columns if isinstance(schema_columns, set) else set(schema_columns)
-    diff = expected_columns.difference(table_columns)
+    diff = expected_columns.difference(columns_to_inspect)
     if diff:
         cols = " ".join(sorted(diff))
         msg = f"These columns are defined in the schema but not present in the table: {cols}"

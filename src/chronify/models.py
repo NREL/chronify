@@ -29,6 +29,10 @@ class TableSchemaBase(ChronifyBaseModel):
             "Should not include time columns."
         ),
     ]
+    ignore_columns: list[str] = Field(
+        default=[],
+        description="Columns in the table to ignore",
+    )
 
     @field_validator("time_config")
     @classmethod
