@@ -153,10 +153,6 @@ def _apply_mapping(
     """Apply mapping to create result as a table according to_schema
     - Columns used to join the from_table are prefixed with "from_" in the mapping table
     """
-    # if output_file is not None and engine.name != "hive":
-    # msg = f"A mapping can only be written to Parquet if the engine is hive: {engine.name=}"
-    # raise InvalidOperation(msg)
-
     left_table = Table(from_schema.name, metadata)
     right_table = Table(mapping_table_name, metadata)
     left_table_columns = [x.name for x in left_table.columns]

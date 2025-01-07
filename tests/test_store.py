@@ -117,7 +117,6 @@ def test_ingest_csv(iter_stores_by_engine: Store, tmp_path, generators_schema, u
         ).to_df().to_csv(new_src_file, index=False)
         src_file = new_src_file
     store.ingest_from_csv(src_file, src_schema, dst_schema)
-    store.create_index(dst_schema.name)
     df = store.read_table(dst_schema.name)
     assert len(df) == 8784 * 3
 
@@ -148,8 +147,6 @@ def test_ingest_csv(iter_stores_by_engine: Store, tmp_path, generators_schema, u
     df = store.read_table(dst_schema.name)
     assert len(df) == 8784 * 3 * 2
     all(df.timestamp.unique() == expected_timestamps)
-
-    store.drop_index(dst_schema.name)
 
     # Read a subset of the table.
     df2 = store.read_query(

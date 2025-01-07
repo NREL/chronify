@@ -154,8 +154,8 @@ class Store:
         --------
         create_view_from_parquet
         """
-        # We don't currently expect to need to load an existing hive-based store.
-        # Users should only use
+        # We don't currently expect to need to load an existing hive-based store, but it could
+        # be added.
         if "hive://" not in url:
             msg = f"Expected 'hive://' to be in url: {url}"
             raise InvalidParameter(msg)
@@ -170,12 +170,8 @@ class Store:
             conn.execute(text("SET spark.sql.parquet.outputTimestampType=TIMESTAMP_MICROS"))
 
             if drop_schema:
-                name = SchemaManager.SCHEMAS_TABLE
-                if name in metadata.tables:
-                    try:
-                        conn.execute(text(f"DROP TABLE {name}"))
-                    except Exception:
-                        conn.execute(text(f"DROP VIEW {name}"))
+                if SchemaManager.SCHEMAS_TABLE in metadata.tables:
+                    conn.execute(text(f"DROP TABLE {SchemaManager.SCHEMAS_TABLE}"))
 
         return cls(engine=engine)
 
@@ -199,11 +195,7 @@ class Store:
             msg = f"{name=}"
             raise TableNotStored(msg)
 
-        return (
-            self._metadata.tables[name]
-            if self._engine.name == "hive"
-            else Table(name, self._metadata)
-        )
+        return Table(name, self._metadata)
 
     def has_table(self, name: str) -> bool:
         """Return True if the database has a table with the given name."""
@@ -252,72 +244,6 @@ class Store:
                 msg = self._engine.name
                 raise NotImplementedError(msg)
 
-    def create_index(
-        self,
-        table_name: str,
-        index_name: Optional[str] = None,
-        columns: Optional[list[str]] = None,
-    ) -> str:
-        """Create an index on the table. SQLite read queries benefit from indexes.
-        Performance tests on chronify tables with DuckDB have shown no difference.
-
-        Parameters
-        ----------
-        table_name
-            Name of table on which to create an index
-        index_name
-            Name of index. By default, chronify will choose a name.
-        columns
-            Columns on which to create the index. By default, chronify will
-            use time_array_id_columns for the table.
-
-        Returns
-        -------
-        str
-            Index name
-
-        Raises
-        ------
-        TableNotStored
-        """
-        self.get_table(table_name)
-        index = self._index_name_from_table(table_name, index_name)
-        if columns is None:
-            cols = self._schema_mgr.get_schema(table_name).time_array_id_columns
-        else:
-            cols = columns
-
-        cols_str = ",".join(cols)
-        query = f"CREATE INDEX {index} ON {table_name}({cols_str})"
-        with self._engine.begin() as conn:
-            conn.execute(text(query))
-
-        return index
-
-    def drop_index(self, table_name: str, index_name: Optional[str] = None) -> None:
-        """Drop the index, if it exists.
-
-        Parameters
-        ----------
-        table_name
-            Name of table on which to create an index
-        index_name
-            Name of index. By default, chronify will use the auto-generated name.
-
-        Raises
-        ------
-        TableNotStored
-        """
-        self.get_table(table_name)
-        index = self._index_name_from_table(table_name, index_name)
-        query = f"DROP INDEX IF EXISTS {index}"
-        with self._engine.begin() as conn:
-            conn.execute(text(query))
-
-    @staticmethod
-    def _index_name_from_table(table_name: str, index_name: Optional[str]) -> str:
-        return index_name or f"{table_name}__index"
-
     @property
     def engine(self) -> Engine:
         """Return the sqlalchemy engine."""
@@ -337,7 +263,6 @@ class Store:
         self, path: Path, schema: TableSchema, bypass_checks: bool = False
     ) -> None:
         """Load a table into the database."""
-        # TODO: support unpivoting a pivoted table
         self._create_view_from_parquet(path, schema)
         try:
             with self._engine.connect() as conn:
@@ -1212,7 +1137,7 @@ class Store:
     def _drop_table_or_view(
         self,
         name: str,
-        tbl_type: str,
+        table_type: str,
         connection: Optional[Connection],
         if_exists: bool,
     ) -> None:
@@ -1220,14 +1145,14 @@ class Store:
         if_exists_str = " IF EXISTS" if if_exists else ""
         if connection is None:
             with self._engine.begin() as conn:
-                conn.execute(text(f"DROP {tbl_type} {if_exists_str} {name}"))
+                conn.execute(text(f"DROP {table_type} {if_exists_str} {name}"))
                 self._schema_mgr.remove_schema(conn, name)
         else:
-            connection.execute(text(f"DROP {tbl_type} {if_exists_str} {name}"))
+            connection.execute(text(f"DROP {table_type} {if_exists_str} {name}"))
             self._schema_mgr.remove_schema(connection, name)
 
         self._metadata.remove(table)
-        logger.info("Dropped {} {}", tbl_type.lower(), name)
+        logger.info("Dropped {} {}", table_type.lower(), name)
 
     def _handle_sqlite_error_case(self, name: str, connection: Optional[Connection]) -> None:
         if connection is None and self._engine.name == "sqlite":
