@@ -202,6 +202,72 @@ class Store:
         """Return the sqlalchemy metadata."""
         return self._metadata
 
+    def create_index(
+        self,
+        table_name: str,
+        index_name: Optional[str] = None,
+        columns: Optional[list[str]] = None,
+    ) -> str:
+        """Create an index on the table. SQLite read queries benefit from indexes.
+        Performance tests on chronify tables with DuckDB have shown no difference.
+
+        Parameters
+        ----------
+        table_name
+            Name of table on which to create an index
+        index_name
+            Name of index. By default, chronify will choose a name.
+        columns
+            Columns on which to create the index. By default, chronify will
+            use time_array_id_columns for the table.
+
+        Returns
+        -------
+        str
+            Index name
+
+        Raises
+        ------
+        TableNotStored
+        """
+        self.get_table(table_name)
+        index = self._index_name_from_table(table_name, index_name)
+        if columns is None:
+            cols = self._schema_mgr.get_schema(table_name).time_array_id_columns
+        else:
+            cols = columns
+
+        cols_str = ",".join(cols)
+        query = f"CREATE INDEX {index} ON {table_name}({cols_str})"
+        with self._engine.begin() as conn:
+            conn.execute(text(query))
+
+        return index
+
+    def drop_index(self, table_name: str, index_name: Optional[str] = None) -> None:
+        """Drop the index, if it exists.
+
+        Parameters
+        ----------
+        table_name
+            Name of table on which to create an index
+        index_name
+            Name of index. By default, chronify will use the auto-generated name.
+
+        Raises
+        ------
+        TableNotStored
+        """
+        self.get_table(table_name)
+        index = self._index_name_from_table(table_name, index_name)
+        query = f"DROP INDEX IF EXISTS {index}"
+        with self._engine.begin() as conn:
+            conn.execute(text(query))
+
+    @staticmethod
+    def _index_name_from_table(table_name: str, index_name: Optional[str]) -> str:
+        return index_name or f"{table_name}__index"
+
     def create_view_from_parquet(self, schema: TableSchema, path: Path | str) -> None:
         """Create a view in the database from a Parquet file.
 
