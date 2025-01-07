@@ -105,7 +105,7 @@ class TimeSeriesChecker:
                 msg = (
                     f"The count of time values in each time array must be {count}, and each "
                     "value must be distinct. "
-                    f"Time array identifiers: {values}."
+                    f"Time array identifiers: {values}. "
                     f"count = {count_by_ta}, distinct count = {distinct_count_by_ta}. "
                 )
                 raise InvalidTable(msg)

@@ -22,6 +22,26 @@ Python-based modeling packages.
     explanation/index
 ```
 
+## Supported Backends
+While chronify should work with any database supported by SQLAlchemy, it has been tested with
+the following:
+
+- DuckDB (default)
+- SQLite
+- Apache Spark through Apache Thrift Server
+
+DuckDB and SQLite are fully supported.
+
+Because of limitations in the backend software, chronify functionality with Spark is limited to
+the following:
+
+- Create a view into an existing Parquet file (or directory).
+- Perform time series checks.
+- Map between time configurations.
+- Write output data to Parquet files.
+
+There is no support for creating tables and ingesting data with Spark.
+
 ## How to use this guide
 - Refer to [How Tos](#how-tos-page) for step-by-step instructions for creating store and ingesting data.
 - Refer to [Tutorials](#tutorials-page) examples of ingesting different types of data and mapping

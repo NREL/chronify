@@ -1,10 +1,12 @@
+import os
 from typing import Any, Generator
 
 import numpy as np
 import pandas as pd
 import pytest
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from chronify.models import TableSchema
+from chronify.store import Store
 from chronify.time import RepresentativePeriodFormat
 
 from chronify.time_configs import RepresentativePeriodTime
@@ -14,6 +16,9 @@ ENGINES: dict[str, dict[str, Any]] = {
     "duckdb": {"url": "duckdb:///:memory:", "connect_args": {}, "kwargs": {}},
     "sqlite": {"url": "sqlite:///:memory:", "connect_args": {}, "kwargs": {}},
 }
+HIVE_URL = os.getenv("CHRONIFY_HIVE_URL")
+if HIVE_URL is not None:
+    ENGINES["hive"] = {"url": HIVE_URL, "connect_args": {}, "kwargs": {}}
 
 
 @pytest.fixture
@@ -22,14 +27,54 @@ def create_duckdb_engine() -> Engine:
     return create_engine("duckdb:///:memory:")
 
 
-@pytest.fixture(params=ENGINES.keys())
+@pytest.fixture(params=[x for x in ENGINES.keys() if x != "hive"])
 def iter_engines(request) -> Generator[Engine, None, None]:
     """Return an iterable of sqlalchemy in-memory engines to test."""
     engine = ENGINES[request.param]
     yield create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
 
 
+@pytest.fixture(params=[x for x in ENGINES.keys() if x != "hive"])
+def iter_stores_by_engine(request) -> Generator[Store, None, None]:
+    """Return an iterable of stores with different engines to test.
+    Will only return engines that support data ingestion.
+    """
+    engine = ENGINES[request.param]
+    engine = create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
+    store = Store(engine=engine)
+    yield store
+
+
 @pytest.fixture(params=ENGINES.keys())
+def iter_stores_by_engine_no_data_ingestion(request) -> Generator[Store, None, None]:
+    """Return an iterable of stores with different engines to test."""
+    engine = ENGINES[request.param]
+    if engine["url"].startswith("hive"):
+        store = Store.create_new_hive_store(
+            engine["url"], *engine["connect_args"], drop_schema=True, **engine["kwargs"]
+        )
+        orig_tables_and_views = set()
+        with store.engine.begin() as conn:
+            for row in conn.execute(text("SHOW TABLES")).all():
+                orig_tables_and_views.add(row[1])
+    else:
+        eng = create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
+        store = Store(engine=eng)
+        orig_tables_and_views = None
+    yield store
+    if engine["url"].startswith("hive"):
+        with store.engine.begin() as conn:
+            for row in conn.execute(text("SHOW VIEWS")).all():
+                name = row[1]
+                if name not in orig_tables_and_views:
+                    conn.execute(text(f"DROP VIEW {name}"))
+            for row in conn.execute(text("SHOW TABLES")).all():
+                name = row[1]
+                if name not in orig_tables_and_views:
+                    conn.execute(text(f"DROP TABLE {name}"))
+
+
+@pytest.fixture(params=[x for x in ENGINES.keys() if x != "hive"])
 def iter_engines_file(request, tmp_path) -> Generator[Engine, None, None]:
     """Return an iterable of sqlalchemy file-based engines to test."""
     engine = ENGINES[request.param]
@@ -38,7 +83,7 @@ def iter_engines_file(request, tmp_path) -> Generator[Engine, None, None]:
     yield create_engine(url, *engine["connect_args"], **engine["kwargs"])
 
 
-@pytest.fixture(params=ENGINES.keys())
+@pytest.fixture(params=[x for x in ENGINES.keys() if x != "hive"])
 def iter_engine_names(request) -> Generator[str, None, None]:
     """Return an iterable of engine names."""
     yield request.param
