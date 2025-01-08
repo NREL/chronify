@@ -12,26 +12,30 @@ from chronify.exceptions import TableAlreadyExists, ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
+from chronify.exceptions import MissingParameter
+from chronify.time_configs import DatetimeRange
 
 logger = logging.getLogger(__name__)
-from chronify.exceptions import ConflictingInputsError, MissingParameter
-from chronify.time_configs import DatetimeRange
-from chronify.schema_manager import TableSchema
 
 
 class TimeSeriesMapperBase(abc.ABC):
     """Maps time series data from one configuration to another."""
 
     def __init__(
-        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema,
+        self,
+        engine: Engine,
+        metadata: MetaData,
+        from_schema: TableSchema,
+        to_schema: TableSchema,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
         self._from_schema = from_schema
         self._to_schema = to_schema
 
+
 class CheckSchemaMixins:
-    """ schema validation mixins. """
+    """schema validation mixins."""
 
     _to_time_config: DatetimeRange
     _from_schema: TableSchema
