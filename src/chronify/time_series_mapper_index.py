@@ -141,6 +141,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
 
         keys = self._from_schema.time_config.list_time_columns()
         if not self._to_time_config.is_time_zone_naive():
+            select_stmt += [right_table.c["time_zone"]]
             keys.append("time_zone")
             assert (
                 "time_zone" in left_table_columns
