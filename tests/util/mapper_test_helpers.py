@@ -36,6 +36,14 @@ def get_datetime_schema(year, tzinfo) -> TableSchema:
     return schema
 
 
+def add_time_zone_data(df: pd.DataFrame, schema: TableSchema) -> tuple[pd.DataFrame, TableSchema]:
+    df["time_zone"] = df["id"].map(
+        dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
+    )
+    schema.time_array_id_columns += ["time_zone"]
+    return df, schema
+
+
 def run_test(
     engine: Engine,
     df: pd.DataFrame,
@@ -70,7 +78,7 @@ def run_test(
 
         if isinstance(from_schema.time_config, IndexTimeRange):
             truth = generate_datetime_data(to_schema.time_config)
-            check_mapped_timestamps(queried, truth)
+            check_mapped_timestamps(queried, truth, to_schema.time_config.is_time_zone_naive())
 
 
 def check_representative_mapping(queried, df, to_schema: TableSchema):
@@ -78,19 +86,20 @@ def check_representative_mapping(queried, df, to_schema: TableSchema):
         to_schema.time_config, DatetimeRange
     ), "Mapping to_schema must have DatetimeRange time config"
     truth = generate_datetime_data(to_schema.time_config)
-    check_mapped_timestamps(queried, truth)
+    check_mapped_timestamps(queried, truth, to_schema.time_config.is_time_zone_naive())
     check_mapped_values(queried, df)
 
 
-def check_mapped_timestamps(df: pd.DataFrame, ts: pd.Series) -> None:
+def check_mapped_timestamps(df: pd.DataFrame, ts: pd.Series, is_tz_naive: bool) -> None:
     res = sorted(df["timestamp"].drop_duplicates().to_list())
     tru = sorted(ts)
     assert res == tru, "wrong unique timestamps"
 
-    res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
+    if not is_tz_naive:
+        res = df.groupby(["time_zone"])["timestamp"].count().unique().tolist()
 
-    tru = [len(ts)]
-    assert res == tru, "wrong number of timestamps"
+        tru = [len(ts)]
+        assert res == tru, "wrong number of timestamps"
 
 
 def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame) -> None:

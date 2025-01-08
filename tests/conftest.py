@@ -1,5 +1,6 @@
 from typing import Any, Generator
 from datetime import timedelta, datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -131,7 +132,7 @@ def one_year_index_time_by_hour():
         time_config=IndexTimeRange(
             time_column="t_idx",
             start=0,
-            start_timestamp=datetime(2019, 1, 1),
+            start_timestamp=datetime(2019, 1, 1, tzinfo=ZoneInfo("US/Central")),
             length=hours_per_year + 1,
             resolution=timedelta(hours=1),
             time_zone=TimeZone.EST,  # standard time zone
@@ -149,9 +150,9 @@ def one_year_index_time_subhourly():
     num_time_arrays = 3
     # id 1 based index, t_idx 0 based index
     data = {
-        "id": np.repeat(np.arange(1, num_time_arrays + 1), hours_per_year),
-        "t_idx": np.tile(np.arange(hours_per_year), num_time_arrays),
-        "value": np.random.random(hours_per_year * num_time_arrays),
+        "id": np.repeat(np.arange(1, num_time_arrays + 1), index_length),
+        "t_idx": np.tile(np.arange(index_length), num_time_arrays),
+        "value": np.random.random(index_length * num_time_arrays),
     }
     schema = TableSchema(
         name="ev_charging",
@@ -159,7 +160,7 @@ def one_year_index_time_subhourly():
         time_config=IndexTimeRange(
             time_column="t_idx",
             start=0,
-            start_timestamp=datetime(2019, 1, 1),
+            start_timestamp=datetime(2019, 1, 1, tzinfo=ZoneInfo("US/Pacific")),
             length=index_length,
             resolution=timedelta(minutes=30),
             time_zone=TimeZone.EPT,  # prevaling time zone
@@ -185,7 +186,7 @@ def one_year_index_time_by_hour_leapyear():
         time_config=IndexTimeRange(
             time_column="t_idx",
             start=0,
-            start_timestamp=datetime(2020, 1, 1),
+            start_timestamp=datetime(2020, 1, 1, tzinfo=ZoneInfo("US/Eastern")),
             length=hours_per_year,
             resolution=timedelta(hours=1),
             time_zone=TimeZone.UTC,  # utc time zone
