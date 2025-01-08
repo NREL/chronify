@@ -1,4 +1,3 @@
-
 import logging
 from functools import reduce
 from operator import and_
@@ -68,7 +67,9 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
                 try:
                     check_timestamps(conn, mapped_table, self._to_schema)
                 except Exception:
-                    msg = f"check_timestamps failed on mapped table {self._to_schema.name}. Drop it"
+                    msg = (
+                        f"check_timestamps failed on mapped table {self._to_schema.name}. Drop it"
+                    )
                     logger.exception(msg)
                     conn.rollback()
                     raise
@@ -81,10 +82,15 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
                 self._metadata.remove(Table(map_table_name, self._metadata))
 
     def create_tz_naive_mapping_dataframe(self, dft, to_time_col):
-        # dft needs to be sorted and unique? does resolution matter here? 
-        # using the from schema, the resolution can be used 
-        # only mapping to datetime
-        dft[self._from_time_config.time_column] = round((dft[to_time_col] - self._from_time_config.start_timestamp) / self._from_time_config.resolution).astype(int)
+        timestamps = dft[to_time_col]
+        if timestamps.dt.tz is not None:
+            timestamps = timestamps.dt.tz_convert(None)
+
+        dft[self._from_time_config.time_column] = round(
+            (timestamps - self._from_time_config.start_timestamp.replace(tzinfo=None))
+            / self._from_time_config.resolution
+        ).astype(int)
+
         return dft
 
     def create_tz_aware_mapping_dataframe(self, dft, to_time_col, time_zones: list[str]):
