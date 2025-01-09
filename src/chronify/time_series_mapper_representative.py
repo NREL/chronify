@@ -10,7 +10,7 @@ from chronify.exceptions import (
     InvalidParameter,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_series_mapper_base import CheckSchemaMixins, TimeSeriesMapperBase, apply_mapping
+from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
 from chronify.time_configs import DatetimeRange, RepresentativePeriodTime
 from chronify.time_utils import shift_time_interval
@@ -18,7 +18,7 @@ from chronify.time_utils import shift_time_interval
 logger = logging.getLogger(__name__)
 
 
-class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
+class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
     def __init__(
         self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
     ) -> None:

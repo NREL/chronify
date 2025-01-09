@@ -8,10 +8,13 @@ from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
 from chronify.time_configs import IndexTimeRange, RepresentativePeriodTime, DatetimeRange
 
 
-def check_mapping(from_schema: TableSchema, to_schema: TableSchema, from_config_type: Type, to_config_type: Type):
-    if isinstance(from_schema.time_config, from_config_type) and isinstance(to_schema.time_config, to_config_type):
-        return True
-    return False
+def check_mapping(
+    from_schema: TableSchema, to_schema: TableSchema, from_config_type: Type, to_config_type: Type
+) -> bool:
+    return isinstance(from_schema.time_config, from_config_type) and isinstance(
+        to_schema.time_config, to_config_type
+    )
+
 
 def map_time(
     engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema

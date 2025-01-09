@@ -5,7 +5,7 @@ from sqlalchemy import Engine, MetaData
 
 from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import InvalidParameter, ConflictingInputsError
-from chronify.time_series_mapper_base import CheckSchemaMixins, TimeSeriesMapperBase, apply_mapping
+from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_utils import roll_time_interval
@@ -13,7 +13,7 @@ from chronify.time_utils import roll_time_interval
 logger = logging.getLogger(__name__)
 
 
-class MapperDatetimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
+class MapperDatetimeToDatetime(TimeSeriesMapperBase):
     def __init__(
         self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
     ) -> None:

@@ -13,7 +13,6 @@ from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
 from chronify.exceptions import MissingParameter
-from chronify.time_configs import DatetimeRange
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +31,7 @@ class TimeSeriesMapperBase(abc.ABC):
         self._metadata = metadata
         self._from_schema = from_schema
         self._to_schema = to_schema
-
-
-class CheckSchemaMixins:
-    """schema validation mixins."""
-
-    _to_time_config: DatetimeRange
-    _from_schema: TableSchema
-    _to_schema: TableSchema
+        self._to_time_config = to_schema.time_config
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""

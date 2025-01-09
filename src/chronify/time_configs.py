@@ -161,7 +161,8 @@ class AnnualTimeRange(TimeBaseModel):
 
 
 class IndexTimeRange(TimeBaseModel):
-    """ 0 based time index time representation """
+    """Index time representation"""
+
     time_column: str = Field(description="Column in the table that represents time.")
     time_type: Literal[TimeType.INDEX] = TimeType.INDEX
     start: int

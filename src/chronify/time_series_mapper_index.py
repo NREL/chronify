@@ -12,7 +12,7 @@ from chronify.exceptions import (
     InvalidParameter,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_series_mapper_base import TimeSeriesMapperBase, CheckSchemaMixins
+from chronify.time_series_mapper_base import TimeSeriesMapperBase
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.index_time_range_generator import IndexTimeRangeGenerator
 from chronify.time_series_checker import check_timestamps
@@ -22,7 +22,7 @@ from chronify.time_configs import DatetimeRange, IndexTimeRange
 logger = logging.getLogger(__name__)
 
 
-class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
+class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def __init__(
         self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
     ) -> None:
@@ -59,7 +59,11 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
         try:
             with self._engine.connect() as conn:
                 write_database(
-                    dfm, conn, map_table_name, self._to_schema.time_config, if_table_exists="fail"
+                    dfm,
+                    conn,
+                    map_table_name,
+                    [self._to_schema.time_config],
+                    if_table_exists="fail",
                 )
                 self._metadata.reflect(self._engine, views=True)
                 self._apply_mapping(map_table_name)
@@ -81,7 +85,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
                     conn.commit()
                 self._metadata.remove(Table(map_table_name, self._metadata))
 
-    def create_tz_naive_mapping_dataframe(self, dft, to_time_col):
+    def create_tz_naive_mapping_dataframe(self, dft, to_time_col) -> pd.DataFrame:
         timestamps = dft[to_time_col]
         if timestamps.dt.tz is not None:
             timestamps = timestamps.dt.tz_convert(None)
@@ -93,7 +97,9 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase, CheckSchemaMixins):
 
         return dft
 
-    def create_tz_aware_mapping_dataframe(self, dft, to_time_col, time_zones: list[str]):
+    def create_tz_aware_mapping_dataframe(
+        self, dft: pd.DataFrame, to_time_col: str, time_zones: list[str]
+    ) -> pd.DataFrame:
         dfm = []
         for tz in time_zones:
             dfc = dft.copy()
