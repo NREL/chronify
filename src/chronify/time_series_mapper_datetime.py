@@ -35,8 +35,8 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
-        self._check_table_columns_producibility()
-        self._check_measurement_type_consistency()
+        self._check_table_column_producibility()
+        self._check_schema_measurement_type_consistency()
         self._check_time_interval_type()
         self._check_time_resolution_and_length()
 
