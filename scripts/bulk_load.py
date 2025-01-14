@@ -41,9 +41,7 @@ GENERATOR_TIME_SERIES_FILE = "tests/data/gen.csv"
 def make_tables(
     resolution: timedelta, length: int, count: int
 ) -> Generator[pd.DataFrame, None, None]:
-    start = datetime(2020, 1, 1)
-    end = start + resolution * (length - 1)
-    timestamps = pd.date_range(start, end, freq=resolution)
+    timestamps = pd.date_range(datetime(2020, 1, 1), periods=length, freq=resolution)
 
     for i in range(count):
         df = pd.DataFrame(
@@ -85,7 +83,7 @@ def run_test(engine_url: str, length: int, count: int, create_index: bool):
         for i in range(count):
             ts_id = i + 1
             stmt = select(table).where(table.c.id == ts_id)
-            store.read_query(schema.name, stmt, conn=conn)
+            store.read_query(schema.name, stmt, connection=conn)
     duration_read = time.time() - start
     avg = duration_read / count
     print(f"{duration_read=} {avg=}")
