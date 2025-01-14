@@ -95,15 +95,21 @@ class SchemaManager:
         """Remove the schema from the store."""
         table = self._get_schema_table()
         if self._engine.name == "hive":
-            pass
-            # TODO: This is not working because pandas can't find the table.
-            # stmt = select(table).where(table.c.name != name)
-            # df = pd.read_sql_query(stmt, conn)
-            # conn.execute(text(f"DROP TABLE {self.SCHEMAS_TABLE}"))
-            # df.to_sql(self.SCHEMAS_TABLE, conn)
+            # Hive/Spark doesn't support delete, so we have to re-create the table without
+            # this one entry
+            stmt = select(table).where(table.c.name != name)
+            rows = conn.execute(stmt).fetchall()
+            conn.execute(text(f"DROP TABLE {self.SCHEMAS_TABLE}"))
+            conn.execute(text(f"CREATE TABLE {self.SCHEMAS_TABLE}(name STRING, schema STRING)"))
+            for row in rows:
+                params = {"name": row[0], "schema": row[1]}
+                conn.execute(
+                    text(f"INSERT INTO {self.SCHEMAS_TABLE} VALUES(:name, :schema)"),
+                    params,
+                )
         else:
-            stmt = delete(table).where(table.c["name"] == name)
-            conn.execute(stmt)
+            stmt2 = delete(table).where(table.c["name"] == name)
+            conn.execute(stmt2)
 
         self._cache.pop(name)
 

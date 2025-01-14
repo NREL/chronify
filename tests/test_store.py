@@ -348,6 +348,23 @@ def test_load_parquet(iter_stores_by_engine_no_data_ingestion: Store, tmp_path):
     expected_timestamps = timestamp_generator.list_timestamps()
     all(df.timestamp.unique() == expected_timestamps)
 
+    # This adds test coverage for Hive.
+    as_dict = dst_schema.model_dump()
+    as_dict["name"] = "test_view"
+    schema2 = TableSchema(**as_dict)
+    store.create_view_from_parquet(out_file, schema2)
+    df2 = store.read_table(schema2.name)
+    assert schema2.name in store.list_tables()
+    assert len(df2) == 8784 * 3
+    timestamp_generator = make_time_range_generator(time_config)
+    expected_timestamps = timestamp_generator.list_timestamps()
+    all(df2.timestamp.unique() == expected_timestamps)
+    store.drop_view(schema2.name)
+    assert schema2.name not in store.list_tables()
+    assert dst_schema.name in store.list_tables()
+    df3 = store.read_table(dst_schema.name)
+    assert len(df3) == 8784 * 3
+
 
 @pytest.mark.parametrize(
     "params",
