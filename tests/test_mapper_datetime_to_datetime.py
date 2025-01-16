@@ -73,7 +73,7 @@ def run_test_with_error(
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
     with pytest.raises(error[0], match=error[1]):
-        map_time(engine, metadata, from_schema, to_schema)
+        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
 
 
 def get_mapped_results(
@@ -84,7 +84,7 @@ def get_mapped_results(
 ) -> pd.DataFrame:
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
-    map_time(engine, metadata, from_schema, to_schema)
+    map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
 
     with engine.connect() as conn:
         query = f"select * from {to_schema.name}"

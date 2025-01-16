@@ -64,9 +64,9 @@ def run_test(
     # Map
     if error:
         with pytest.raises(error[0], match=error[1]):
-            map_time(engine, metadata, from_schema, to_schema)
+            map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
     else:
-        map_time(engine, metadata, from_schema, to_schema)
+        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
 
         # Check mapped table
         with engine.connect() as conn:

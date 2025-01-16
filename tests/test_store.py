@@ -408,7 +408,7 @@ def test_map_datetime_to_one_week_per_month_by_hour(
         store.create_view_from_parquet(out_file, src_schema)
     else:
         store.ingest_table(df, src_schema)
-    store.map_table_time_config(src_schema.name, dst_schema)
+    store.map_table_time_config(src_schema.name, dst_schema, check_mapped_timestamps=True)
     df2 = store.read_table(dst_schema.name)
     assert len(df2) == time_array_len * num_time_arrays
     actual = sorted(df2["timestamp"].unique())
@@ -427,7 +427,7 @@ def test_map_datetime_to_one_week_per_month_by_hour(
         assert out_file.exists()
 
     with pytest.raises(TableAlreadyExists):
-        store.map_table_time_config(src_schema.name, dst_schema)
+        store.map_table_time_config(src_schema.name, dst_schema, check_mapped_timestamps=True)
 
 
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("EST"), None])
@@ -491,7 +491,9 @@ def test_map_datetime_to_datetime(
         output_file = tmp_path / "mapped_data"
     else:
         output_file = None
-    store.map_table_time_config(src_schema.name, dst_schema, output_file=output_file)
+    store.map_table_time_config(
+        src_schema.name, dst_schema, output_file=output_file, check_mapped_timestamps=True
+    )
     if output_file is None or store.engine.name == "sqlite":
         df2 = store.read_table(dst_schema.name)
     else:

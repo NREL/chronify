@@ -16,7 +16,7 @@ def map_time(
     to_schema: TableSchema,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
-    check_mapped_timestamps: bool = True,
+    check_mapped_timestamps: bool = False,
 ) -> None:
     """Function to map time using the appropriate TimeSeriesMapper model."""
 

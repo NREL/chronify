@@ -51,7 +51,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         self,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
-        check_mapped_timestamps: bool = True,
+        check_mapped_timestamps: bool = False,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         is_tz_naive = self._to_time_config.is_time_zone_naive()
@@ -115,7 +115,6 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         df = df.rename(columns={x: "from_" + x for x in from_columns})
 
         if time_col != to_time_col:
-            # TODO: confirm with Lixi. Seems like it was accidental to leave this column.
             df.drop(time_col, axis=1, inplace=True)
 
         mapping_schema = MappingTableSchema(

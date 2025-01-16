@@ -2,6 +2,7 @@ from collections.abc import Iterable
 from pathlib import Path
 import shutil
 from typing import Any, Optional
+from chronify.utils.sql import make_temp_view_name
 
 import duckdb
 import pandas as pd
@@ -48,7 +49,6 @@ from chronify.time_configs import DatetimeRange, IndexTimeRange
 from chronify.time_series_checker import check_timestamps
 from chronify.time_series_mapper import map_time
 from chronify.utils.path_utils import check_overwrite, to_path
-from chronify.utils.sql import make_temp_view_name
 from chronify.utils.sqlalchemy_view import create_view
 
 
@@ -460,7 +460,7 @@ class Store:
     ) -> bool:
         rel = read_csv(path, src_schema)
         columns = set(src_schema.list_columns())
-        check_columns(rel.columns, columns, set(src_schema.ignore_columns))
+        check_columns(rel.columns, columns)
 
         # TODO
         if isinstance(src_schema.time_config, IndexTimeRange):
@@ -791,7 +791,7 @@ class Store:
             msg = "Data ingestion through Hive is not supported"
             raise NotImplementedError(msg)
         df = data.to_df() if isinstance(data, DuckDBPyRelation) else data
-        check_columns(df.columns, schema.list_columns(), schema.ignore_columns)
+        check_columns(df.columns, schema.list_columns())
 
         table = self.try_get_table(schema.name)
         if table is None:
@@ -820,7 +820,7 @@ class Store:
         dst_schema: TableSchema,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
-        check_mapped_timestamps: bool = True,
+        check_mapped_timestamps: bool = False,
     ) -> None:
         """Map the existing table represented by src_name to a new table represented by
         dst_schema with a different time configuration.
@@ -831,6 +831,11 @@ class Store:
             Refers to the table name of the source data.
         dst_schema
             Defines the table to create in the database. Must not already exist.
+        scratch_dir
+            Directory to use for temporary writes. Default to the system's tmp filesystem.
+        check_mapped_timestamps
+            Perform time checks on the result of the mapping operation. This can be slow and
+            is not required.
 
         Raises
         ------
@@ -969,8 +974,8 @@ class Store:
         >>> df = store.read_raw_query(query1, params=params1)
 
         >>> with store.engine.connect() as conn:
-        ...     df1 = store.read_raw_query(query1, params=params1, conn=conn)
-        ...     df2 = store.read_raw_query(query2, params=params2, conn=conn)
+        ...     df1 = store.read_raw_query(query1, params=params1, connection=conn)
+        ...     df2 = store.read_raw_query(query2, params=params2, connection=conn)
         """
         if connection is None:
             with self._engine.connect() as conn:
@@ -993,13 +998,21 @@ class Store:
                 raise NotImplementedError(msg)
 
     def write_query_to_parquet(
-        self, stmt: Selectable, file_path: Path | str, overwrite: bool = False
+        self,
+        stmt: Selectable,
+        file_path: Path | str,
+        overwrite: bool = False,
+        partition_columns: Optional[list[str]] = None,
     ) -> None:
         """Write the result of a query to a Parquet file."""
+        # We could add a separate path where the query is a string and skip the intermediate
+        # view if we passed parameters through the call stack.
         view_name = make_temp_view_name()
         create_view(view_name, stmt, self._engine, self._metadata)
         try:
-            self.write_table_to_parquet(view_name, file_path, overwrite=overwrite)
+            self.write_table_to_parquet(
+                view_name, file_path, overwrite=overwrite, partition_columns=partition_columns
+            )
         finally:
             with self._engine.connect() as conn:
                 conn.execute(text(f"DROP VIEW {view_name}"))
@@ -1105,13 +1118,7 @@ class Store:
         if_exists: bool = False,
     ) -> None:
         """Drop a table from the database."""
-        if self._engine.name == "hive":
-            try:
-                self._drop_table_or_view(name, "TABLE", connection, if_exists)
-            except Exception:
-                self._drop_table_or_view(name, "VIEW", connection, if_exists)
-        else:
-            self._drop_table_or_view(name, "TABLE", connection, if_exists)
+        self._drop_table_or_view(name, "TABLE", connection, if_exists)
 
     def create_view(self, schema: TableSchema, stmt: Selectable) -> None:
         """Create a view in the database."""
@@ -1126,13 +1133,7 @@ class Store:
         if_exists: bool = False,
     ) -> None:
         """Drop a view from the database."""
-        if self._engine.name == "hive":
-            try:
-                self._drop_table_or_view(name, "VIEW", connection, if_exists)
-            except Exception:
-                self._drop_table_or_view(name, "TABLE", connection, if_exists)
-        else:
-            self._drop_table_or_view(name, "VIEW", connection, if_exists)
+        self._drop_table_or_view(name, "VIEW", connection, if_exists)
 
     def _drop_table_or_view(
         self,
@@ -1161,7 +1162,8 @@ class Store:
 
 
 def check_columns(
-    table_columns: Iterable[str], schema_columns: Iterable[str], ignore_columns: Iterable[str]
+    table_columns: Iterable[str],
+    schema_columns: Iterable[str],
 ) -> None:
     """Check if the columns match the schema.
 
@@ -1170,10 +1172,9 @@ def check_columns(
     InvalidTable
         Raised if the columns don't match the schema.
     """
-    columns_to_inspect = set(table_columns).difference(ignore_columns)
+    columns_to_inspect = set(table_columns)
     expected_columns = schema_columns if isinstance(schema_columns, set) else set(schema_columns)
-    diff = expected_columns.difference(columns_to_inspect)
-    if diff:
+    if diff := expected_columns.difference(columns_to_inspect):
         cols = " ".join(sorted(diff))
         msg = f"These columns are defined in the schema but not present in the table: {cols}"
         raise InvalidTable(msg)

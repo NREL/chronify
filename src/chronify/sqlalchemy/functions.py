@@ -144,8 +144,8 @@ def _write_to_hive(
     for config in configs:
         if isinstance(config, DatetimeRange):
             if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
-                # Spark doesn't like ns.
-                # TODO: is there a better way to change from ns to us?
+                # Spark doesn't like ns. That might change in the future.
+                # Pandas might offer a better way to change from ns to us in the future.
                 new_dtype = df2[config.time_column].dtype.name.replace(
                     "datetime64[ns", "datetime64[us"
                 )
@@ -169,6 +169,7 @@ def _write_to_hive(
             conn.execute(text(f"DROP VIEW IF EXISTS {table_name}"))
             query = f"CREATE VIEW {table_name} AS {select_stmt}"
         case "fail":
+            # Let the database fail the operation if the table already exists.
             query = f"CREATE VIEW {table_name} AS {select_stmt}"
         case _:
             msg = f"{if_table_exists=}"

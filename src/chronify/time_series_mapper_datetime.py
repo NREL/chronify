@@ -56,7 +56,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         self,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
-        check_mapped_timestamps: bool = True,
+        check_mapped_timestamps: bool = False,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         self.check_schema_consistency()

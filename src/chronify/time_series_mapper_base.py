@@ -86,7 +86,7 @@ def apply_mapping(
     metadata: MetaData,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
-    check_mapped_timestamps: bool = True,
+    check_mapped_timestamps: bool = False,
 ) -> None:
     """
     Apply mapping to create result table with process to clean up and roll back if checks fail
@@ -112,10 +112,12 @@ def apply_mapping(
             scratch_dir,
             output_file,
         )
-        created_tmp_view = _create_view_if_necessary(
-            engine, metadata, to_schema.name, check_mapped_timestamps, output_file
-        )
         if check_mapped_timestamps:
+            if output_file is not None:
+                with engine.begin() as conn:
+                    create_view_from_parquet(conn, to_schema.name, output_file)
+                metadata.reflect(engine, views=True)
+                created_tmp_view = True
             mapped_table = Table(to_schema.name, metadata)
             with engine.connect() as conn:
                 try:
@@ -184,19 +186,3 @@ def _apply_mapping(
         )
     else:
         create_table(to_schema.name, query, engine, metadata)
-
-
-def _create_view_if_necessary(
-    engine: Engine,
-    metadata: MetaData,
-    name: str,
-    check_mapped_timestamps: bool,
-    output_file: Optional[Path],
-) -> bool:
-    if check_mapped_timestamps:
-        if output_file is not None:
-            with engine.begin() as conn:
-                create_view_from_parquet(conn, name, output_file)
-            metadata.reflect(engine, views=True)
-            return True
-    return False
