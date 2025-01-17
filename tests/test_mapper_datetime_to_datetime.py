@@ -58,9 +58,8 @@ def ingest_data(
     schema: TableSchema,
 ) -> None:
     metadata = MetaData()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         write_database(df, conn, schema.name, [schema.time_config], if_table_exists="replace")
-        conn.commit()
     metadata.reflect(engine, views=True)
 
 
@@ -74,7 +73,7 @@ def run_test_with_error(
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
     with pytest.raises(error[0], match=error[1]):
-        map_time(engine, metadata, from_schema, to_schema)
+        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
 
 
 def get_mapped_results(
@@ -85,7 +84,7 @@ def get_mapped_results(
 ) -> pd.DataFrame:
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
-    map_time(engine, metadata, from_schema, to_schema)
+    map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
 
     with engine.connect() as conn:
         query = f"select * from {to_schema.name}"
@@ -128,7 +127,7 @@ def check_time_shift_values(
         assert row["value"] == dfo.loc[dfo["timestamp"] == ts, "value"].iloc[0]
 
 
-def test_roll_time_using_shift_and_wrap(iter_engines: Engine) -> None:
+def test_roll_time_using_shift_and_wrap() -> None:
     from_schema = get_datetime_schema(2024, None, TimeIntervalType.PERIOD_ENDING, "from_table")
     df = generate_datetime_dataframe(from_schema)
     to_schema = get_datetime_schema(2024, None, TimeIntervalType.PERIOD_BEGINNING, "to_table")

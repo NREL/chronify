@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
@@ -45,7 +47,12 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             msg = f"time_zone is required for tz-aware representative time mapping and it is missing from source table: {self._from_schema.name}"
             raise MissingParameter(msg)
 
-    def map_time(self) -> None:
+    def map_time(
+        self,
+        scratch_dir: Optional[Path] = None,
+        output_file: Optional[Path] = None,
+        check_mapped_timestamps: bool = False,
+    ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         is_tz_naive = self._to_time_config.is_time_zone_naive()
         self.check_schema_consistency()
@@ -54,7 +61,15 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
 
         df, mapping_schema = self._create_mapping(is_tz_naive)
         apply_mapping(
-            df, mapping_schema, self._from_schema, self._to_schema, self._engine, self._metadata
+            df,
+            mapping_schema,
+            self._from_schema,
+            self._to_schema,
+            self._engine,
+            self._metadata,
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
 
     def _create_mapping(self, is_tz_naive: bool) -> tuple[pd.DataFrame, MappingTableSchema]:
@@ -98,6 +113,9 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             from_columns.append("time_zone")
 
         df = df.rename(columns={x: "from_" + x for x in from_columns})
+
+        if time_col != to_time_col:
+            df.drop(time_col, axis=1, inplace=True)
 
         mapping_schema = MappingTableSchema(
             name="mapping_table",

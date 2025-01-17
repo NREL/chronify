@@ -13,9 +13,8 @@ def ingest_data_and_check(
     engine: Engine, df: pd.DataFrame, schema: TableSchema, error: tuple[any, str]
 ) -> None:
     metadata = MetaData()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         write_database(df, conn, schema.name, [schema.time_config], if_table_exists="replace")
-        conn.commit()
     metadata.reflect(engine, views=True)
 
     with engine.connect() as conn:

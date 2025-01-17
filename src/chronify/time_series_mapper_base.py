@@ -1,26 +1,37 @@
 import abc
-import logging
 from functools import reduce
 from operator import and_
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
+from loguru import logger
 from sqlalchemy import Engine, MetaData, Table, select, text
+from chronify.hive_functions import create_materialized_view
 
-from chronify.sqlalchemy.functions import write_database
+from chronify.sqlalchemy.functions import (
+    create_view_from_parquet,
+    write_database,
+    write_query_to_parquet,
+)
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import TableAlreadyExists, ConflictingInputsError
+from chronify.exceptions import (
+    ConflictingInputsError,
+)
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
-
-logger = logging.getLogger(__name__)
 
 
 class TimeSeriesMapperBase(abc.ABC):
     """Maps time series data from one configuration to another."""
 
     def __init__(
-        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+        self,
+        engine: Engine,
+        metadata: MetaData,
+        from_schema: TableSchema,
+        to_schema: TableSchema,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
@@ -73,43 +84,63 @@ def apply_mapping(
     to_schema: TableSchema,
     engine: Engine,
     metadata: MetaData,
+    scratch_dir: Optional[Path] = None,
+    output_file: Optional[Path] = None,
+    check_mapped_timestamps: bool = False,
 ) -> None:
     """
     Apply mapping to create result table with process to clean up and roll back if checks fail
     """
-    if mapping_schema.name in metadata.tables:
-        msg = (
-            f"table {mapping_schema.name} already exists, delete it or use a different table name."
+    with engine.begin() as conn:
+        write_database(
+            df_mapping,
+            conn,
+            mapping_schema.name,
+            mapping_schema.time_configs,
+            if_table_exists="fail",
         )
-        raise TableAlreadyExists(msg)
+    metadata.reflect(engine, views=True)
 
+    created_tmp_view = False
     try:
-        with engine.connect() as conn:
-            write_database(
-                df_mapping,
-                conn,
-                mapping_schema.name,
-                mapping_schema.time_configs,
-                if_table_exists="fail",
-            )
-            metadata.reflect(engine, views=True)
-            _apply_mapping(mapping_schema.name, from_schema, to_schema, engine, metadata)
+        _apply_mapping(
+            mapping_schema.name,
+            from_schema,
+            to_schema,
+            engine,
+            metadata,
+            scratch_dir,
+            output_file,
+        )
+        if check_mapped_timestamps:
+            if output_file is not None:
+                with engine.begin() as conn:
+                    create_view_from_parquet(conn, to_schema.name, output_file)
+                metadata.reflect(engine, views=True)
+                created_tmp_view = True
             mapped_table = Table(to_schema.name, metadata)
-            try:
-                check_timestamps(conn, mapped_table, to_schema)
-            except Exception:
-                logger.exception(
-                    "check_timestamps failed on mapped table {}. Drop it", to_schema.name
-                )
-                conn.rollback()
-                raise
-            conn.commit()
-    finally:
-        if mapping_schema.name in metadata.tables:
             with engine.connect() as conn:
-                conn.execute(text(f"DROP TABLE {mapping_schema.name}"))
-                conn.commit()
-            metadata.remove(Table(mapping_schema.name, metadata))
+                try:
+                    check_timestamps(conn, mapped_table, to_schema)
+                except Exception:
+                    logger.exception(
+                        "check_timestamps failed on mapped table {}. Drop it",
+                        to_schema.name,
+                    )
+                    if output_file is None:
+                        conn.execute(text(f"DROP TABLE {to_schema.name}"))
+                    raise
+    finally:
+        with engine.begin() as conn:
+            table_type = "view" if engine.name == "hive" else "table"
+            conn.execute(text(f"DROP {table_type} IF EXISTS {mapping_schema.name}"))
+
+            if created_tmp_view:
+                conn.execute(text(f"DROP VIEW IF EXISTS {to_schema.name}"))
+                metadata.remove(Table(to_schema.name, metadata))
+
+        metadata.remove(Table(mapping_schema.name, metadata))
+        metadata.reflect(engine, views=True)
 
 
 def _apply_mapping(
@@ -118,6 +149,8 @@ def _apply_mapping(
     to_schema: TableSchema,
     engine: Engine,
     metadata: MetaData,
+    scratch_dir: Optional[Path] = None,
+    output_file: Optional[Path] = None,
 ) -> None:
     """Apply mapping to create result as a table according to_schema
     - Columns used to join the from_table are prefixed with "from_" in the mapping table
@@ -142,4 +175,14 @@ def _apply_mapping(
 
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
-    create_table(to_schema.name, query, engine, metadata)
+
+    if output_file is not None:
+        write_query_to_parquet(engine, str(query), output_file, overwrite=True)
+        return
+
+    if engine.name == "hive":
+        create_materialized_view(
+            str(query), to_schema.name, engine, metadata, scratch_dir=scratch_dir
+        )
+    else:
+        create_table(to_schema.name, query, engine, metadata)
