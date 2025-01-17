@@ -187,6 +187,6 @@ def test_missing_time_zone(
     to_schema = get_datetime_schema(2020, ZoneInfo("US/Mountain"))
     error = (
         MissingParameter,
-        "time_zone is required for tz-aware representative time mapping and it is missing from source table",
+        "time_zone is required for tz-aware representative time mapping and must be part of the time_array_id_columns for source table",
     )
     run_test(iter_engines, df, schema, to_schema, error)

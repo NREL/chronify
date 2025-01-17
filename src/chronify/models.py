@@ -114,7 +114,6 @@ class MappingTableSchema(ChronifyBaseModel):
         Field(description="Name of the table or view in the database.", frozen=True),
     ]
     time_configs: list[TimeConfig]
-    other_columns: list[str] = []
 
     @field_validator("name")
     @classmethod
@@ -133,18 +132,11 @@ class MappingTableSchema(ChronifyBaseModel):
                 _check_name(column)
         return time_configs
 
-    @field_validator("other_columns")
-    @classmethod
-    def check_columns(cls, columns: list[str]) -> list[str]:
-        for column in columns:
-            _check_name(column)
-        return columns
-
     def list_columns(self) -> list[str]:
         time_columns = []
         for config in self.time_configs:
             time_columns += config.list_time_columns()
-        return time_columns + self.other_columns
+        return time_columns
 
 
 # TODO: print example tables here.

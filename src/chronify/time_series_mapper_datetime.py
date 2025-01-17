@@ -73,11 +73,12 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         )
         if self._from_time_config.interval_type != self._to_time_config.interval_type:
             # If from_tz or to_tz is naive, use tz_localize
-            from_timestamps = df[from_time_col]
             fm_tz = self._from_time_config.start.tzinfo
             to_tz = self._to_time_config.start.tzinfo
+            from_timestamps = df[from_time_col]
             if None in (fm_tz, to_tz) and (fm_tz, to_tz) != (None, None):
-                from_timestamps = df[from_time_col].dt.tz_localize(to_tz)
+                from_timestamps = from_timestamps.dt.tz_localize(to_tz)
+
             df[to_time_col] = roll_time_interval(
                 from_timestamps,
                 self._from_time_config.interval_type,
@@ -85,7 +86,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 to_time_data,
             )
         else:
-            df[to_time_col] = make_time_range_generator(self._to_time_config).list_timestamps()
+            df[to_time_col] = to_time_data
 
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col
@@ -95,6 +96,5 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 from_time_config,
                 self._to_time_config,
             ],
-            other_columns=[],
         )
         return df, mapping_schema

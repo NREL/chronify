@@ -38,7 +38,7 @@ class TimeSeriesMapperBase(abc.ABC):
         available_cols = (
             self._from_schema.list_columns() + self._to_schema.time_config.list_time_columns()
         )
-        final_cols = self._to_schema.list_columns()
+        final_cols = self._to_schema.list_columns()  # does not include pass-thru columns
         if diff := set(final_cols) - set(available_cols):
             msg = f"Source table {self._from_schema.name} cannot produce the columns: {diff}"
             raise ConflictingInputsError(msg)
@@ -126,8 +126,11 @@ def _apply_mapping(
     right_table = Table(mapping_table_name, metadata)
     left_table_columns = [x.name for x in left_table.columns]
     right_table_columns = [x.name for x in right_table.columns]
+    left_table_pass_thru_columns = set(left_table_columns).intersection(
+        set(from_schema.list_columns())
+    )
 
-    final_cols = set(to_schema.list_columns())
+    final_cols = set(to_schema.list_columns()).union(left_table_pass_thru_columns)
     right_cols = set(right_table_columns).intersection(final_cols)
     left_cols = final_cols - right_cols
 

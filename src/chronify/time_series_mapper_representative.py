@@ -42,7 +42,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
     def _check_source_table_has_time_zone(self) -> None:
         """Check source table has time_zone column."""
         if "time_zone" not in self._from_schema.list_columns():
-            msg = f"time_zone is required for tz-aware representative time mapping and it is missing from source table: {self._from_schema.name}"
+            msg = f"time_zone is required for tz-aware representative time mapping and must be part of the time_array_id_columns for source table: {self._from_schema.name}"
             raise MissingParameter(msg)
 
     def map_time(self) -> None:
@@ -97,13 +97,13 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             df = self._generator.create_tz_aware_mapping_dataframe(dft, time_col, time_zones)
             from_columns.append("time_zone")
 
-        df = df.rename(columns={x: "from_" + x for x in from_columns})
+        prefixed_from_columns = ["from_" + x for x in from_columns]
+        df = df.rename(columns=dict(zip(from_columns, prefixed_from_columns)))
 
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[
                 self._to_time_config,  # only DatetimeRange
             ],
-            other_columns=from_columns,  # passing representative time here
         )
         return df, mapping_schema
