@@ -22,7 +22,7 @@ def get_datetime_schema(year: int, tzinfo: ZoneInfo | None) -> TableSchema:
     start = datetime(year=year, month=1, day=1, tzinfo=tzinfo)
     end = datetime(year=year + 1, month=1, day=1, tzinfo=tzinfo)
     resolution = timedelta(hours=1)
-    length = (end - start) / resolution + 1
+    length = (end - start) / resolution
     schema = TableSchema(
         name="mapped_data",
         time_config=DatetimeRange(
@@ -55,19 +55,18 @@ def run_test(
 ) -> None:
     # Ingest
     metadata = MetaData()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         write_database(
             df, conn, from_schema.name, [from_schema.time_config], if_table_exists="replace"
         )
-        conn.commit()
     metadata.reflect(engine, views=True)
 
     # Map
     if error:
         with pytest.raises(error[0], match=error[1]):
-            map_time(engine, metadata, from_schema, to_schema)
+            map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
     else:
-        map_time(engine, metadata, from_schema, to_schema)
+        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
 
         # Check mapped table
         with engine.connect() as conn:

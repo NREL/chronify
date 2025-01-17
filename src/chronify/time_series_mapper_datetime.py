@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
@@ -50,12 +52,25 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen}"
             raise ConflictingInputsError(msg)
 
-    def map_time(self) -> None:
+    def map_time(
+        self,
+        scratch_dir: Optional[Path] = None,
+        output_file: Optional[Path] = None,
+        check_mapped_timestamps: bool = False,
+    ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         self.check_schema_consistency()
         df, mapping_schema = self._create_mapping()
         apply_mapping(
-            df, mapping_schema, self._from_schema, self._to_schema, self._engine, self._metadata
+            df,
+            mapping_schema,
+            self._from_schema,
+            self._to_schema,
+            self._engine,
+            self._metadata,
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
         # TODO - add handling for changing resolution - Issue #30
 
