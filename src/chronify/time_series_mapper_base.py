@@ -159,7 +159,7 @@ def _apply_mapping(
     right_table = Table(mapping_table_name, metadata)
     left_table_columns = [x.name for x in left_table.columns]
     right_table_columns = [x.name for x in right_table.columns]
-    left_table_pass_thru_columns = set(left_table_columns).intersection(
+    left_table_pass_thru_columns = set(left_table_columns).difference(
         set(from_schema.list_columns())
     )
 
