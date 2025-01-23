@@ -161,15 +161,18 @@ class AnnualTimeRange(TimeBaseModel):
 
 
 class IndexTimeRange(TimeBaseModel):
+    time_column: str = Field(description="Column for index representation of time")
     time_type: Literal[TimeType.INDEX] = TimeType.INDEX
     start: int
     length: int
     resolution: timedelta
-    time_zone: TimeZone
+    start_timestamp: datetime
 
     def list_time_columns(self) -> list[str]:
-        # TODO:
-        return []
+        return [self.time_column]
+
+    def is_time_zone_naive(self) -> bool:
+        return self.start_timestamp.tzinfo is None
 
 
 class RepresentativePeriodTime(TimeBaseModel):
