@@ -90,21 +90,6 @@ class DaylightSavingsDataAdjustment(StrEnum):
     NONE = "none"
 
 
-# class DaylightSavingSpringForwardType(StrEnum):
-#     """Daylight saving spring forward adjustment enum types"""
-#
-#     DROP = "drop"
-#     NONE = "none"
-#
-#
-# class DaylightSavingFallBackType(StrEnum):
-#     """Daylight saving fall back adjustment enum types"""
-#
-#     INTERPOLATE = "interpolate"
-#     DUPLICATE = "duplicate"
-#     NONE = "none"
-
-
 class TimeIntervalType(StrEnum):
     """Time interval enum types"""
 

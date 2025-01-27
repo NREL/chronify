@@ -70,27 +70,6 @@ class LocalTimeAsStrings(ChronifyBaseModel):
     #    return data_str_format
 
 
-# class DaylightSavingAdjustment(ChronifyBaseModel):
-#     """Defines how to drop and add data along with timestamps to convert standard time
-#     load profiles to clock time"""
-#
-#     spring_forward_hour: Annotated[
-#         DaylightSavingSpringForwardType,
-#         Field(
-#             title="spring_forward_hour",
-#             description="Data adjustment for spring forward hour (a 2AM in March)",
-#         ),
-#     ] = DaylightSavingSpringForwardType.NONE
-#
-#     fall_back_hour: Annotated[
-#         DaylightSavingFallBackType,
-#         Field(
-#             title="fall_back_hour",
-#             description="Data adjustment for spring forward hour (a 2AM in November)",
-#         ),
-#     ] = DaylightSavingFallBackType.NONE
-
-
 class TimeBasedDataAdjustment(ChronifyBaseModel):
     """Defines how data needs to be adjusted with respect to time.
     For leap day adjustment, up to one full day of timestamps and data are dropped.
