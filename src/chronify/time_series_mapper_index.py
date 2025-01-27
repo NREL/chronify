@@ -20,7 +20,6 @@ from chronify.time_configs import (
     IndexTimeRange,
     TimeBasedDataAdjustment,
 )
-from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +33,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_schema: TableSchema,
         to_schema: TableSchema,
         time_based_data_adjustment: TimeBasedDataAdjustment | None = None,
-        aligned: bool = True,
     ) -> None:
         """
         Parameters
@@ -54,10 +52,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
 
         time_based_data_adjustment : TimeBasedDataAdjustment
             enumerates actions to take that will duplicate, drop or adjust data based on time mapping
-
-        aligned : bool
-            if True, assume the data is aligned in absolute time,
-            if False, use DatatimeToDatetime mapping to align time with shifting and wrapping
         """
         if not isinstance(from_schema.time_config, IndexTimeRange):
             msg = "source schema does not have IndexTimeRange time config. Use a different mapper."
@@ -72,21 +66,11 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self._to_time_config: DatetimeRange = to_schema.time_config
         self._from_schema = from_schema
 
-        # if not aligned, map to intermediate schema and then use Datetime to Datetime
-        if aligned:
-            self._to_schema = to_schema
-            self._datetime_mapper = None
-        else:
-            self._to_schema = self.create_intermediate_schema()
-            self._to_time_config: DatetimeRange = self._to_schema.time_config  # type: ignore
-            self._datetime_mapper = MapperDatetimeToDatetime(
-                engine, metadata, self._to_schema, to_schema
-            )
+        self._to_schema = to_schema
 
         self._engine = engine
         self._metadata = metadata
         self._time_based_data_adjustment = time_based_data_adjustment or TimeBasedDataAdjustment()
-        self._aligned = aligned
 
         self._index_generator = IndexTimeRangeGenerator(self._from_time_config)
 
@@ -115,37 +99,19 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             == DaylightSavingAdjustment(spring_forward_hour="drop", fall_back_hour="duplicate")
         )
 
-    def create_intermediate_schema(self) -> TableSchema:
-        time_kwargs = self._from_time_config.model_dump()
-        time_kwargs = dict(
-            filter(lambda k_v: k_v[0] in DatetimeRange.model_fields, time_kwargs.items())
-        )
-        time_kwargs["start"] = self._from_time_config.start_timestamp
-        time_kwargs["time_type"] = TimeType.DATETIME
-
-        time_config = DatetimeRange(**time_kwargs)
-
-        from_schema_kwargs = self._from_schema.model_dump()
-        from_schema_kwargs["name"] = "intermediate_mapping"
-        from_schema_kwargs["time_config"] = time_config
-
-        int_schema = TableSchema(**from_schema_kwargs)
-        return int_schema
-
     def map_time(
         self,
-        check_mapped_timestamps: bool = False,
         **kwargs,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
+        dfm = self._create_mapping()
+        self._map_time(dfm, **kwargs)
+
+    def _map_time(self, dfm: pd.DataFrame, **kwargs):
         self.check_schema_consistency()
 
         map_table_name = "map_table"
-        dfm = self._create_mapping()
         mapping_schema = self._create_mapping_schema(map_table_name)
-
-        # if using datetime mapper, check timestamps in that mapper
-        tmp_check_mapped_timestamps = self._datetime_mapper is None
 
         apply_mapping(
             dfm,
@@ -154,18 +120,10 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             self._to_schema,
             self._engine,
             self._metadata,
-            check_mapped_timestamps=tmp_check_mapped_timestamps,
             **kwargs,
         )
 
-        if self._datetime_mapper is not None:
-            self._datetime_mapper.map_time(
-                check_mapped_timestamps=check_mapped_timestamps, **kwargs
-            )
-
-            # TODO drop table with self._to_schema.name
-
-    def create_single_tz_mapping_dataframe(
+    def _create_single_tz_mapping_dataframe(
         self, to_time_col: str, from_time_col: str
     ) -> pd.DataFrame:
         """
@@ -200,22 +158,93 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
 
         return dfm
 
-    def create_multi_tz_aligned_mapping_dataframe(
+    def _create_multi_tz_mapping_dataframe(
         self, to_time_col: str, from_time_col: str, time_zones: list[str]
     ) -> pd.DataFrame:
         # Create mapping using from/to schema
-        dfm = self.create_single_tz_mapping_dataframe(to_time_col, from_time_col)
+        dfm = self._create_single_tz_mapping_dataframe(to_time_col, from_time_col)
         df_mtz = []
         for tz in time_zones:
             dfc = dfm.copy()
+            # TODO handle for tz = None
             dfc[to_time_col] = dfc[to_time_col].dt.tz_convert(tz)
             dfc["from_time_zone"] = tz
             df_mtz.append(dfc)
         return pd.concat(df_mtz, ignore_index=True)
 
-    def create_multi_tz_unaligned_mapping_dataframe(
+    def _list_time_zones(self):
+        # Could be cached?
+        self._metadata.reflect(self._engine)
+        with self._engine.connect() as conn:
+            table = Table(self._from_schema.name, self._metadata)
+            stmt = select(table.c["time_zone"]).distinct().where(table.c["time_zone"].is_not(None))
+            time_zones = read_database(stmt, conn, self._from_time_config)["time_zone"].to_list()
+        return time_zones
+
+    def _create_mapping(self) -> pd.DataFrame:
+        """Create mapping dataframe"""
+
+        to_time_col = self._to_time_config.time_column
+        from_time_col = "from_" + self._from_time_config.time_column
+
+        if "time_zone" in self._from_schema.time_array_id_columns:
+            time_zones = self._list_time_zones()
+            dfm = self._create_multi_tz_mapping_dataframe(to_time_col, from_time_col, time_zones)
+        else:
+            dfm = self._create_single_tz_mapping_dataframe(to_time_col, from_time_col)
+
+        return dfm
+
+    def _create_mapping_schema(self, table_name: str):
+        return MappingTableSchema(name=table_name, time_configs=[self._to_time_config])
+
+
+class MapperIndexTimetoDatetimeIntermediate(MapperIndexTimeToDatetime):
+    """Maps to an intermediate schema that matches the from_schema, so all time points are represented"""
+
+    def __init__(
+        self,
+        engine: Engine,
+        metadata: MetaData,
+        from_schema: TableSchema,
+        to_schema: TableSchema,
+        time_based_data_adjustment: TimeBasedDataAdjustment | None = None,
+    ) -> None:
+        to_schema = self.create_intermediate_schema()
+
+        super().__init__(engine, metadata, from_schema, to_schema, time_based_data_adjustment)
+
+    def create_intermediate_schema(self) -> TableSchema:
+        time_kwargs = self._from_time_config.model_dump()
+        time_kwargs = dict(
+            filter(lambda k_v: k_v[0] in DatetimeRange.model_fields, time_kwargs.items())
+        )
+        time_kwargs["start"] = self._from_time_config.start_timestamp
+        time_kwargs["time_type"] = TimeType.DATETIME
+
+        time_config = DatetimeRange(**time_kwargs)
+
+        from_schema_kwargs = self._from_schema.model_dump()
+        from_schema_kwargs["name"] = "intermediate_mapping"
+        from_schema_kwargs["time_config"] = time_config
+
+        int_schema = TableSchema(**from_schema_kwargs)
+        return int_schema
+
+    @property
+    def is_unaligned(self):
+        """if time_zone is a time_array_id and start_timestamp is tz_naive then the timestamps are."""
+        return (
+            self._to_time_config.is_time_zone_naive()
+            and "time_zone" in self._to_schema.time_array_id_columns
+        )
+
+    def _create_multi_tz_unaligned_mapping_dataframe(
         self, to_time_col: str, from_time_col: str, time_zones: list[str]
     ) -> pd.DataFrame:
+        assert (
+            self._to_time_config.is_time_zone_naive()
+        ), "Can't create unaligned mapping with start timezone"
         dfm = []
         for tz in time_zones:
             df_tz = pd.DataFrame(
@@ -233,36 +262,20 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
 
         return pd.concat(dfm, ignore_index=True)
 
-    def _create_mapping(self) -> pd.DataFrame:
-        """Create mapping dataframe"""
+    def map_time(
+        self,
+        **kwargs,
+    ) -> None:
+        """Convert time columns with from_schema to to_schema configuration."""
+        if self.is_unaligned:
+            time_zones = self._list_time_zones()
+            to_time_col = self._to_time_config.time_column
+            from_time_col = "from_" + self._from_time_config.time_column
+            dfm = self._create_multi_tz_unaligned_mapping_dataframe(
+                to_time_col, from_time_col, time_zones
+            )
 
-        to_time_col = self._to_time_config.time_column
-        from_time_col = "from_" + self._from_time_config.time_column
-        self._metadata.reflect(self._engine)
-
-        if "time_zone" in self._from_schema.time_array_id_columns:
-            with self._engine.connect() as conn:
-                table = Table(self._from_schema.name, self._metadata)
-                stmt = (
-                    select(table.c["time_zone"])
-                    .distinct()
-                    .where(table.c["time_zone"].is_not(None))
-                )
-                time_zones = read_database(stmt, conn, self._from_time_config)[
-                    "time_zone"
-                ].to_list()
-            if self._from_time_config.is_time_zone_naive():
-                dfm = self.create_multi_tz_unaligned_mapping_dataframe(
-                    to_time_col, from_time_col, time_zones
-                )
-            else:
-                dfm = self.create_multi_tz_aligned_mapping_dataframe(
-                    to_time_col, from_time_col, time_zones
-                )
         else:
-            dfm = self.create_single_tz_mapping_dataframe(to_time_col, from_time_col)
+            dfm = self._create_mapping()
 
-        return dfm
-
-    def _create_mapping_schema(self, table_name: str):
-        return MappingTableSchema(name=table_name, time_configs=[self._to_time_config])
+        self._map_time(dfm, **kwargs)

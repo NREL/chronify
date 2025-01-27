@@ -6,7 +6,10 @@ from chronify.models import TableSchema
 
 from chronify.time_series_mapper_representative import MapperRepresentativeTimeToDatetime
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
-from chronify.time_series_mapper_index import MapperIndexTimeToDatetime
+from chronify.time_series_mapper_index import (
+    MapperIndexTimeToDatetime,
+    MapperIndexTimetoDatetimeIntermediate,
+)
 from chronify.time_configs import (
     RepresentativePeriodTime,
     DatetimeRange,
@@ -21,7 +24,7 @@ def map_time(
     from_schema: TableSchema,
     to_schema: TableSchema,
     time_based_data_adjustment: TimeBasedDataAdjustment | None = None,
-    aligned: bool = True,
+    align_to_project: bool = False,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -47,8 +50,13 @@ def map_time(
     elif isinstance(from_schema.time_config, IndexTimeRange) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
-        MapperIndexTimeToDatetime(
-            engine, metadata, from_schema, to_schema, time_based_data_adjustment, aligned
+        if align_to_project:
+            mapper_class = MapperIndexTimetoDatetimeIntermediate
+        else:
+            mapper_class = MapperIndexTimeToDatetime
+
+        mapper_class(
+            engine, metadata, from_schema, to_schema, time_based_data_adjustment
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
