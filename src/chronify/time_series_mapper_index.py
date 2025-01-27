@@ -11,12 +11,11 @@ from chronify.sqlalchemy.functions import read_database
 from chronify.exceptions import (
     InvalidParameter,
 )
-from chronify.time import TimeType
+from chronify.time import DaylightSavingsDataAdjustment, TimeType
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.index_time_range_generator import IndexTimeRangeGenerator
 from chronify.time_configs import (
     DatetimeRange,
-    DaylightSavingAdjustment,
     IndexTimeRange,
     TimeBasedDataAdjustment,
 )
@@ -96,7 +95,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         return (
             self._from_time_config.is_time_zone_naive()
             and self._time_based_data_adjustment.daylight_saving_adjustment
-            == DaylightSavingAdjustment(spring_forward_hour="drop", fall_back_hour="duplicate")
+            == DaylightSavingsDataAdjustment.DUPLICATE
         )
 
     def map_time(

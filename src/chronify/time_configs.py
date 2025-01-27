@@ -10,8 +10,7 @@ from typing_extensions import Annotated
 from chronify.base_models import ChronifyBaseModel
 from chronify.time import (
     DatetimeFormat,
-    DaylightSavingFallBackType,
-    DaylightSavingSpringForwardType,
+    DaylightSavingsDataAdjustment,
     LeapDayAdjustmentType,
     MeasurementType,
     TimeIntervalType,
@@ -71,25 +70,25 @@ class LocalTimeAsStrings(ChronifyBaseModel):
     #    return data_str_format
 
 
-class DaylightSavingAdjustment(ChronifyBaseModel):
-    """Defines how to drop and add data along with timestamps to convert standard time
-    load profiles to clock time"""
-
-    spring_forward_hour: Annotated[
-        DaylightSavingSpringForwardType,
-        Field(
-            title="spring_forward_hour",
-            description="Data adjustment for spring forward hour (a 2AM in March)",
-        ),
-    ] = DaylightSavingSpringForwardType.NONE
-
-    fall_back_hour: Annotated[
-        DaylightSavingFallBackType,
-        Field(
-            title="fall_back_hour",
-            description="Data adjustment for spring forward hour (a 2AM in November)",
-        ),
-    ] = DaylightSavingFallBackType.NONE
+# class DaylightSavingAdjustment(ChronifyBaseModel):
+#     """Defines how to drop and add data along with timestamps to convert standard time
+#     load profiles to clock time"""
+#
+#     spring_forward_hour: Annotated[
+#         DaylightSavingSpringForwardType,
+#         Field(
+#             title="spring_forward_hour",
+#             description="Data adjustment for spring forward hour (a 2AM in March)",
+#         ),
+#     ] = DaylightSavingSpringForwardType.NONE
+#
+#     fall_back_hour: Annotated[
+#         DaylightSavingFallBackType,
+#         Field(
+#             title="fall_back_hour",
+#             description="Data adjustment for spring forward hour (a 2AM in November)",
+#         ),
+#     ] = DaylightSavingFallBackType.NONE
 
 
 class TimeBasedDataAdjustment(ChronifyBaseModel):
@@ -108,12 +107,12 @@ class TimeBasedDataAdjustment(ChronifyBaseModel):
         ),
     ] = LeapDayAdjustmentType.NONE
     daylight_saving_adjustment: Annotated[
-        DaylightSavingAdjustment,
+        DaylightSavingsDataAdjustment,
         Field(
             title="daylight_saving_adjustment",
             description="Daylight saving adjustment method applied to time data",
         ),
-    ] = DaylightSavingAdjustment()
+    ] = DaylightSavingsDataAdjustment.NONE
 
 
 class TimeBaseModel(ChronifyBaseModel, abc.ABC):
