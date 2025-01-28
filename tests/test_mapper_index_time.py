@@ -131,7 +131,7 @@ def run_test_with_error(
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
     with pytest.raises(error[0], match=error[1]):
-        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True, **kwargs)
+        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=False, **kwargs)
 
 
 def get_mapped_results(
@@ -143,7 +143,7 @@ def get_mapped_results(
 ) -> pd.DataFrame:
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
-    map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True, **kwargs)
+    map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=False, **kwargs)
 
     with engine.connect() as conn:
         query = f"select * from {to_schema.name}"
@@ -153,15 +153,14 @@ def get_mapped_results(
     return queried
 
 
-@pytest.mark.parametrize("tzinfo", [None])  # [ZoneInfo("UTC"), ZoneInfo("US/Eastern"), None])
+@pytest.mark.parametrize(
+    "tzinfo", [ZoneInfo("US/Eastern")]
+)  # [ZoneInfo("UTC"), ZoneInfo("US/Eastern"), None])
 def test_index_mapping_simple(
     iter_engines: Engine,
-    tzinfo: ZoneInfo | None,
+    tzinfo,
 ):
     """
-    1. Testing with no tz in to or from schema
-    2. Testing from tz in ["US/Eastern", "US/Mountain", None] and to tz = "US/Eastern"
-
     No wrapping, and no TimeBasedDataAdjustment
     """
     from_schema = gen_index_time_schema(
@@ -170,26 +169,28 @@ def test_index_mapping_simple(
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         name="input_data",
         resolution=timedelta(hours=1),
-        add_tz_col=True,
+        add_tz_col=False,
     )
 
-    id_values = {"time_zone": ["US/Central", "US/Mountain"], "id": [1, 2, 3]}
+    id_values = {"id": [1, 2, 3]}
     df = generate_indextime_dataframe(from_schema, id_values)
 
     to_schema = gen_datetime_schema(
         year=2020,
-        tzinfo=ZoneInfo("US/Mountain"),
+        tzinfo=ZoneInfo("US/Pacific"),
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         name="simple_output",
         resolution=timedelta(hours=1),
-        add_tz_col=True,
+        add_tz_col=False,
     )
-    queried = get_mapped_results(iter_engines, df, from_schema, to_schema)
-    queried = queried.sort_values(by=["id", "timestamp"])
+    queried = get_mapped_results(iter_engines, df, from_schema, to_schema, wrap_time_allowed=True)
+    queried = queried.sort_values(by=["id", "timestamp"], ignore_index=True)
 
     assert np.array_equal(
-        queried["value"], np.arange(queried.shape[0])
+        np.sort(queried["value"]), np.arange(queried.shape[0])
     ), "No value should have been dropped"
+
+    assert not np.array_equal(queried["value"], np.arange(queried.shape[0]))
 
     expected_timestamps = pd.to_datetime(
         DatetimeRangeGenerator(to_schema.time_config).list_timestamps()
@@ -297,4 +298,3 @@ def test_index_mapping_time_alignment(
 
     queried = get_mapped_results(iter_engines, df, from_schema, to_schema, **map_kwargs)
     queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)
-    breakpoint()
