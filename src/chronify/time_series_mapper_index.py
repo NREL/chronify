@@ -101,7 +101,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 wrap_time_allowed=wrap_time_allowed,
             )
 
-        self._mapping_generator = mapping_generator
+        self._mapping_generator = mapping_generator  # type: ignore
 
     def check_schema_consistency(self) -> None:
         # TODO: fail for interpolate fall_back_hour
