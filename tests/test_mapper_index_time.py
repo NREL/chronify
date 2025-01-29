@@ -153,9 +153,14 @@ def get_mapped_results(
     return queried
 
 
-@pytest.mark.parametrize(
-    "tzinfo", [ZoneInfo("US/Eastern")]
-)  # [ZoneInfo("UTC"), ZoneInfo("US/Eastern"), None])
+def check_dst_duplication_drop(values: np.ndarray):
+    values_diff = values[1:] - values[:-1]
+
+    assert np.sum(values_diff == 2) == 1, "One value should have been dropped"
+    assert np.sum(values_diff == 0) == 1, "One value should have been duplicated"
+
+
+@pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), ZoneInfo("UTC")])
 def test_index_mapping_simple(
     iter_engines: Engine,
     tzinfo,
@@ -193,108 +198,70 @@ def test_index_mapping_simple(
     assert not np.array_equal(queried["value"], np.arange(queried.shape[0]))
 
     expected_timestamps = pd.to_datetime(
-        DatetimeRangeGenerator(to_schema.time_config).list_timestamps()
-    )  # type: ignore
+        DatetimeRangeGenerator(to_schema.time_config).list_timestamps()  # type: ignore
+    )
 
     for _, group in queried.groupby(list(id_values.keys()))[to_schema.time_config.time_column]:
-        assert np.array_equal(
-            group, expected_timestamps
-        )  # each timearray should have all expected timestamps
+        # each timearray should have all expected timestamps
+        assert np.array_equal(group, expected_timestamps)
 
 
-def test_index_mapping_data_adjusments(
+@pytest.mark.parametrize(
+    "tzinfo,add_tz_col,time_zones,data_adjustment",
+    [
+        (None, True, {"time_zone": ["US/Eastern", "US/Pacific", "US/Central"]}, "none"),
+        (None, True, {"time_zone": ["US/Eastern", "US/Pacific", "US/Central"]}, "duplicate"),
+    ],
+)
+def test_index_mapping_multi_tz(
     iter_engines: Engine,
+    tzinfo,
+    add_tz_col,
+    time_zones,
+    data_adjustment,
 ):
-    """
-    Test the implementation of TimeBasedDataAdjustments
+    """ """
 
-    main case:
-        industrial time, dropping an hour in spring, and duplicating an hour in the fall
-    """
     from_schema = gen_index_time_schema(
         year=2020,
-        tzinfo=None,
+        tzinfo=tzinfo,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         name="input_data",
         resolution=timedelta(hours=1),
-        add_tz_col=False,
+        add_tz_col=add_tz_col,
     )
 
-    id_values = {"id": [1, 2, 3]}
+    id_values = {"id": [1, 2, 3], **time_zones}
     df = generate_indextime_dataframe(from_schema, id_values)
 
     to_schema = gen_datetime_schema(
         year=2020,
-        tzinfo=ZoneInfo("US/Mountain"),
+        tzinfo=ZoneInfo("US/Eastern"),
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         name="simple_output",
         resolution=timedelta(hours=1),
-        add_tz_col=False,
+        add_tz_col=add_tz_col,
     )
 
     map_time_kwargs = {
+        "wrap_time_allowed": True,
         "time_based_data_adjustment": TimeBasedDataAdjustment(
-            daylight_saving_adjustment=DaylightSavingsDataAdjustment.DUPLICATE
-        )
+            daylight_saving_adjustment=DaylightSavingsDataAdjustment(data_adjustment)
+        ),
     }
+
     queried = get_mapped_results(iter_engines, df, from_schema, to_schema, **map_time_kwargs)
-    queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)
 
     expected_timestamps = pd.to_datetime(
         DatetimeRangeGenerator(to_schema.time_config).list_timestamps()
     )
 
-    for _, group in queried.groupby(list(id_values.keys())):
+    for name, group in queried.groupby(list(id_values.keys())):
         # each timearray should have all expected timestamps
-        assert np.array_equal(group[to_schema.time_config.time_column], expected_timestamps)
+        group = group.sort_values(by="timestamp").reset_index(drop=True)
+        msg = f"timestamps don't match expected timestamps for {name}"
+        assert np.array_equal(group[to_schema.time_config.time_column], expected_timestamps), msg
 
-        values = group["value"].to_numpy()
-        values_diff = values[1:] - values[:-1]
-
-        assert np.sum(values_diff == 2) == 1, "One value should have been dropped"
-        assert np.sum(values_diff == 0) == 1, "One value should have been duplicated"
-
-
-def test_index_mapping_time_alignment(
-    iter_engines: Engine,
-):
-    """
-    Test the implementation of shift and wrap time, Only test that needs index->intermediate_dt->final_dt
-
-    cases:
-        - different period types?
-        - time zone conversion and wrapping to one year
-    """
-
-    # TODO: test with time_zone column, where mapped ts need to be wrapped
-    from_schema = gen_index_time_schema(
-        year=2020,
-        tzinfo=None,
-        interval_type=TimeIntervalType.PERIOD_BEGINNING,
-        name="input_data",
-        resolution=timedelta(hours=1),
-        add_tz_col=True,
-    )
-
-    # should None be tested as a source time_zone?
-    id_values = {"id": [1, 2, 3], "time_zone": ["US/Eastern", "US/Pacific"]}
-    df = generate_indextime_dataframe(from_schema, id_values)
-
-    to_schema = gen_datetime_schema(
-        year=2020,
-        tzinfo=ZoneInfo("US/Mountain"),
-        interval_type=TimeIntervalType.PERIOD_BEGINNING,
-        name="simple_output",
-        resolution=timedelta(hours=1),
-        add_tz_col=True,
-    )
-
-    map_kwargs = {"align_to_project": False}
-
-    # TODO: should fail for align_to_project=False
-    # run_test_with_error(iter_engines, df, from_schema, to_schema, Exception(), **map_kwargs)
-
-    map_kwargs = {"align_to_project": True}
-
-    queried = get_mapped_results(iter_engines, df, from_schema, to_schema, **map_kwargs)
-    queried = queried.sort_values(by=["id", "timestamp"]).reset_index(drop=True)
+        if data_adjustment == "duplicate":
+            values = group["value"].to_numpy()
+            check_dst_duplication_drop(values)

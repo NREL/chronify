@@ -1,5 +1,6 @@
 import logging
 import abc
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
@@ -181,30 +182,31 @@ class BaseMappingGenerator:
             != DaylightSavingsDataAdjustment.NONE
         )
 
-    def _simple_mapping(self) -> pd.DataFrame:
-        dfm = pd.DataFrame(
-            {
-                self._from_time_col: self._index_generator.list_timestamps(),
-                self._intermediate_time_col: self._intermediate_datetime_generator.list_timestamps(),
-            }
-        )
-        return dfm
-
     @abc.abstractmethod
     def _create_mapping(self) -> pd.DataFrame:
         """creates a mapping for a given mapping generator."""
 
     def create_mapping(self, wrap_time_allowed: bool = False):
         dfm = self._create_mapping()
+        if self._intermediate_time_config.is_time_zone_naive():
+            tz_converted_timestamps = dfm[self._intermediate_time_col].dt.tz_localize(
+                self._to_time_config.start.tzinfo
+            )
+        else:
+            tz_converted_timestamps = dfm[self._intermediate_time_col].dt.tz_convert(
+                self._to_time_config.start.tzinfo
+            )
+
         dfm[self._to_time_col] = shift_and_wrap_time_intervals(
             self._datetime_generator.list_timestamps(),
-            dfm[self._intermediate_time_col].dt.tz_convert(self._to_time_config.start.tzinfo),
+            tz_converted_timestamps,
             self._intermediate_time_config,
             self._to_time_config,
             wrap_time_allowed,
         )
         dfm = dfm.drop(columns=[self._intermediate_time_col])
-
+        if self._align_to_local_clocktime:
+            dfm = self._adjust_mapping_local_clock_time_to_dst(dfm)
         return dfm
 
     def create_intermediate_schema(self) -> DatetimeRange:
@@ -218,6 +220,23 @@ class BaseMappingGenerator:
 
         return time_config
 
+    def _adjust_mapping_local_clock_time_to_dst(self, dfm):
+        df_idx_clock_time = pd.DataFrame(
+            {
+                self._from_time_col: self._index_generator.list_timestamps(),
+                "clock_time": pd.date_range(
+                    start=self._from_time_config.start_timestamp,  # should be naive
+                    periods=self._from_time_config.length,
+                    freq=self._from_time_config.resolution,
+                ),
+            }
+        )
+
+        dfm["clock_time"] = dfm[self._to_time_col].dt.tz_localize(None)
+        dfm = dfm.drop(self._from_time_col, axis=1)
+        dfm = dfm.merge(df_idx_clock_time, on="clock_time")
+        return dfm
+
 
 class SimpleMappingGenerator(BaseMappingGenerator):
     """
@@ -225,9 +244,19 @@ class SimpleMappingGenerator(BaseMappingGenerator):
     None is considered an accpetable time zone for this mapper
     """
 
+    def _simple_mapping(self) -> pd.DataFrame:
+        dfm = pd.DataFrame(
+            {
+                self._from_time_col: self._index_generator.list_timestamps(),
+                self._intermediate_time_col: self._intermediate_datetime_generator.list_timestamps(),
+            }
+        )
+        return dfm
+
     def _create_mapping(self) -> pd.DataFrame:
         dfm = self._simple_mapping()
 
+        # TODO: Not tested, is this a case we support?
         if self._align_to_local_clocktime:
             df_idx_clock_time = pd.DataFrame(
                 {
@@ -270,16 +299,29 @@ class MultipleLocalMappingGenerator(BaseMappingGenerator):
         )
         self._time_zones = time_zones
 
+    def _tz_adjusted_mapping(self, tzinfo: ZoneInfo) -> pd.DataFrame:
+        self._intermediate_datetime_generator.set_tzinfo(tzinfo)
+        dfm = pd.DataFrame(
+            {
+                self._from_time_col: self._index_generator.list_timestamps(),
+                self._intermediate_time_col: self._intermediate_datetime_generator.list_timestamps(),
+            }
+        )
+        return dfm
+
     def _create_mapping(self) -> pd.DataFrame:
-        dfm = self._simple_mapping()
         df_mtz = []
         for tz in self._time_zones:
-            dfc = dfm.copy()
-            # TODO handle for tz = None
-            dfc[self._to_time_col] = dfc[self._to_time_col].dt.tz_convert(tz)
+            dfc = self._tz_adjusted_mapping(ZoneInfo(tz))
+            # TODO is tz ever none in a the time_zone col?
+            dfc[self._intermediate_time_col] = dfc[self._intermediate_time_col].dt.tz_convert(
+                self._to_time_config.start.tzinfo
+            )
             dfc["from_time_zone"] = tz
             df_mtz.append(dfc)
-        return pd.concat(df_mtz, ignore_index=True)
+
+        dfm = pd.concat(df_mtz, ignore_index=True)
+        return dfm
 
 
 class MultipleLocalClocktimeMappingGenerator(BaseMappingGenerator):
@@ -305,10 +347,6 @@ class MultipleLocalClocktimeMappingGenerator(BaseMappingGenerator):
 
     def _create_mapping(self) -> pd.DataFrame:
         return pd.DataFrame()
-
-
-def _adjust_mapping_local_clock_time_to_dst(df, time_based_adjustments: TimeBasedDataAdjustment):
-    pass
 
 
 # class MapperIndexTimetoDatetimeIntermediate(MapperIndexTimeToDatetime):

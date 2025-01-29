@@ -29,6 +29,9 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
         else:
             self._adjustment = time_based_data_adjustment
 
+    def set_tzinfo(self, tzinfo: ZoneInfo | None):
+        self._model.start = self._model.start.replace(tzinfo=tzinfo)
+
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         for i in range(self._model.length):
             if self._model.is_time_zone_naive():
