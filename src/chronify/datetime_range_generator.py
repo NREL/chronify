@@ -29,7 +29,7 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
         else:
             self._adjustment = time_based_data_adjustment
 
-    def set_tzinfo(self, tzinfo: ZoneInfo | None):
+    def set_tzinfo(self, tzinfo: ZoneInfo | None) -> None:
         self._model.start = self._model.start.replace(tzinfo=tzinfo)
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:

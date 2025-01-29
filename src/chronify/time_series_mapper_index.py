@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
+from typing import Any
 
 
 from chronify.datetime_range_generator import DatetimeRangeGenerator
@@ -81,7 +82,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 raise InvalidParameter(msg)
             time_zones = self._list_time_zones()
 
-            self._mapping_generator = MultipleLocalMappingGenerator(
+            self._mapping_generator: BaseMappingGenerator = MultipleLocalMappingGenerator(
                 to_time_config=self._to_time_config,
                 from_time_config=self._from_time_config,
                 to_time_col=self._to_time_config.time_column,
@@ -91,7 +92,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 time_zones=time_zones,
             )
         else:
-            self._mapping_generator = SimpleMappingGenerator(
+            self._mapping_generator: BaseMappingGenerator = SimpleMappingGenerator(
                 to_time_config=self._to_time_config,
                 from_time_config=self._from_time_config,
                 to_time_col=self._to_time_config.time_column,
@@ -100,21 +101,19 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 wrap_time_allowed=wrap_time_allowed,
             )
 
-        # self._not_supported_mappings()
-
     def check_schema_consistency(self) -> None:
         # TODO: fail for interpolate fall_back_hour
         pass
 
     def map_time(
         self,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         dfm = self._create_mapping()
         self._map_time(dfm, **kwargs)
 
-    def _map_time(self, dfm: pd.DataFrame, **kwargs):
+    def _map_time(self, dfm: pd.DataFrame, **kwargs: Any) -> None:
         self.check_schema_consistency()
 
         map_table_name = "map_table"
@@ -130,8 +129,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             **kwargs,
         )
 
-    def _list_time_zones(self):
-        # Could be cached?
+    def _list_time_zones(self) -> list[str]:
         self._metadata.reflect(self._engine)
         with self._engine.connect() as conn:
             table = Table(self._from_schema.name, self._metadata)
@@ -144,7 +142,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
 
         return self._mapping_generator.create_mapping()
 
-    def _create_mapping_schema(self, table_name: str):
+    def _create_mapping_schema(self, table_name: str) -> MappingTableSchema:
         return MappingTableSchema(name=table_name, time_configs=[self._to_time_config])
 
 
@@ -179,7 +177,7 @@ class BaseMappingGenerator:
         )
 
     @property
-    def _align_to_local_clocktime(self):
+    def _align_to_local_clocktime(self) -> bool:
         # TODO: doesn't handle non dst timezone from configs
         return (
             self._from_time_config.is_time_zone_naive()
@@ -191,7 +189,7 @@ class BaseMappingGenerator:
     def _create_mapping(self) -> pd.DataFrame:
         """creates a mapping for a given mapping generator."""
 
-    def create_mapping(self):
+    def create_mapping(self) -> pd.DataFrame:
         dfm = self._create_mapping()
         if self._intermediate_time_config.is_time_zone_naive():
             tz_converted_timestamps = dfm[self._intermediate_time_col].dt.tz_localize(
@@ -225,7 +223,7 @@ class BaseMappingGenerator:
 
         return time_config
 
-    def _adjust_mapping_local_clock_time_to_dst(self, dfm):
+    def _adjust_mapping_local_clock_time_to_dst(self, dfm) -> pd.DataFrame:
         df_idx_clock_time = pd.DataFrame(
             {
                 self._from_time_col: self._index_generator.list_timestamps(),

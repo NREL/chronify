@@ -9,6 +9,7 @@ from chronify.time import (
     TimeIntervalType,
 )
 from chronify.exceptions import InvalidParameter
+from chronify.time_configs import TimeBaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -135,12 +136,12 @@ def roll_time_interval(
 
 
 def shift_and_wrap_time_intervals(
-    to_timestamps: list,
-    from_timestamps: pd.Series,
-    from_time_config,
-    to_time_config,
+    to_timestamps: list[pd.Timestamp],
+    from_timestamps: "pd.Series[pd.Timestamp]",
+    from_time_config: TimeBaseModel,
+    to_time_config: TimeBaseModel,
     wrap_time_allowed: bool = False,
-):
+) -> "pd.Series[pd.Timestamp]":
     if from_time_config.interval_type != to_time_config.interval_type:
         # If from_tz or to_tz is naive, use tz_localize
         fm_tz = from_time_config.start.tzinfo
