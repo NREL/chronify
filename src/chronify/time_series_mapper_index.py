@@ -82,7 +82,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 raise InvalidParameter(msg)
             time_zones = self._list_time_zones()
 
-            self._mapping_generator: BaseMappingGenerator = MultipleLocalMappingGenerator(
+            mapping_generator = MultipleLocalMappingGenerator(
                 to_time_config=self._to_time_config,
                 from_time_config=self._from_time_config,
                 to_time_col=self._to_time_config.time_column,
@@ -92,7 +92,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 time_zones=time_zones,
             )
         else:
-            self._mapping_generator: BaseMappingGenerator = SimpleMappingGenerator(
+            mapping_generator = SimpleMappingGenerator(
                 to_time_config=self._to_time_config,
                 from_time_config=self._from_time_config,
                 to_time_col=self._to_time_config.time_column,
@@ -100,6 +100,8 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 time_based_data_adjustment=self._time_based_data_adjustment,
                 wrap_time_allowed=wrap_time_allowed,
             )
+
+        self._mapping_generator = mapping_generator
 
     def check_schema_consistency(self) -> None:
         # TODO: fail for interpolate fall_back_hour
@@ -223,7 +225,7 @@ class BaseMappingGenerator:
 
         return time_config
 
-    def _adjust_mapping_local_clock_time_to_dst(self, dfm) -> pd.DataFrame:
+    def _adjust_mapping_local_clock_time_to_dst(self, dfm: pd.DataFrame) -> pd.DataFrame:
         df_idx_clock_time = pd.DataFrame(
             {
                 self._from_time_col: self._index_generator.list_timestamps(),
