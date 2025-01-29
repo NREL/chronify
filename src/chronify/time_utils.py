@@ -104,7 +104,7 @@ def roll_time_interval(
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
     to_timestamps: list[pd.Timestamp],
-    wrap_time_allowed: bool = False,
+    wrap_time_allowed: bool = True,
 ) -> "pd.Series[pd.Timestamp]":
     """Roll pandas timeseries by shifting time interval based on interval type and
     wrapping timestamps
