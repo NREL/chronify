@@ -9,6 +9,7 @@ from chronify.time import (
     TimeIntervalType,
 )
 from chronify.exceptions import InvalidParameter
+from chronify.time_configs import DatetimeRange
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ def roll_time_interval(
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
     to_timestamps: list[pd.Timestamp],
+    wrap_time_allowed: bool = True,
 ) -> "pd.Series[pd.Timestamp]":
     """Roll pandas timeseries by shifting time interval based on interval type and
     wrapping timestamps
@@ -128,5 +130,32 @@ def roll_time_interval(
     dtype: datetime64[ns]
     """
     dfs = shift_time_interval(dfs, from_interval_type, to_interval_type)
-    dfs = wrap_timestamps(dfs, to_timestamps)
+    if wrap_time_allowed:
+        dfs = wrap_timestamps(dfs, to_timestamps)
     return dfs
+
+
+def shift_and_wrap_time_intervals(
+    to_timestamps: list[pd.Timestamp],
+    from_timestamps: "pd.Series[pd.Timestamp]",
+    from_time_config: DatetimeRange,
+    to_time_config: DatetimeRange,
+    wrap_time_allowed: bool = False,
+) -> "pd.Series[pd.Timestamp]":
+    if from_time_config.interval_type != to_time_config.interval_type:
+        # If from_tz or to_tz is naive, use tz_localize
+        fm_tz = from_time_config.start.tzinfo
+        to_tz = to_time_config.start.tzinfo
+        if None in (fm_tz, to_tz) and (fm_tz, to_tz) != (None, None):
+            from_timestamps = from_timestamps.dt.tz_localize(to_tz)
+
+        from_timestamps = shift_time_interval(
+            from_timestamps,
+            from_time_config.interval_type,
+            to_time_config.interval_type,
+        )
+
+    if wrap_time_allowed:
+        from_timestamps = wrap_timestamps(from_timestamps, to_timestamps)
+
+    return from_timestamps

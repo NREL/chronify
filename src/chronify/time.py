@@ -71,18 +71,22 @@ class LeapDayAdjustmentType(StrEnum):
     NONE = "none"
 
 
-class DaylightSavingSpringForwardType(StrEnum):
-    """Daylight saving spring forward adjustment enum types"""
+class DaylightSavingsDataAdjustment(StrEnum):
+    """
+    Data adjustments going from non-dst (daylight savings time) refenerce to dst reference
 
-    DROP = "drop"
-    NONE = "none"
+    if DUPLICATE:
+        drop the spring forward hour, and duplicate the fall back hour
 
+    if INTERPOLATE:
+        drop the spring forward hour, and interpolate between clock times for fall back hour
 
-class DaylightSavingFallBackType(StrEnum):
-    """Daylight saving fall back adjustment enum types"""
+    if NONE:
+        no drop or duplication, essentially a NO-OP
+    """
 
-    INTERPOLATE = "interpolate"
     DUPLICATE = "duplicate"
+    INTERPOLATE = "interpolate"
     NONE = "none"
 
 

@@ -37,7 +37,8 @@ jobs:
         start-thriftserver.sh
     - name: Run pytest with coverage
       run: |
-        CHRONIFY_HIVE_URL=hive://localhost:10000/default pytest -v --cov --cov-report=xml
+        # CHRONIFY_HIVE_URL=hive://localhost:10000/default 
+        pytest -v --cov --cov-report=xml  
     - name: codecov
       uses: codecov/codecov-action@v4.2.0
       if: ${{ matrix.os == env.DEFAULT_OS && matrix.python-version == env.DEFAULT_PYTHON  }}

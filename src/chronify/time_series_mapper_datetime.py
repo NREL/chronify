@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 
 class MapperDatetimeToDatetime(TimeSeriesMapperBase):
     def __init__(
-        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+        self,
+        engine: Engine,
+        metadata: MetaData,
+        from_schema: TableSchema,
+        to_schema: TableSchema,
+        wrap_time_allowed: bool = False,
     ) -> None:
         super().__init__(engine, metadata, from_schema, to_schema)
         if from_schema == to_schema:
@@ -32,6 +37,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         if not isinstance(to_schema.time_config, DatetimeRange):
             msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
+        self._wrap_time_allowed = wrap_time_allowed
         self._from_time_config = from_schema.time_config
         self._to_time_config = to_schema.time_config
 
@@ -99,6 +105,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 self._from_time_config.interval_type,
                 self._to_time_config.interval_type,
                 to_time_data,
+                wrap_time_allowed=self._wrap_time_allowed,
             )
         else:
             df[to_time_col] = to_time_data
