@@ -84,7 +84,14 @@ def get_mapped_results(
 ) -> pd.DataFrame:
     metadata = MetaData()
     ingest_data(engine, df, from_schema)
-    map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
+    map_time(
+        engine,
+        metadata,
+        from_schema,
+        to_schema,
+        check_mapped_timestamps=True,
+        wrap_time_allowed=True,
+    )
 
     with engine.connect() as conn:
         query = f"select * from {to_schema.name}"
@@ -138,6 +145,7 @@ def test_roll_time_using_shift_and_wrap() -> None:
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
         data,
+        wrap_time_allowed=True,
     )
     df["rolled2"] = shift_time_interval(
         df[from_schema.time_config.time_column],

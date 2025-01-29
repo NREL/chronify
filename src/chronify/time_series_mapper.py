@@ -41,7 +41,9 @@ def map_time(
     elif isinstance(from_schema.time_config, DatetimeRange) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
-        MapperDatetimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
+        MapperDatetimeToDatetime(
+            engine, metadata, from_schema, to_schema, wrap_time_allowed
+        ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
@@ -50,9 +52,8 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperIndexTimeToDatetime(
-            engine, metadata, from_schema, to_schema, time_based_data_adjustment
+            engine, metadata, from_schema, to_schema, time_based_data_adjustment, wrap_time_allowed
         ).map_time(
-            wrap_time_allowed=wrap_time_allowed,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
