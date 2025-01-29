@@ -14,7 +14,7 @@ from chronify.time_configs import RepresentativePeriodTime
 
 ENGINES: dict[str, dict[str, Any]] = {
     "duckdb": {"url": "duckdb:///:memory:", "connect_args": {}, "kwargs": {}},
-    # "sqlite": {"url": "sqlite:///:memory:", "connect_args": {}, "kwargs": {}},
+    "sqlite": {"url": "sqlite:///:memory:", "connect_args": {}, "kwargs": {}},
 }
 HIVE_URL = os.getenv("CHRONIFY_HIVE_URL")
 if HIVE_URL is not None:
