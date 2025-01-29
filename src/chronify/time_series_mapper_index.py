@@ -75,6 +75,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self._metadata = metadata
         self._time_based_data_adjustment = time_based_data_adjustment or TimeBasedDataAdjustment()
         self._wrap_time_allowed = wrap_time_allowed
+        self._mapping_generator: MultipleLocalMappingGenerator | SimpleMappingGenerator
 
         if "time_zone" in self._from_schema.time_array_id_columns:
             if not self._from_time_config.is_time_zone_naive():
@@ -82,7 +83,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 raise InvalidParameter(msg)
             time_zones = self._list_time_zones()
 
-            mapping_generator = MultipleLocalMappingGenerator(
+            self._mapping_generator = MultipleLocalMappingGenerator(
                 to_time_config=self._to_time_config,
                 from_time_config=self._from_time_config,
                 to_time_col=self._to_time_config.time_column,
@@ -92,7 +93,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 time_zones=time_zones,
             )
         else:
-            mapping_generator = SimpleMappingGenerator(
+            self._mapping_generator = SimpleMappingGenerator(
                 to_time_config=self._to_time_config,
                 from_time_config=self._from_time_config,
                 to_time_col=self._to_time_config.time_column,
@@ -100,8 +101,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 time_based_data_adjustment=self._time_based_data_adjustment,
                 wrap_time_allowed=wrap_time_allowed,
             )
-
-        self._mapping_generator = mapping_generator  # type: ignore
 
     def check_schema_consistency(self) -> None:
         # TODO: fail for interpolate fall_back_hour
