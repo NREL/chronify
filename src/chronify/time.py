@@ -13,7 +13,9 @@ class TimeType(StrEnum):
     DATETIME = "datetime"
     ANNUAL = "annual"
     REPRESENTATIVE_PERIOD = "representative_period"
-    INDEX = "index"
+    INDEX_NTZ = "index_ntz"
+    INDEX_TZ = "index_tz"
+    INDEX_LOCAL = "index_local"
 
 
 class DatetimeFormat(StrEnum):

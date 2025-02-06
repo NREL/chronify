@@ -33,7 +33,7 @@ class TableSchemaBase(ChronifyBaseModel):
     @field_validator("time_config")
     @classmethod
     def check_time_config(cls, time_config: TimeConfig) -> TimeConfig:
-        for column in time_config.list_time_columns():
+        for column in time_config.list_time_columns() + time_config.list_time_zone_column():
             _check_name(column)
         return time_config
 
@@ -43,6 +43,18 @@ class TableSchemaBase(ChronifyBaseModel):
         for column in columns:
             _check_name(column)
         return columns
+
+    @model_validator(mode="before")
+    @classmethod
+    def update_time_array_id_columns(cls, data: dict[str, Any]) -> dict[str, Any]:
+        if "time_array_id_columns" not in data:
+            data["time_array_id_columns"] = []
+        if (
+            "time_zone_column" in data["time_config"]
+            and data["time_config"]["time_zone_column"] is not None
+        ):
+            data["time_array_id_columns"].append(data["time_config"]["time_zone_column"])
+        return data
 
     def list_columns(self) -> list[str]:
         """Return the column names in the schema."""

@@ -38,11 +38,15 @@ def get_datetime_schema(year: int, tzinfo: ZoneInfo | None) -> TableSchema:
     return schema
 
 
-def add_time_zone_data(df: pd.DataFrame, schema: TableSchema) -> tuple[pd.DataFrame, TableSchema]:
+def add_time_zone_data(
+    df: pd.DataFrame, schema: TableSchema, update_time_config: bool = False
+) -> tuple[pd.DataFrame, TableSchema]:
     df["time_zone"] = df["id"].map(
         dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
     )
     schema.time_array_id_columns += ["time_zone"]
+    if update_time_config:
+        schema.time_config.time_zone_column = "time_zone"
     return df, schema
 
 
@@ -126,7 +130,11 @@ def test_one_week_per_month_by_hour(
     tzinfo: ZoneInfo | None,
 ) -> None:
     df, _, schema = one_week_per_month_by_hour_table
-    df, schema = add_time_zone_data(df, schema)  # allowed in tz-naive
+    if tzinfo is None:
+        # For tz-naive case, time_zone can exist in the table and not get used, but it needs to be added to time_array_id.
+        df, schema = add_time_zone_data(df, schema)
+    else:
+        df, schema = add_time_zone_data(df, schema, update_time_config=True)
 
     to_schema = get_datetime_schema(2020, tzinfo)
     to_schema.time_array_id_columns += ["time_zone"]
@@ -145,7 +153,7 @@ def test_one_weekday_day_and_one_weekend_day_per_month_by_hour(
     df, _, schema = one_weekday_day_and_one_weekend_day_per_month_by_hour_table
     to_schema = get_datetime_schema(2020, tzinfo)
     if tzinfo is not None:
-        df, schema = add_time_zone_data(df, schema)
+        df, schema = add_time_zone_data(df, schema, update_time_config=True)
         to_schema.time_array_id_columns += ["time_zone"]
     error = ()
     run_test(iter_engines, df, schema, to_schema, error)
@@ -158,9 +166,10 @@ def test_time_interval_shift(
     tzinfo: ZoneInfo | None,
 ) -> None:
     df, _, schema = one_week_per_month_by_hour_table
-    df, schema = add_time_zone_data(df, schema)
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
+    if tzinfo is not None:
+        df, schema = add_time_zone_data(df, schema, update_time_config=True)
+        to_schema.time_array_id_columns += ["time_zone"]
     to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
     error = ()
     run_test(iter_engines, df, schema, to_schema, error)
@@ -186,6 +195,6 @@ def test_missing_time_zone(
     to_schema = get_datetime_schema(2020, ZoneInfo("US/Mountain"))
     error = (
         MissingParameter,
-        "time_zone is required for tz-aware representative time mapping and must be part of the time_array_id_columns for source table",
+        "The source time config must have the time_zone_column specified",
     )
     run_test(iter_engines, df, schema, to_schema, error)

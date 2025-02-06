@@ -1,10 +1,8 @@
 import abc
 import logging
 from datetime import datetime, timedelta
-from typing import Union, Literal
-from pydantic import (
-    Field,
-)
+from typing import Union, Literal, Optional
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
@@ -20,6 +18,7 @@ from chronify.time import (
     RepresentativePeriodFormat,
     list_representative_time_columns,
 )
+from chronify.exceptions import ConflictingInputsError, InvalidParameter
 
 
 logger = logging.getLogger(__name__)
@@ -126,6 +125,10 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
     def list_time_columns(self) -> list[str]:
         """Return the columns in the table that represent time."""
 
+    @abc.abstractmethod
+    def list_time_zone_column(self) -> list[str]:
+        """Return the column in the table that contains time zone or offset information."""
+
 
 class DatetimeRange(TimeBaseModel):
     """Defines a time range that uses Python datetime instances."""
@@ -134,17 +137,35 @@ class DatetimeRange(TimeBaseModel):
     time_type: Literal[TimeType.DATETIME] = TimeType.DATETIME
     start: datetime = Field(
         description="Start time of the range. If it includes a time zone, the timestamps in "
-        "the data must also include time zones."
+        "the data must be time zone-aware."
     )
     length: int
     resolution: timedelta
+    time_zone_column: Optional[str] = Field(
+        description="Column in the table that has time zone or offset information.", default=None
+    )
 
-    def is_time_zone_naive(self) -> bool:
+    @model_validator(mode="after")
+    def check_time_zone_column(self) -> "DatetimeRange":
+        tz_col = self.time_zone_column
+        if not self.start_time_is_tz_naive and tz_col is not None:
+            msg = f"{self.start} is tz-aware and {tz_col=} is provided"
+            raise ConflictingInputsError(msg)
+        return self
+
+    def start_time_is_tz_naive(self) -> bool:
         """Return True if the timestamps in the range do not have time zones."""
         return self.start.tzinfo is None
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
+
+    def list_time_zone_column(self) -> list[str]:
+        if self.time_zone_column is None:
+            return []
+        return [self.time_zone_column]
+
+    # TODO: make different datetime classes
 
 
 class AnnualTimeRange(TimeBaseModel):
@@ -159,17 +180,97 @@ class AnnualTimeRange(TimeBaseModel):
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
 
+    def list_time_zone_column(self) -> list[str]:
+        return []
 
-class IndexTimeRange(TimeBaseModel):
-    time_type: Literal[TimeType.INDEX] = TimeType.INDEX
-    start: int
+
+class IndexTimeRangeBase(TimeBaseModel):
+    """Defines a time range in the form of indexes"""
+
+    time_column: str = Field(description="Column in the table that represents index time.")
+    start: int = Field(description="starting index")
     length: int
-    resolution: timedelta
-    time_zone: TimeZone
+    start_timestamp: datetime = Field(
+        description="The timestamp represented by the starting index."
+    )
+    resolution: timedelta = Field(description="The resolution of time represented by the indexes.")
+    time_zone_column: Optional[str] = Field(
+        description="Column in the table that has time zone or offset information.", default=None
+    )
+
+    @model_validator(mode="after")
+    def check_time_zone_column(self) -> "IndexTimeRangeBase":
+        tz_col = self.time_zone_column
+        if not self.start_time_is_tz_naive and tz_col is not None:
+            msg = f"{self.start} is tz-aware and {tz_col=} is provided"
+            raise ConflictingInputsError(msg)
+        return self
+
+    def start_time_is_tz_naive(self) -> bool:
+        """Return True if the repreentative timestamps do not have time zones."""
+        return self.start_timestamp.tzinfo is None
 
     def list_time_columns(self) -> list[str]:
-        # TODO:
-        return []
+        return [self.time_column]
+
+    def list_time_zone_column(self) -> list[str]:
+        if self.time_zone_column is None:
+            return []
+        return [self.time_zone_column]
+
+
+class IndexTimeRangeNTZ(IndexTimeRangeBase):
+    """Index time that represents tz-naive timestamps.
+    start_timestamp is tz-naive
+    time_zone_column is None
+    """
+
+    time_type: Literal[TimeType.INDEX_NTZ] = TimeType.INDEX_NTZ
+    time_zone_column: None = None
+
+    @field_validator("start_timestamp")
+    @classmethod
+    def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
+        if start_timestamp.tzinfo is not None:
+            msg = "start_timestamp must be tz-naive for IndexTimeRangeNTZ model"
+            raise InvalidParameter(msg)
+        return start_timestamp
+
+
+class IndexTimeRangeTZ(IndexTimeRangeBase):
+    """Index time that represents tz-aware timestamps of a single time zone.
+    start_timestamp is tz-aware
+    time_zone_column is None
+    """
+
+    time_type: Literal[TimeType.INDEX_TZ] = TimeType.INDEX_TZ
+    time_zone_column: None = None
+
+    @field_validator("start_timestamp")
+    @classmethod
+    def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
+        if start_timestamp.tzinfo is None:
+            msg = "start_timestamp must be tz-aware for IndexTimeRangeTZ model"
+            raise InvalidParameter(msg)
+        return start_timestamp
+
+
+class IndexTimeRangeLocalTime(IndexTimeRangeBase):
+    """Index time that reprsents local time relative to a time zone column.
+    start_timestamp is tz-naive
+    time_zone_column is not None
+    """
+
+    time_type: Literal[TimeType.INDEX_LOCAL] = TimeType.INDEX_LOCAL
+    time_zone_column: str
+
+    @field_validator("start_timestamp")
+    @classmethod
+    def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
+        if start_timestamp.tzinfo is not None:
+            msg = "start_timestamp must be tz-naive for IndexTimeRangeLocalTime model"
+            raise InvalidParameter(msg)
+        return start_timestamp
 
 
 class RepresentativePeriodTime(TimeBaseModel):
@@ -177,29 +278,31 @@ class RepresentativePeriodTime(TimeBaseModel):
 
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD] = TimeType.REPRESENTATIVE_PERIOD
     time_format: RepresentativePeriodFormat
+    time_zone_column: Optional[str] = Field(
+        description="Column in the table that has time zone or offset information.",
+        default=None,
+    )
 
     def list_time_columns(self) -> list[str]:
         return list_representative_time_columns(self.time_format)
 
+    def list_time_zone_column(self) -> list[str]:
+        if self.time_zone_column is None:
+            return []
+        return [self.time_zone_column]
+
 
 TimeConfig = Annotated[
-    Union[AnnualTimeRange, DatetimeRange, IndexTimeRange, RepresentativePeriodTime],
+    Union[
+        AnnualTimeRange,
+        DatetimeRange,
+        IndexTimeRangeNTZ,
+        IndexTimeRangeTZ,
+        IndexTimeRangeLocalTime,
+        RepresentativePeriodTime,
+    ],
     Field(
         description="Defines the times in a time series table.",
         discriminator="time_type",
     ),
 ]
-
-
-def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -> datetime:
-    """Reduce the timestamps within the daylight saving range by 1 hour.
-    Used to ensure that a time series at daily (or lower) resolution returns each day at the
-    same timestamp in prevailing time, an expected behavior in most standard libraries.
-    (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00...
-    instead of 2018-03-11 00:00, 2018-03-12 01:00...)
-    """
-    if resolution < timedelta(hours=24):
-        return timestamp
-
-    offset = timestamp.dst() or timedelta(hours=0)
-    return timestamp - offset

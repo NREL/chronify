@@ -45,7 +45,7 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.schema_manager import SchemaManager
-from chronify.time_configs import DatetimeRange, IndexTimeRange
+from chronify.time_configs import DatetimeRange, IndexTimeRangeBase
 from chronify.time_series_checker import check_timestamps
 from chronify.time_series_mapper import map_time
 from chronify.utils.path_utils import check_overwrite, to_path
@@ -463,7 +463,7 @@ class Store:
         check_columns(rel.columns, columns)
 
         # TODO
-        if isinstance(src_schema.time_config, IndexTimeRange):
+        if isinstance(src_schema.time_config, IndexTimeRangeBase):
             if isinstance(dst_schema.time_config, DatetimeRange):
                 raise NotImplementedError
                 # timestamps = IndexTimeRangeGenerator(src_schema.time_config).list_timestamps()
@@ -478,7 +478,7 @@ class Store:
                 # )
             else:
                 cls_name = dst_schema.time_config.__class__.__name__
-                msg = f"IndexTimeRange cannot be converted to {cls_name}"
+                msg = f"IndexTimeRangeNTZ cannot be converted to {cls_name}"
                 raise NotImplementedError(msg)
 
         if src_schema.pivoted_dimension_name is not None:

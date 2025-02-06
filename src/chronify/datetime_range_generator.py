@@ -9,9 +9,9 @@ from chronify.time import (
 )
 from chronify.time_configs import (
     DatetimeRange,
-    adjust_timestamp_by_dst_offset,
     TimeBasedDataAdjustment,
 )
+from chronify.time_utils import adjust_timestamp_by_dst_offset
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
 
@@ -31,7 +31,7 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         for i in range(self._model.length):
-            if self._model.is_time_zone_naive():
+            if self._model.start_time_is_tz_naive():
                 cur = adjust_timestamp_by_dst_offset(
                     self._model.start + i * self._model.resolution, self._model.resolution
                 )

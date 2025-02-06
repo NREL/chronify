@@ -21,7 +21,7 @@ from chronify.time import RepresentativePeriodFormat
 from chronify.time_configs import (
     AnnualTimeRange,
     DatetimeRange,
-    IndexTimeRange,
+    IndexTimeRangeBase,
     RepresentativePeriodTime,
     TimeBaseModel,
     TimeBasedDataAdjustment,
@@ -34,7 +34,7 @@ __all__ = (
     "ConflictingInputsError",
     "CsvTableSchema",
     "DatetimeRange",
-    "IndexTimeRange",
+    "IndexTimeRangeBase",
     "InvalidOperation",
     "InvalidParameter",
     "InvalidTable",

@@ -388,7 +388,8 @@ def test_map_datetime_to_one_week_per_month_by_hour(
         df["time_zone"] = df["id"].map(
             dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
         )
-        src_schema.time_array_id_columns += ["time_zone"]
+        # "time_zone" is added automatically to time_array_id_columns by line below
+        src_schema.time_config.time_zone_column = "time_zone"
     tzinfo = ZoneInfo("America/Denver") if use_time_zone else None
     time_array_len = 8784 if year % 4 == 0 else 8760
     dst_schema = TableSchema(

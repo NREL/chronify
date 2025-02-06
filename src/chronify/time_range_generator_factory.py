@@ -1,7 +1,9 @@
 from chronify.time_configs import (
     AnnualTimeRange,
     DatetimeRange,
-    IndexTimeRange,
+    IndexTimeRangeNTZ,
+    IndexTimeRangeTZ,
+    IndexTimeRangeLocalTime,
     RepresentativePeriodTime,
     TimeBaseModel,
 )
@@ -18,7 +20,11 @@ def make_time_range_generator(model: TimeBaseModel) -> TimeRangeGeneratorBase:
             return DatetimeRangeGenerator(model)
         case AnnualTimeRange():
             return AnnualTimeRangeGenerator(model)
-        case IndexTimeRange():
+        case IndexTimeRangeNTZ():
+            return IndexTimeRangeGenerator(model)
+        case IndexTimeRangeTZ():
+            return IndexTimeRangeGenerator(model)
+        case IndexTimeRangeLocalTime():
             return IndexTimeRangeGenerator(model)
         case RepresentativePeriodTime():
             return RepresentativePeriodTimeGenerator(model)

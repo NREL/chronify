@@ -41,10 +41,10 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         self._check_measurement_type_consistency()
         self._check_time_interval_type()
 
-    def _check_source_table_has_time_zone(self) -> None:
+    def _check_source_schema_has_time_zone(self) -> None:
         """Check source table has time_zone column."""
-        if "time_zone" not in self._from_schema.list_columns():
-            msg = f"time_zone is required for tz-aware representative time mapping and must be part of the time_array_id_columns for source table: {self._from_schema.name}"
+        if self._from_time_config.list_time_zone_column() == []:
+            msg = "The source time config must have the time_zone_column specified for tz-aware representative time mapping."
             raise MissingParameter(msg)
 
     def map_time(
@@ -54,10 +54,10 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         check_mapped_timestamps: bool = False,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
-        is_tz_naive = self._to_time_config.is_time_zone_naive()
+        is_tz_naive = self._to_time_config.start_time_is_tz_naive()
         self.check_schema_consistency()
         if not is_tz_naive:
-            self._check_source_table_has_time_zone()
+            self._check_source_schema_has_time_zone()
 
         df, mapping_schema = self._create_mapping(is_tz_naive)
         apply_mapping(

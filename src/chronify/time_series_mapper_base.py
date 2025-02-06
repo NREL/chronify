@@ -171,10 +171,16 @@ def _apply_mapping(
     select_stmt += [right_table.c[x] for x in right_cols]
 
     keys = from_schema.time_config.list_time_columns()
-    # infer the use of time_zone
-    if "from_time_zone" in right_table_columns:
-        keys.append("time_zone")
-        assert "time_zone" in left_table_columns, f"time_zone not in table={from_schema.name}"
+    # check time_zone
+    tz_col_list = from_schema.time_config.list_time_zone_column()
+    if len(tz_col_list) > 0:
+        keys += tz_col_list
+        tz_col = tz_col_list[0]
+        assert tz_col in left_table_columns, f"{tz_col} not in table={from_schema.name}"
+        ftz_col = "from_" + tz_col
+        assert (
+            ftz_col in right_table_columns
+        ), f"time_zone not in mapping table={mapping_table_name}"
 
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)

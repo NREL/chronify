@@ -100,7 +100,7 @@ def one_week_per_month_by_hour_table() -> tuple[pd.DataFrame, int, TableSchema]:
     hours_per_year = 12 * 7 * 24
     num_time_arrays = 3
     data = {
-        "id": np.concat([np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]),
+        "id": np.repeat(range(1, 1 + num_time_arrays), hours_per_year),
         "month": np.tile(np.repeat(range(1, 13), 7 * 24), num_time_arrays),
         # 0: Monday, 6: Sunday
         "day_of_week": np.tile(np.tile(np.repeat(range(7), 24), 12), num_time_arrays),
@@ -131,7 +131,7 @@ def one_weekday_day_and_one_weekend_day_per_month_by_hour_table() -> (
     hours_per_year = 12 * 2 * 24
     num_time_arrays = 3
     data = {
-        "id": np.concat([np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]),
+        "id": np.repeat(range(1, 1 + num_time_arrays), hours_per_year),
         "month": np.tile(np.repeat(range(1, 13), 2 * 24), num_time_arrays),
         # 0: Monday, 6: Sunday
         "is_weekday": np.tile(np.tile(np.repeat([True, False], 24), 12), num_time_arrays),

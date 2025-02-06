@@ -2,7 +2,7 @@
 
 import logging
 import numpy as np
-
+from datetime import datetime, timedelta
 import pandas as pd
 
 from chronify.time import (
@@ -11,6 +11,20 @@ from chronify.time import (
 from chronify.exceptions import InvalidParameter
 
 logger = logging.getLogger(__name__)
+
+
+def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -> datetime:
+    """Reduce the timestamps within the daylight saving range by 1 hour.
+    Used to ensure that a time series at daily (or lower) resolution returns each day at the
+    same timestamp in prevailing time, an expected behavior in most standard libraries.
+    (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00...
+    instead of 2018-03-11 00:00, 2018-03-12 01:00...)
+    """
+    if resolution < timedelta(hours=24):
+        return timestamp
+
+    offset = timestamp.dst() or timedelta(hours=0)
+    return timestamp - offset
 
 
 def shift_time_interval(
