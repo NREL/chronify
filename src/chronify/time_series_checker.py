@@ -1,4 +1,5 @@
 from sqlalchemy import Connection, Table, select, text
+from typing import Optional
 
 import pandas as pd
 
@@ -6,21 +7,37 @@ from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import read_database
 from chronify.time_range_generator_factory import make_time_range_generator
+from chronify.time_configs import LeapDayAdjustmentType
 
 
-def check_timestamps(conn: Connection, table: Table, schema: TableSchema) -> None:
+def check_timestamps(
+    conn: Connection,
+    table: Table,
+    schema: TableSchema,
+    leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
+) -> None:
     """Performs checks on time series arrays in a table."""
-    TimeSeriesChecker(conn, table, schema).check_timestamps()
+    TimeSeriesChecker(
+        conn, table, schema, leap_day_adjustment=leap_day_adjustment
+    ).check_timestamps()
 
 
 class TimeSeriesChecker:
     """Performs checks on time series arrays in a table."""
 
-    def __init__(self, conn: Connection, table: Table, schema: TableSchema) -> None:
+    def __init__(
+        self,
+        conn: Connection,
+        table: Table,
+        schema: TableSchema,
+        leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
+    ) -> None:
         self._conn = conn
         self._schema = schema
         self._table = table
-        self._time_generator = make_time_range_generator(schema.time_config)
+        self._time_generator = make_time_range_generator(
+            schema.time_config, leap_day_adjustment=leap_day_adjustment
+        )
 
     def check_timestamps(self) -> None:
         count = self._check_expected_timestamps()

@@ -6,7 +6,7 @@ from chronify.models import TableSchema
 
 from chronify.time_series_mapper_representative import MapperRepresentativeTimeToDatetime
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
-from chronify.time_configs import RepresentativePeriodTime, DatetimeRange
+from chronify.time_configs import RepresentativePeriodTime, DatetimeRange, TimeBasedDataAdjustment
 
 
 def map_time(
@@ -14,16 +14,18 @@ def map_time(
     metadata: MetaData,
     from_schema: TableSchema,
     to_schema: TableSchema,
+    data_adjustment: Optional[TimeBasedDataAdjustment] = None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
 ) -> None:
     """Function to map time using the appropriate TimeSeriesMapper model."""
-
     if isinstance(from_schema.time_config, RepresentativePeriodTime) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
-        MapperRepresentativeTimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
+        MapperRepresentativeTimeToDatetime(
+            engine, metadata, from_schema, to_schema, data_adjustment
+        ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
@@ -31,7 +33,9 @@ def map_time(
     elif isinstance(from_schema.time_config, DatetimeRange) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
-        MapperDatetimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
+        MapperDatetimeToDatetime(
+            engine, metadata, from_schema, to_schema, data_adjustment
+        ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,

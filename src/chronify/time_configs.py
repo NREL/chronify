@@ -8,8 +8,7 @@ from typing_extensions import Annotated
 from chronify.base_models import ChronifyBaseModel
 from chronify.time import (
     DatetimeFormat,
-    DaylightSavingFallBackType,
-    DaylightSavingSpringForwardType,
+    DaylightSavingAdjustmentType,
     LeapDayAdjustmentType,
     MeasurementType,
     TimeIntervalType,
@@ -70,27 +69,6 @@ class LocalTimeAsStrings(ChronifyBaseModel):
     #    return data_str_format
 
 
-class DaylightSavingAdjustment(ChronifyBaseModel):
-    """Defines how to drop and add data along with timestamps to convert standard time
-    load profiles to clock time"""
-
-    spring_forward_hour: Annotated[
-        DaylightSavingSpringForwardType,
-        Field(
-            title="spring_forward_hour",
-            description="Data adjustment for spring forward hour (a 2AM in March)",
-        ),
-    ] = DaylightSavingSpringForwardType.NONE
-
-    fall_back_hour: Annotated[
-        DaylightSavingFallBackType,
-        Field(
-            title="fall_back_hour",
-            description="Data adjustment for spring forward hour (a 2AM in November)",
-        ),
-    ] = DaylightSavingFallBackType.NONE
-
-
 class TimeBasedDataAdjustment(ChronifyBaseModel):
     """Defines how data needs to be adjusted with respect to time.
     For leap day adjustment, up to one full day of timestamps and data are dropped.
@@ -103,16 +81,16 @@ class TimeBasedDataAdjustment(ChronifyBaseModel):
         LeapDayAdjustmentType,
         Field(
             title="leap_day_adjustment",
-            description="Leap day adjustment method applied to time data",
+            description="Leap day adjustment method applied to change the dataframe based on the time column",
         ),
     ] = LeapDayAdjustmentType.NONE
     daylight_saving_adjustment: Annotated[
-        DaylightSavingAdjustment,
+        DaylightSavingAdjustmentType,
         Field(
             title="daylight_saving_adjustment",
-            description="Daylight saving adjustment method applied to time data",
+            description="Daylight saving adjustment method applied to change the dataframe based on the time column",
         ),
-    ] = DaylightSavingAdjustment()
+    ] = DaylightSavingAdjustmentType.NONE
 
 
 class TimeBaseModel(ChronifyBaseModel, abc.ABC):

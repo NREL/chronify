@@ -14,7 +14,7 @@ from chronify.exceptions import (
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
-from chronify.time_configs import DatetimeRange, RepresentativePeriodTime
+from chronify.time_configs import DatetimeRange, RepresentativePeriodTime, TimeBasedDataAdjustment
 from chronify.time_utils import shift_time_interval
 
 logger = logging.getLogger(__name__)
@@ -22,18 +22,21 @@ logger = logging.getLogger(__name__)
 
 class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
     def __init__(
-        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+        self,
+        engine: Engine,
+        metadata: MetaData,
+        from_schema: TableSchema,
+        to_schema: TableSchema,
+        data_adjustment: Optional[TimeBasedDataAdjustment] = None,
     ) -> None:
-        super().__init__(engine, metadata, from_schema, to_schema)
-        if not isinstance(from_schema.time_config, RepresentativePeriodTime):
+        super().__init__(engine, metadata, from_schema, to_schema, data_adjustment)
+        if not isinstance(self._from_time_config, RepresentativePeriodTime):
             msg = "source schema does not have RepresentativePeriodTime time config. Use a different mapper."
             raise InvalidParameter(msg)
-        if not isinstance(to_schema.time_config, DatetimeRange):
+        if not isinstance(self._to_time_config, DatetimeRange):
             msg = "destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
-        self._generator = RepresentativePeriodTimeGenerator(from_schema.time_config)
-        self._from_time_config = from_schema.time_config
-        self._to_time_config = to_schema.time_config
+        self._generator = RepresentativePeriodTimeGenerator(self._from_time_config)
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
@@ -67,6 +70,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             self._to_schema,
             self._engine,
             self._metadata,
+            self._data_adjustment,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
@@ -77,16 +81,17 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         - Handles time interval type adjustment
         - Columns used to join the from_table are prefixed with "from_"
         """
-        timestamp_generator = make_time_range_generator(self._to_time_config)
+        timestamp_generator = make_time_range_generator(
+            self._to_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
+        )
 
         to_time_col = self._to_time_config.time_column
         dft = pd.Series(timestamp_generator.list_timestamps()).rename(to_time_col).to_frame()
 
         if self._from_time_config.interval_type != self._to_time_config.interval_type:
             time_col = "to_" + to_time_col
-            # Mapping works backward for representative time by
-            # shifting interval type of to_time_config to match
-            # from_time_config before extracting time info
+            # Mapping works backward for representative time by shifting interval type of
+            # to_time_config to match from_time_config before extracting time info
             dft[time_col] = shift_time_interval(
                 dft[to_time_col],
                 self._to_time_config.interval_type,

@@ -14,11 +14,10 @@ class IndexTimeRangeGenerator(TimeRangeGeneratorBase):
         self._model = model
 
     def iter_timestamps(self) -> Generator[int, None, None]:
-        # TODO: port from dsgrid
-        raise NotImplementedError
+        yield from range(self._model.start, self._model.length + self._model.start)
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
-        return []
+        return sorted(df[self._model.time_column].unique())
 
     def list_time_columns(self) -> list[str]:
         return self._model.list_time_columns()

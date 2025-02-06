@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Generator
+from datetime import datetime, timedelta
+from typing import Generator, Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -9,7 +9,6 @@ from chronify.time import (
 )
 from chronify.time_configs import (
     DatetimeRange,
-    TimeBasedDataAdjustment,
 )
 from chronify.time_utils import adjust_timestamp_by_dst_offset
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
@@ -21,13 +20,10 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
     def __init__(
         self,
         model: DatetimeRange,
-        time_based_data_adjustment: TimeBasedDataAdjustment | None = None,
+        leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
     ) -> None:
         self._model = model
-        if time_based_data_adjustment is None:
-            self._adjustment = TimeBasedDataAdjustment()
-        else:
-            self._adjustment = time_based_data_adjustment
+        self._adjustment = leap_day_adjustment or LeapDayAdjustmentType.NONE
 
     def iter_timestamps(self) -> Generator[datetime, None, None]:
         for i in range(self._model.length):
@@ -44,20 +40,26 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
                 cur = adjust_timestamp_by_dst_offset(
                     cur_utc.astimezone(tz), self._model.resolution
                 )
+
+            is_leap_year = (
+                pd.Timestamp(f"{cur.year}-01-01") + timedelta(days=365)
+            ).year == cur.year
+            if not is_leap_year:
+                yield pd.Timestamp(cur)
+                continue
+
             month = cur.month
             day = cur.day
             if not (
-                self._adjustment.leap_day_adjustment == LeapDayAdjustmentType.DROP_FEB29
-                and month == 2
-                and day == 29
+                self._adjustment == LeapDayAdjustmentType.DROP_FEB29 and month == 2 and day == 29
             ):
                 if not (
-                    self._adjustment.leap_day_adjustment == LeapDayAdjustmentType.DROP_DEC31
+                    self._adjustment == LeapDayAdjustmentType.DROP_DEC31
                     and month == 12
                     and day == 31
                 ):
                     if not (
-                        self._adjustment.leap_day_adjustment == LeapDayAdjustmentType.DROP_JAN1
+                        self._adjustment == LeapDayAdjustmentType.DROP_JAN1
                         and month == 1
                         and day == 1
                     ):

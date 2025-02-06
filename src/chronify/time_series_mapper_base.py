@@ -21,6 +21,7 @@ from chronify.exceptions import (
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
+from chronify.time_configs import TimeBasedDataAdjustment
 
 
 class TimeSeriesMapperBase(abc.ABC):
@@ -32,13 +33,16 @@ class TimeSeriesMapperBase(abc.ABC):
         metadata: MetaData,
         from_schema: TableSchema,
         to_schema: TableSchema,
+        data_adjustment: TimeBasedDataAdjustment,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
         self._from_schema = from_schema
         self._to_schema = to_schema
-        # self._from_time_config = from_schema.time_config
-        # self._to_time_config = to_schema.time_config
+        self._from_time_config = from_schema.time_config
+        self._to_time_config = to_schema.time_config
+        # data_adjustment is used in mapping creation and time check of mapped time
+        self._data_adjustment = data_adjustment or TimeBasedDataAdjustment()
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:
@@ -84,6 +88,7 @@ def apply_mapping(
     to_schema: TableSchema,
     engine: Engine,
     metadata: MetaData,
+    data_adjustment: TimeBasedDataAdjustment,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -121,7 +126,12 @@ def apply_mapping(
             mapped_table = Table(to_schema.name, metadata)
             with engine.connect() as conn:
                 try:
-                    check_timestamps(conn, mapped_table, to_schema)
+                    check_timestamps(
+                        conn,
+                        mapped_table,
+                        to_schema,
+                        leap_day_adjustment=data_adjustment.leap_day_adjustment,
+                    )
                 except Exception:
                     logger.exception(
                         "check_timestamps failed on mapped table {}. Drop it",
