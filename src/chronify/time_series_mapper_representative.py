@@ -91,7 +91,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         to_time_col = self._to_time_config.time_column
         dft = pd.Series(timestamp_generator.list_timestamps()).rename(to_time_col).to_frame()
 
-        if self._from_time_config.interval_type != self._to_time_config.interval_type:
+        if self._adjust_interval:
             time_col = "to_" + to_time_col
             # Mapping works backward for representative time by shifting interval type of
             # to_time_config to match from_time_config before extracting time info

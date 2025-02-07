@@ -6,7 +6,13 @@ from chronify.models import TableSchema
 
 from chronify.time_series_mapper_representative import MapperRepresentativeTimeToDatetime
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
-from chronify.time_configs import RepresentativePeriodTime, DatetimeRange, TimeBasedDataAdjustment
+from chronify.time_series_mapper_index_time import MapperIndexTimeToDatetime
+from chronify.time_configs import (
+    RepresentativePeriodTime,
+    DatetimeRange,
+    IndexTimeRangeBase,
+    TimeBasedDataAdjustment,
+)
 
 
 def map_time(
@@ -35,6 +41,16 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperDatetimeToDatetime(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        ).map_time(
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
+        )
+    elif isinstance(from_schema.time_config, IndexTimeRangeBase) and isinstance(
+        to_schema.time_config, DatetimeRange
+    ):
+        MapperIndexTimeToDatetime(
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         ).map_time(
             scratch_dir=scratch_dir,

@@ -45,6 +45,10 @@ class TimeSeriesMapperBase(abc.ABC):
         # data_adjustment is used in mapping creation and time check of mapped time
         self._data_adjustment = data_adjustment or TimeBasedDataAdjustment()
         self._wrap_time_allowed = wrap_time_allowed
+        if self._from_time_config.interval_type != self._to_time_config.interval_type:
+            self._adjust_interval = True
+        else:
+            self._adjust_interval = False
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:

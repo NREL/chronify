@@ -86,31 +86,54 @@ class TimeSeriesChecker:
         on_expr = " AND ".join([f"t1.{x} = t2.{x}" for x in self._schema.time_array_id_columns])
         t1_id_cols = ",".join((f"t1.{x}" for x in self._schema.time_array_id_columns))
 
-        query = f"""
-            WITH distinct_time_values_by_array AS (
-                SELECT DISTINCT {time_cols}, {id_cols}
-                FROM {self._schema.name}
-                WHERE {where_clause}
-            ),
-            t1 AS (
-                SELECT {id_cols}, COUNT(*) AS distinct_count_by_ta
-                FROM distinct_time_values_by_array
-                GROUP BY {id_cols}
-            ),
-            t2 AS (
-                SELECT {id_cols}, COUNT(*) AS count_by_ta
-                FROM {self._schema.name}
-                WHERE {where_clause}
-                GROUP BY {id_cols}
-            )
-            SELECT
-                t1.distinct_count_by_ta
-                ,t2.count_by_ta
-                ,{t1_id_cols}
-            FROM t1
-            JOIN t2
-            ON {on_expr}
-        """
+        if self._schema.time_array_id_columns == []:
+            query = f"""
+                WITH distinct_time_values_by_array AS (
+                    SELECT DISTINCT {time_cols}
+                    FROM {self._schema.name}
+                    WHERE {where_clause}
+                ),
+                t1 AS (
+                    SELECT COUNT(*) AS distinct_count_by_ta
+                    FROM distinct_time_values_by_array
+                ),
+                t2 AS (
+                    SELECT COUNT(*) AS count_by_ta
+                    FROM {self._schema.name}
+                    WHERE {where_clause}
+                )
+                SELECT
+                    t1.distinct_count_by_ta
+                    ,t2.count_by_ta
+                FROM t1
+                CROSS JOIN t2
+            """
+        else:
+            query = f"""
+                WITH distinct_time_values_by_array AS (
+                    SELECT DISTINCT {id_cols}, {time_cols}
+                    FROM {self._schema.name}
+                    WHERE {where_clause}
+                ),
+                t1 AS (
+                    SELECT {id_cols}, COUNT(*) AS distinct_count_by_ta
+                    FROM distinct_time_values_by_array
+                    GROUP BY {id_cols}
+                ),
+                t2 AS (
+                    SELECT {id_cols}, COUNT(*) AS count_by_ta
+                    FROM {self._schema.name}
+                    WHERE {where_clause}
+                    GROUP BY {id_cols}
+                )
+                SELECT
+                    t1.distinct_count_by_ta
+                    ,t2.count_by_ta
+                    ,{t1_id_cols}
+                FROM t1
+                JOIN t2
+                ON {on_expr}
+            """
         for result in self._conn.execute(text(query)).fetchall():
             distinct_count_by_ta = result[0]
             count_by_ta = result[1]
