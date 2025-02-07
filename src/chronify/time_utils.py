@@ -32,7 +32,7 @@ def shift_time_interval(
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
 ) -> "pd.Series[pd.Timestamp]":
-    """Shift pandas timeseries by time interval based on interval type.
+    """Shift pandas timeseries by ONE time interval based on interval type.
 
     Example:
     >>> dfs = pd.Series(pd.date_range("2018-12-31 22:00", periods=4, freq="h"))
@@ -118,7 +118,7 @@ def roll_time_interval(
     to_interval_type: TimeIntervalType,
     to_timestamps: list[pd.Timestamp],
 ) -> "pd.Series[pd.Timestamp]":
-    """Roll pandas timeseries by shifting time interval based on interval type and
+    """Roll pandas timeseries by shifting time interval based on interval type and then
     wrapping timestamps
 
     Example:

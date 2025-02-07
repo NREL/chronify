@@ -10,7 +10,7 @@ from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_utils import roll_time_interval
+from chronify.time_utils import roll_time_interval, wrap_timestamps
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,11 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         from_schema: TableSchema,
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
     ) -> None:
-        super().__init__(engine, metadata, from_schema, to_schema, data_adjustment)
+        super().__init__(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        )
         if self._from_schema == self._to_schema and self._data_adjustment is None:
             msg = f"from_schema is the same as to_schema and no data_adjustment, nothing to do.\n{self._from_schema}"
             logger.info(msg)
@@ -35,6 +38,10 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         if not isinstance(self._to_time_config, DatetimeRange):
             msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
+        if self._from_time_config.interval_type != self._to_time_config.interval_type:
+            self._adjust_interval = True
+        else:
+            self._adjust_interval = False
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
@@ -82,30 +89,37 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         """
         from_time_col = "from_" + self._from_time_config.time_column
         to_time_col = self._to_time_config.time_column
+        from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
         to_time_data = make_time_range_generator(
             self._to_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
         ).list_timestamps()
+
+        dfs_from = pd.Series(from_time_data)
+        # If from_tz or to_tz is naive, use tz_localize TODO: separate these into classes
+        fm_tz = self._from_time_config.start.tzinfo
+        to_tz = self._to_time_config.start.tzinfo
+        if None in (fm_tz, to_tz) and (fm_tz, to_tz) != (None, None):
+            dfs_from = dfs_from.dt.tz_localize(to_tz)
+
+        match (self._adjust_interval, self._wrap_time_allowed):
+            case (True, _):
+                dfs = roll_time_interval(
+                    dfs_from,
+                    self._from_time_config.interval_type,
+                    self._to_time_config.interval_type,
+                    to_time_data,
+                )
+            case (False, True):
+                dfs = wrap_timestamps(dfs_from, to_time_data)
+            case (False, False):
+                dfs = to_time_data
+
         df = pd.DataFrame(
             {
-                from_time_col: make_time_range_generator(self._from_time_config).list_timestamps(),
+                from_time_col: from_time_data,
+                to_time_col: dfs,
             }
         )
-        if self._from_time_config.interval_type != self._to_time_config.interval_type:
-            # If from_tz or to_tz is naive, use tz_localize
-            fm_tz = self._from_time_config.start.tzinfo
-            to_tz = self._to_time_config.start.tzinfo
-            from_timestamps = df[from_time_col]
-            if None in (fm_tz, to_tz) and (fm_tz, to_tz) != (None, None):
-                from_timestamps = from_timestamps.dt.tz_localize(to_tz)
-
-            df[to_time_col] = roll_time_interval(
-                from_timestamps,
-                self._from_time_config.interval_type,
-                self._to_time_config.interval_type,
-                to_time_data,
-            )
-        else:
-            df[to_time_col] = to_time_data
 
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col

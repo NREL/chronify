@@ -28,8 +28,11 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         from_schema: TableSchema,
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
     ) -> None:
-        super().__init__(engine, metadata, from_schema, to_schema, data_adjustment)
+        super().__init__(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        )
         if not isinstance(self._from_time_config, RepresentativePeriodTime):
             msg = "source schema does not have RepresentativePeriodTime time config. Use a different mapper."
             raise InvalidParameter(msg)

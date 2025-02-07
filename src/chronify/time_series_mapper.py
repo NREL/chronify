@@ -15,6 +15,7 @@ def map_time(
     from_schema: TableSchema,
     to_schema: TableSchema,
     data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+    wrap_time_allowed: bool = False,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -24,7 +25,7 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperRepresentativeTimeToDatetime(
-            engine, metadata, from_schema, to_schema, data_adjustment
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
@@ -34,7 +35,7 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperDatetimeToDatetime(
-            engine, metadata, from_schema, to_schema, data_adjustment
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,

@@ -34,6 +34,7 @@ class TimeSeriesMapperBase(abc.ABC):
         from_schema: TableSchema,
         to_schema: TableSchema,
         data_adjustment: TimeBasedDataAdjustment,
+        wrap_time_allowed: bool,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
@@ -43,6 +44,7 @@ class TimeSeriesMapperBase(abc.ABC):
         self._to_time_config = to_schema.time_config
         # data_adjustment is used in mapping creation and time check of mapped time
         self._data_adjustment = data_adjustment or TimeBasedDataAdjustment()
+        self._wrap_time_allowed = wrap_time_allowed
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:
