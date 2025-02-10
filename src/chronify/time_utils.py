@@ -99,7 +99,6 @@ def wrap_timestamps(
     freqs = set((np.roll(arr, -1) - arr)[:-1])
     assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
     freq = next(iter(freqs))
-
     tmin, tmax = arr[0], arr[-1]
     tdelta = tmax - tmin + freq
     dfs2 = dfs.copy()

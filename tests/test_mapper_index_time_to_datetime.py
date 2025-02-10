@@ -2,11 +2,18 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData
 import pytest
 from datetime import timedelta
-from typing import Any
+from typing import Any, Optional
+import numpy as np
 
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_series_mapper import map_time
-from chronify.time_configs import DatetimeRange, IndexTimeRangeNTZ, IndexTimeRangeTZ
+from chronify.time_configs import (
+    DatetimeRange,
+    IndexTimeRangeNTZ,
+    IndexTimeRangeTZ,
+    IndexTimeRangeLocalTime,
+    TimeBasedDataAdjustment,
+)
 from chronify.models import TableSchema
 from chronify.time import TimeIntervalType
 
@@ -26,7 +33,9 @@ def output_dst_schema() -> TableSchema:
     )
 
 
-def input_for_simple_mapping(tz_naive=False) -> tuple[pd.DataFrame, TableSchema]:
+def data_for_simple_mapping(
+    tz_naive: bool = False,
+) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
     src_df = pd.DataFrame({"index_time": range(1, 8761), "value": range(1, 8761)})
 
     if tz_naive:
@@ -53,7 +62,38 @@ def input_for_simple_mapping(tz_naive=False) -> tuple[pd.DataFrame, TableSchema]
         time_array_id_columns=[],
         value_column="value",
     )
-    return src_df, src_schema
+
+    dst_schema = output_dst_schema()
+    return src_df, src_schema, dst_schema
+
+
+def data_for_unaligned_time_mapping() -> tuple[pd.DataFrame, TableSchema, TableSchema]:
+    src_df = pd.DataFrame(
+        {
+            "index_time": np.tile(range(1, 8761), 2),
+            "value": np.concatenate([range(1, 8761), range(10, 87610, 10)]),
+            "time_zone": np.repeat(["US/Mountain", "US/Central"], 8760),
+        }
+    )
+
+    time_config = IndexTimeRangeLocalTime(
+        start=1,
+        length=8760,
+        start_timestamp=pd.Timestamp("2018-01-01 00:00"),
+        resolution=timedelta(hours=1),
+        interval_type=TimeIntervalType.PERIOD_BEGINNING,
+        time_column="index_time",
+        time_zone_column="time_zone",
+    )
+    src_schema = TableSchema(
+        name="input_data",
+        time_config=time_config,
+        time_array_id_columns=[],
+        value_column="value",
+    )
+    dst_schema = output_dst_schema()
+    dst_schema.time_array_id_columns = ["time_zone"]
+    return src_df, src_schema, dst_schema
 
 
 def run_test(
@@ -62,6 +102,8 @@ def run_test(
     from_schema: TableSchema,
     to_schema: TableSchema,
     error: tuple[Any, str],
+    data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+    wrap_time_allowed: bool = False,
 ) -> None:
     # Ingest
     metadata = MetaData()
@@ -74,9 +116,25 @@ def run_test(
     # Map
     if error:
         with pytest.raises(error[0], match=error[1]):
-            map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
+            map_time(
+                engine,
+                metadata,
+                from_schema,
+                to_schema,
+                data_adjustment=data_adjustment,
+                wrap_time_allowed=wrap_time_allowed,
+                check_mapped_timestamps=True,
+            )
     else:
-        map_time(engine, metadata, from_schema, to_schema, check_mapped_timestamps=True)
+        map_time(
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment=data_adjustment,
+            wrap_time_allowed=wrap_time_allowed,
+            check_mapped_timestamps=True,
+        )
 
 
 def get_output_table(engine: Engine, to_schema: TableSchema) -> pd.DataFrame:
@@ -88,10 +146,28 @@ def get_output_table(engine: Engine, to_schema: TableSchema) -> pd.DataFrame:
 
 @pytest.mark.parametrize("tz_naive", [True, False])
 def test_simple_mapping(iter_engines: Engine, tz_naive: bool) -> None:
-    src_df, src_schema = input_for_simple_mapping(tz_naive=tz_naive)
-    dst_schema = output_dst_schema()
+    src_df, src_schema, dst_schema = data_for_simple_mapping(tz_naive=tz_naive)
     error = ()
     run_test(iter_engines, src_df, src_schema, dst_schema, error)
+
+    dfo = get_output_table(iter_engines, dst_schema)
+    assert sorted(dfo["value"]) == sorted(src_df["value"])
+
+
+def test_unaligned_time_mapping(iter_engines: Engine) -> None:
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
+    error = ()
+    data_adjustment = None
+    wrap_time_allowed = True
+    run_test(
+        iter_engines,
+        src_df,
+        src_schema,
+        dst_schema,
+        error,
+        data_adjustment=data_adjustment,
+        wrap_time_allowed=wrap_time_allowed,
+    )
 
     dfo = get_output_table(iter_engines, dst_schema)
     assert sorted(dfo["value"]) == sorted(src_df["value"])

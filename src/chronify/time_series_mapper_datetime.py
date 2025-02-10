@@ -44,7 +44,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         self._check_table_columns_producibility()
         self._check_measurement_type_consistency()
         self._check_time_interval_type()
-        self._check_time_resolution_and_length()
+        # self._check_time_resolution_and_length()
 
     def _check_time_resolution_and_length(self) -> None:
         if self._from_time_config.resolution != self._to_time_config.resolution:
@@ -102,7 +102,6 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 dfs_from = dfs_from.dt.tz_localize(to_tz_std).dt.tz_convert(to_tz)
             case (False, True):
                 dfs_from = dfs_from.dt.tz_localize(to_tz)
-
         match (self._adjust_interval, self._wrap_time_allowed):
             case (True, _):
                 dfs = roll_time_interval(
@@ -123,6 +122,9 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             }
         )
 
+        assert (
+            df[to_time_col].nunique() == self._to_time_config.length
+        ), "to_time_col does not have the right nuumber of timestamps"
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col
         mapping_schema = MappingTableSchema(

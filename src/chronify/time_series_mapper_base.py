@@ -196,7 +196,7 @@ def _apply_mapping(
         ftz_col = "from_" + tz_col
         assert (
             ftz_col in right_table_columns
-        ), f"time_zone not in mapping table={mapping_table_name}"
+        ), f"{ftz_col} not in mapping table={mapping_table_name}"
 
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)

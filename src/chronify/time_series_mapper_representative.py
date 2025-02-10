@@ -107,18 +107,17 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         if is_tz_naive:
             df = self._generator.create_tz_naive_mapping_dataframe(dft, time_col)
         else:
+            tz_col_list = self._from_time_config.list_time_zone_column()
+            assert tz_col_list != [], "Expecting a time zone column for REPRESENTATIVE time"
+            tz_col = tz_col_list[0]
             with self._engine.connect() as conn:
                 table = Table(self._from_schema.name, self._metadata)
-                stmt = (
-                    select(table.c["time_zone"])
-                    .distinct()
-                    .where(table.c["time_zone"].is_not(None))
-                )
-                time_zones = read_database(stmt, conn, self._from_time_config)[
-                    "time_zone"
-                ].to_list()
-            df = self._generator.create_tz_aware_mapping_dataframe(dft, time_col, time_zones)
-            from_columns.append("time_zone")
+                stmt = select(table.c[tz_col]).distinct().where(table.c[tz_col].is_not(None))
+                time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
+            df = self._generator.create_tz_aware_mapping_dataframe(
+                dft, time_col, time_zones, tz_col
+            )
+            from_columns.append(tz_col)
 
         prefixed_from_columns = ["from_" + x for x in from_columns]
         df = df.rename(columns=dict(zip(from_columns, prefixed_from_columns)))

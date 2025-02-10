@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-from sqlalchemy import Engine, MetaData
+from sqlalchemy import Engine, MetaData, Table, select
 
 from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import InvalidParameter, ConflictingInputsError
@@ -12,6 +12,7 @@ from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDa
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
 from chronify.time import TimeType
+from chronify.sqlalchemy.functions import read_database
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,10 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         # self.check_schema_consistency()
 
         # Convert from index time to its represented datetime
-        df, mapping_schema, mapped_schema = self._create_intermediate_mapping()
+        if self._from_time_config.time_type == TimeType.INDEX_LOCAL:
+            df, mapping_schema, mapped_schema = self._create_intermediate_mapping_with_time_zone()
+        else:
+            df, mapping_schema, mapped_schema = self._create_intermediate_mapping()
         apply_mapping(
             df,
             mapping_schema,
@@ -75,6 +79,11 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             scratch_dir=scratch_dir,
             output_file=output_file,
         )
+        # # TODO remove
+        # with self._engine.connect() as conn:
+        #     query = f"select * from {mapped_schema.name}"
+        #     queried = read_database(query, conn, mapped_schema.time_config)
+        # breakpoint()
 
         # Convert from represented datetime to dst time_config
         MapperDatetimeToDatetime(
@@ -91,7 +100,28 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         )
 
     def _create_intermediate_schema(self) -> TableSchema:
-        """Create the intermediate schema for converting index time to its represented datetime"""
+        """Create the intermediate table schema for converting index time to its represented datetime"""
+        time_kwargs = self._from_time_config.model_dump()
+        time_kwargs = dict(
+            filter(lambda k_v: k_v[0] in DatetimeRange.model_fields, time_kwargs.items())
+        )
+        time_kwargs["time_type"] = TimeType.DATETIME
+        time_kwargs["start"] = self._from_time_config.start_timestamp
+        time_kwargs["time_column"] = "represented_time"
+
+        schema_kwargs = self._from_schema.model_dump()
+        schema_kwargs["name"] += "_intermediate"
+        if time_kwargs["time_zone_column"] is not None:
+            schema_kwargs["time_array_id_columns"].append(time_kwargs["time_zone_column"])
+            time_kwargs["time_zone_column"] = None
+
+        schema_kwargs["time_config"] = DatetimeRange(**time_kwargs)
+        schema = TableSchema(**schema_kwargs)
+
+        return schema
+
+    def _create_local_time_config(self, time_zone: str) -> DatetimeRange:
+        """Create the intermediate time config for converting index local time to its represented datetime"""
         time_kwargs = self._from_time_config.model_dump()
         time_kwargs = dict(
             filter(lambda k_v: k_v[0] in DatetimeRange.model_fields, time_kwargs.items())
@@ -100,22 +130,28 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         time_kwargs["start"] = self._from_time_config.start_timestamp
         time_kwargs["time_column"] = "represented_time"
         time_config = DatetimeRange(**time_kwargs)
+        assert (
+            time_config.start_time_is_tz_naive
+        ), "Start time must be tz-naive for local time config"
+        time_config.start = time_config.start.tz_localize(time_zone)
 
-        schema_kwargs = self._from_schema.model_dump()
-        schema_kwargs["name"] += "_intermediate"
-        schema_kwargs["time_config"] = time_config
-        schema = TableSchema(**schema_kwargs)
-
-        return schema
+        return time_config
 
     def _create_intermediate_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
-        """Create mapping dataframe for converting index time to its represented datetime"""
-        from_time_col = "from_" + self._from_time_config.time_column
-        from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
-
+        """Create mapping dataframe for converting INDEX_TZ or INDEX_NTZ time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data = make_time_range_generator(mapped_schema.time_config).list_timestamps()
+
+        from_time_col = "from_" + self._from_time_config.time_column
+        from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
+
+        from_time_config = self._from_time_config.model_copy()
+        from_time_config.time_column = from_time_col
+        mapping_schema = MappingTableSchema(
+            name="mapping_table",
+            time_configs=[from_time_config, mapped_schema.time_config],
+        )
 
         df = pd.DataFrame(
             {
@@ -123,9 +159,55 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 mapped_time_col: mapped_time_data,
             }
         )
+        return df, mapping_schema, mapped_schema
+
+    def _create_intermediate_mapping_with_time_zone(
+        self,
+    ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
+        """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
+        mapped_schema = self._create_intermediate_schema()
+        mapped_time_col = mapped_schema.time_config.time_column
+
+        from_time_col = "from_" + self._from_time_config.time_column
+        from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
+
+        tz_col_list = self._from_time_config.list_time_zone_column()
+        assert tz_col_list != [], "Expecting a time zone column for INDEX_LOCAL"
+        tz_col = tz_col_list[0]
+        from_tz_col = "from_" + tz_col
+
+        with self._engine.connect() as conn:
+            table = Table(self._from_schema.name, self._metadata)
+            stmt = select(table.c[tz_col]).distinct().where(table.c[tz_col].is_not(None))
+            time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col
+        from_time_config.time_zone_column = from_tz_col
+
+        df_tz = []
+        to_tz = self._to_time_config.start.tzinfo
+        for time_zone in time_zones:
+            config_tz = self._create_local_time_config(time_zone)
+            time_data = make_time_range_generator(config_tz).list_timestamps()
+            # Preemptively convert to dst time tzinfo, otherwise if timeseries of
+            # different time zones are concatenated, pandas treats it as an object col
+            mapped_time_data = [x.tz_convert(to_tz) for x in time_data]
+            df_tz.append(
+                pd.DataFrame(
+                    {
+                        from_time_col: from_time_data,
+                        from_tz_col: time_zone,
+                        mapped_time_col: mapped_time_data,
+                    }
+                )
+            )
+        df = pd.concat(df_tz, ignore_index=True)
+
+        # Update mapped_schema
+        mapped_schema.time_config.start = df[mapped_time_col].min()
+        mapped_schema.time_config.length = df[mapped_time_col].nunique()
+
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[from_time_config, mapped_schema.time_config],
