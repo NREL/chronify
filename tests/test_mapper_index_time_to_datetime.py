@@ -15,7 +15,7 @@ from chronify.time_configs import (
     TimeBasedDataAdjustment,
 )
 from chronify.models import TableSchema
-from chronify.time import TimeIntervalType
+from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
 
 
 def output_dst_schema() -> TableSchema:
@@ -171,3 +171,35 @@ def test_unaligned_time_mapping(iter_engines: Engine) -> None:
 
     dfo = get_output_table(iter_engines, dst_schema)
     assert sorted(dfo["value"]) == sorted(src_df["value"])
+
+
+def test_industrial_time_mapping(iter_engines: Engine) -> None:
+    """I.e., unaligned time mapping with data_adjustment"""
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
+    error = ()
+    data_adjustment = TimeBasedDataAdjustment(
+        daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRINGFORWARD_DUPLICATE_FALLBACK
+    )
+    wrap_time_allowed = True
+    run_test(
+        iter_engines,
+        src_df,
+        src_schema,
+        dst_schema,
+        error,
+        data_adjustment=data_adjustment,
+        wrap_time_allowed=wrap_time_allowed,
+    )
+
+    dfo = get_output_table(iter_engines, dst_schema)
+    dfo = dfo.sort_values(by=["time_zone", "value"]).reset_index(drop=True)
+
+    # Check value associated with springforward hour is dropped
+    # If the following fail, print to debug: dfo.loc[1656:1659], dfo.loc[1656+8760:1659+8760]
+    assert 1659 not in dfo["value"].values
+    assert 16590 not in dfo["value"].values
+
+    # Check value associated with fallback hour is duplicated
+    breakpoint()
+    assert dfo.loc[7367:7370]["value"].value_counts()[73700] == 2
+    assert dfo.loc[7367 + 8760 : 7370 + 8760]["value"].value_counts()[7370] == 2
