@@ -8,8 +8,8 @@ from chronify.time_configs import (
     IndexTimeRangeLocalTime,
     RepresentativePeriodTime,
     TimeBaseModel,
-    LeapDayAdjustmentType,
 )
+from chronify.time import LeapDayAdjustmentType
 from chronify.annual_time_range_generator import AnnualTimeRangeGenerator
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 from chronify.index_time_range_generator import IndexTimeRangeGenerator

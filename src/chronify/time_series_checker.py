@@ -7,7 +7,7 @@ from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
 from chronify.sqlalchemy.functions import read_database
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_configs import LeapDayAdjustmentType
+from chronify.time import LeapDayAdjustmentType
 
 
 def check_timestamps(

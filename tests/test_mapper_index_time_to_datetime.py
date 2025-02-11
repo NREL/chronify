@@ -19,14 +19,18 @@ from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
 
 
-def output_dst_schema() -> TableSchema:
+def output_dst_schema(period_ending: bool = False) -> TableSchema:
+    if period_ending:
+        interval_type = TimeIntervalType.PERIOD_ENDING
+    else:
+        interval_type = TimeIntervalType.PERIOD_BEGINNING
     return TableSchema(
         name="output_data",
         time_config=DatetimeRange(
             start=pd.Timestamp("2018-01-01 01:00", tz="US/Mountain"),
             resolution=timedelta(hours=1),
             length=8760,
-            interval_type=TimeIntervalType.PERIOD_BEGINNING,
+            interval_type=interval_type,
             time_column="timestamp",
         ),
         time_array_id_columns=[],
@@ -36,6 +40,7 @@ def output_dst_schema() -> TableSchema:
 
 def data_for_simple_mapping(
     tz_naive: bool = False,
+    test_interval: bool = False,
 ) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
     src_df = pd.DataFrame({"index_time": range(1, 8761), "value": range(1, 8761)})
 
@@ -64,11 +69,13 @@ def data_for_simple_mapping(
         value_column="value",
     )
 
-    dst_schema = output_dst_schema()
+    dst_schema = output_dst_schema(period_ending=test_interval)
     return src_df, src_schema, dst_schema
 
 
-def data_for_unaligned_time_mapping() -> tuple[pd.DataFrame, TableSchema, TableSchema]:
+def data_for_unaligned_time_mapping(
+    test_interval: bool = False,
+) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
     src_df = pd.DataFrame(
         {
             "index_time": np.tile(range(1, 8761), 2),
@@ -92,7 +99,7 @@ def data_for_unaligned_time_mapping() -> tuple[pd.DataFrame, TableSchema, TableS
         time_array_id_columns=[],
         value_column="value",
     )
-    dst_schema = output_dst_schema()
+    dst_schema = output_dst_schema(period_ending=test_interval)
     dst_schema.time_array_id_columns = ["time_zone"]
     return src_df, src_schema, dst_schema
 
@@ -146,8 +153,11 @@ def get_output_table(engine: Engine, to_schema: TableSchema) -> pd.DataFrame:
 
 
 @pytest.mark.parametrize("tz_naive", [True, False])
-def test_simple_mapping(iter_engines: Engine, tz_naive: bool) -> None:
-    src_df, src_schema, dst_schema = data_for_simple_mapping(tz_naive=tz_naive)
+@pytest.mark.parametrize("test_interval", [False, True])
+def test_simple_mapping(iter_engines: Engine, tz_naive: bool, test_interval: bool) -> None:
+    src_df, src_schema, dst_schema = data_for_simple_mapping(
+        tz_naive=tz_naive, test_interval=test_interval
+    )
     error = ()
     run_test(iter_engines, src_df, src_schema, dst_schema, error)
 
@@ -155,8 +165,9 @@ def test_simple_mapping(iter_engines: Engine, tz_naive: bool) -> None:
     assert sorted(dfo["value"]) == sorted(src_df["value"])
 
 
-def test_unaligned_time_mapping(iter_engines: Engine) -> None:
-    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
+@pytest.mark.parametrize("test_interval", [False, True])
+def test_unaligned_time_mapping(iter_engines: Engine, test_interval: bool) -> None:
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(test_interval=test_interval)
     error = ()
     wrap_time_allowed = True
     run_test(
@@ -187,9 +198,10 @@ def test_unaligned_time_mapping_without_wrap_time(iter_engines: Engine) -> None:
     )
 
 
-def test_industrial_time_mapping(iter_engines: Engine) -> None:
+@pytest.mark.parametrize("test_interval", [False, True])
+def test_industrial_time_mapping(iter_engines: Engine, test_interval: bool) -> None:
     """I.e., unaligned time mapping with data_adjustment"""
-    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(test_interval=test_interval)
     error = ()
     data_adjustment = TimeBasedDataAdjustment(
         daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRINGFORWARD_DUPLICATE_FALLBACK

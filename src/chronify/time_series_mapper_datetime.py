@@ -6,7 +6,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData
 
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import InvalidParameter
+from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -46,6 +46,17 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         self._check_time_interval_type()
         self._check_time_resolution()
         self._check_time_length()
+
+    def _check_time_resolution(self) -> None:
+        if self._from_time_config.resolution != self._to_time_config.resolution:
+            msg = "Handling of changing time resolution is not supported yet."
+            raise NotImplementedError(msg)
+
+    def _check_time_length(self) -> None:
+        flen, tlen = self._from_time_config.length, self._to_time_config.length
+        if flen != tlen and not self._wrap_time_allowed:
+            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
+            raise ConflictingInputsError(msg)
 
     def map_time(
         self,
@@ -104,7 +115,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             case (False, True):
                 dfs = wrap_timestamps(dfs_from, to_time_data)
             case (False, False):
-                dfs = to_time_data
+                dfs = pd.Series(to_time_data)
 
         df = pd.DataFrame(
             {

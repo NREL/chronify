@@ -31,8 +31,8 @@ class TimeSeriesMapperBase(abc.ABC):
         metadata: MetaData,
         from_schema: TableSchema,
         to_schema: TableSchema,
-        data_adjustment: TimeBasedDataAdjustment,
-        wrap_time_allowed: bool,
+        data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
@@ -78,17 +78,6 @@ class TimeSeriesMapperBase(abc.ABC):
             from_interval != to_interval
         ):
             msg = "If instantaneous time interval is used, it must exist in both from_scheme and to_schema."
-            raise ConflictingInputsError(msg)
-
-    def _check_time_resolution(self) -> None:
-        if self._from_time_config.resolution != self._to_time_config.resolution:
-            msg = "Handling of changing time resolution is not supported yet."
-            raise NotImplementedError(msg)
-
-    def _check_time_length(self) -> None:
-        flen, tlen = self._from_time_config.length, self._to_time_config.length
-        if flen != tlen and not self._wrap_time_allowed:
-            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
             raise ConflictingInputsError(msg)
 
     @abc.abstractmethod

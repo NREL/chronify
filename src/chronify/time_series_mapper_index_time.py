@@ -6,7 +6,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
 
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import InvalidParameter
+from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -45,6 +45,17 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self._check_time_interval_type()
         self._check_time_resolution()
         self._check_time_length()
+
+    def _check_time_resolution(self) -> None:
+        if self._from_time_config.resolution != self._to_time_config.resolution:
+            msg = "Handling of changing time resolution is not supported yet."
+            raise NotImplementedError(msg)
+
+    def _check_time_length(self) -> None:
+        flen, tlen = self._from_time_config.length, self._to_time_config.length
+        if flen != tlen and not self._wrap_time_allowed:
+            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
+            raise ConflictingInputsError(msg)
 
     def map_time(
         self,
@@ -136,11 +147,12 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         time_kwargs["time_type"] = TimeType.DATETIME
         time_kwargs["start"] = self._from_time_config.start_timestamp
         time_kwargs["time_column"] = "represented_time"
+        time_kwargs["time_zone_column"] = None
         time_config = DatetimeRange(**time_kwargs)
         assert (
-            time_config.start_time_is_tz_naive
+            time_config.start.tzinfo is None
         ), "Start time must be tz-naive for local time config"
-        time_config.start = time_config.start.tz_localize(time_zone)
+        time_config.start = time_config.start.tz_localize(time_zone)  # type: ignore[attr-defined]
 
         return time_config
 

@@ -126,7 +126,7 @@ class DatetimeRange(TimeBaseModel):
     @model_validator(mode="after")
     def check_time_zone_column(self) -> "DatetimeRange":
         tz_col = self.time_zone_column
-        if not self.start_time_is_tz_naive and tz_col is not None:
+        if self.start.tzinfo is not None and tz_col is not None:
             msg = f"{self.start} is tz-aware and {tz_col=} is provided"
             raise ConflictingInputsError(msg)
         return self
@@ -179,7 +179,7 @@ class IndexTimeRangeBase(TimeBaseModel):
     @model_validator(mode="after")
     def check_time_zone_column(self) -> "IndexTimeRangeBase":
         tz_col = self.time_zone_column
-        if not self.start_time_is_tz_naive and tz_col is not None:
+        if self.start_timestamp.tzinfo is not None and tz_col is not None:
             msg = f"{self.start} is tz-aware and {tz_col=} is provided"
             raise ConflictingInputsError(msg)
         return self
