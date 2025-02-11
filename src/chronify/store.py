@@ -478,7 +478,7 @@ class Store:
                 # )
             else:
                 cls_name = dst_schema.time_config.__class__.__name__
-                msg = f"IndexTimeRangeNTZ cannot be converted to {cls_name}"
+                msg = f"{src_schema.time_config.__class__.__name__} cannot be converted to {cls_name}"
                 raise NotImplementedError(msg)
 
         if src_schema.pivoted_dimension_name is not None:
