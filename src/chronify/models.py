@@ -58,7 +58,11 @@ class TableSchemaBase(ChronifyBaseModel):
 
     def list_columns(self) -> list[str]:
         """Return the column names in the schema."""
-        return self.time_array_id_columns + self.time_config.list_time_columns()
+        return (
+            self.time_array_id_columns
+            + self.time_config.list_time_columns()
+            + self.time_config.list_time_zone_column()
+        )
 
 
 class TableSchema(TableSchemaBase):

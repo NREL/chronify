@@ -6,7 +6,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
 
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import InvalidParameter, ConflictingInputsError
+from chronify.exceptions import InvalidParameter
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -43,17 +43,8 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self._check_table_columns_producibility()
         self._check_measurement_type_consistency()
         self._check_time_interval_type()
-        self._check_time_resolution_and_length()
-
-    def _check_time_resolution_and_length(self) -> None:
-        if self._from_time_config.resolution != self._to_time_config.resolution:
-            msg = "Handling of changing time resolution is not supported yet."
-            raise NotImplementedError(msg)
-
-        flen, tlen = self._from_time_config.length, self._to_time_config.length
-        if flen != tlen:
-            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen}"
-            raise ConflictingInputsError(msg)
+        self._check_time_resolution()
+        self._check_time_length()
 
     def map_time(
         self,
@@ -62,7 +53,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         check_mapped_timestamps: bool = False,
     ) -> None:
         """Convert from index time to its represented datetime"""
-        # self.check_schema_consistency()
+        self.check_schema_consistency()
 
         # Convert from index time to its represented datetime
         if self._from_time_config.time_type == TimeType.INDEX_LOCAL:
@@ -74,7 +65,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                     df,
                     mapping_schema,
                     mapped_schema,
-                ) = self._create_intermediate_mapping_with_time_zone_and_dst_adj_drop_dup()
+                ) = self._create_interm_map_with_time_zone_and_dst_adj_drop_dup()
             elif (
                 self._dst_adjustment
                 == DaylightSavingAdjustmentType.DROP_SPRINGFORWARD_INTERPOLATE_FALLBACK
@@ -86,9 +77,9 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                     df,
                     mapping_schema,
                     mapped_schema,
-                ) = self._create_intermediate_mapping_with_time_zone()
+                ) = self._create_interm_map_with_time_zone()
         else:
-            df, mapping_schema, mapped_schema = self._create_intermediate_mapping()
+            df, mapping_schema, mapped_schema = self._create_interm_map()
         apply_mapping(
             df,
             mapping_schema,
@@ -153,7 +144,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
 
         return time_config
 
-    def _create_intermediate_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
+    def _create_interm_map(self) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_TZ or INDEX_NTZ time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
         mapped_time_col = mapped_schema.time_config.time_column
@@ -177,7 +168,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         )
         return df, mapping_schema, mapped_schema
 
-    def _create_intermediate_mapping_with_time_zone(
+    def _create_interm_map_with_time_zone(
         self,
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
@@ -230,7 +221,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         )
         return df, mapping_schema, mapped_schema
 
-    def _create_intermediate_mapping_with_time_zone_and_dst_adj_drop_dup(
+    def _create_interm_map_with_time_zone_and_dst_adj_drop_dup(
         self,
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime

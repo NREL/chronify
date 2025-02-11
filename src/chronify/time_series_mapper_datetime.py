@@ -6,7 +6,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData
 
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import InvalidParameter, ConflictingInputsError
+from chronify.exceptions import InvalidParameter
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -44,17 +44,8 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         self._check_table_columns_producibility()
         self._check_measurement_type_consistency()
         self._check_time_interval_type()
-        # self._check_time_resolution_and_length()
-
-    def _check_time_resolution_and_length(self) -> None:
-        if self._from_time_config.resolution != self._to_time_config.resolution:
-            msg = "Handling of changing time resolution is not supported yet."
-            raise NotImplementedError(msg)
-
-        flen, tlen = self._from_time_config.length, self._to_time_config.length
-        if flen != tlen:
-            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen}"
-            raise ConflictingInputsError(msg)
+        self._check_time_resolution()
+        self._check_time_length()
 
     def map_time(
         self,
@@ -91,7 +82,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         ).list_timestamps()
 
         dfs_from = pd.Series(from_time_data)
-        # If from_tz or to_tz is naive, use tz_localize TODO: separate these into classes?
+        # If from_tz or to_tz is naive, use tz_localize TODO: separate these into classes
         fm_tz = self._from_time_config.start.tzinfo
         to_tz = self._to_time_config.start.tzinfo
         match (fm_tz is None, to_tz is None):
@@ -124,7 +115,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
 
         assert (
             df[to_time_col].nunique() == self._to_time_config.length
-        ), "to_time_col does not have the right nuumber of timestamps"
+        ), "to_time_col does not have the right number of timestamps"
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col
         mapping_schema = MappingTableSchema(

@@ -14,6 +14,7 @@ from chronify.time_configs import (
     IndexTimeRangeLocalTime,
     TimeBasedDataAdjustment,
 )
+from chronify.exceptions import ConflictingInputsError
 from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
 
@@ -157,7 +158,6 @@ def test_simple_mapping(iter_engines: Engine, tz_naive: bool) -> None:
 def test_unaligned_time_mapping(iter_engines: Engine) -> None:
     src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
     error = ()
-    data_adjustment = None
     wrap_time_allowed = True
     run_test(
         iter_engines,
@@ -165,12 +165,26 @@ def test_unaligned_time_mapping(iter_engines: Engine) -> None:
         src_schema,
         dst_schema,
         error,
-        data_adjustment=data_adjustment,
         wrap_time_allowed=wrap_time_allowed,
     )
 
     dfo = get_output_table(iter_engines, dst_schema)
     assert sorted(dfo["value"]) == sorted(src_df["value"])
+
+
+def test_unaligned_time_mapping_without_wrap_time(iter_engines: Engine) -> None:
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
+    error = (
+        ConflictingInputsError,
+        "DatetimeRange length must match between from_schema and to_schema",
+    )
+    run_test(
+        iter_engines,
+        src_df,
+        src_schema,
+        dst_schema,
+        error,
+    )
 
 
 def test_industrial_time_mapping(iter_engines: Engine) -> None:
@@ -200,6 +214,5 @@ def test_industrial_time_mapping(iter_engines: Engine) -> None:
     assert 16590 not in dfo["value"].values
 
     # Check value associated with fallback hour is duplicated
-    breakpoint()
     assert dfo.loc[7367:7370]["value"].value_counts()[73700] == 2
     assert dfo.loc[7367 + 8760 : 7370 + 8760]["value"].value_counts()[7370] == 2
