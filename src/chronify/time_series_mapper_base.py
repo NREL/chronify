@@ -38,12 +38,13 @@ class TimeSeriesMapperBase(abc.ABC):
         self._metadata = metadata
         self._from_schema = from_schema
         self._to_schema = to_schema
-        self._from_time_config = from_schema.time_config
-        self._to_time_config = to_schema.time_config
         # data_adjustment is used in mapping creation and time check of mapped time
         self._data_adjustment = data_adjustment or TimeBasedDataAdjustment()
         self._wrap_time_allowed = wrap_time_allowed
-        if self._from_time_config.interval_type != self._to_time_config.interval_type:
+        if (
+            self._from_schema.time_config.interval_type
+            != self._to_schema.time_config.interval_type
+        ):
             self._adjust_interval = True
         else:
             self._adjust_interval = False

@@ -175,6 +175,7 @@ class IndexTimeRangeBase(TimeBaseModel):
     time_zone_column: Optional[str] = Field(
         description="Column in the table that has time zone or offset information.", default=None
     )
+    time_type: TimeType
 
     @model_validator(mode="after")
     def check_time_zone_column(self) -> "IndexTimeRangeBase":
@@ -249,6 +250,13 @@ class IndexTimeRangeLocalTime(IndexTimeRangeBase):
             msg = "start_timestamp must be tz-naive for IndexTimeRangeLocalTime model"
             raise InvalidParameter(msg)
         return start_timestamp
+
+
+IndexTimeRanges = Union[
+    IndexTimeRangeNTZ,
+    IndexTimeRangeTZ,
+    IndexTimeRangeLocalTime,
+]
 
 
 class RepresentativePeriodTime(TimeBaseModel):

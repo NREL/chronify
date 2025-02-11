@@ -8,7 +8,12 @@ from sqlalchemy import Engine, MetaData, Table, select
 from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
-from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDataAdjustment
+from chronify.time_configs import (
+    DatetimeRange,
+    IndexTimeRanges,
+    IndexTimeRangeBase,
+    TimeBasedDataAdjustment,
+)
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
 from chronify.time import TimeType, DaylightSavingAdjustmentType
@@ -31,12 +36,14 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         )
         self._dst_adjustment = self._data_adjustment.daylight_saving_adjustment
-        if not isinstance(self._from_time_config, IndexTimeRangeBase):
+        if not isinstance(self._from_schema.time_config, IndexTimeRangeBase):
             msg = "Source schema does not have IndexTimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
-        if not isinstance(self._to_time_config, DatetimeRange):
+        if not isinstance(self._to_schema.time_config, DatetimeRange):
             msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
+        self._from_time_config: IndexTimeRanges = self._from_schema.time_config
+        self._to_time_config: DatetimeRange = self._to_schema.time_config
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
@@ -159,6 +166,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _create_interm_map(self) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_TZ or INDEX_NTZ time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
+        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data = make_time_range_generator(mapped_schema.time_config).list_timestamps()
 
@@ -185,6 +193,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
+        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
 
         from_time_col = "from_" + self._from_time_config.time_column
@@ -241,6 +250,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         drops the spring-forward hour and duplicates the fall-back hour
         """
         mapped_schema = self._create_intermediate_schema()
+        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data_ntz = make_time_range_generator(
             mapped_schema.time_config

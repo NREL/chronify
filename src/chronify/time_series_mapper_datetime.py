@@ -32,12 +32,14 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             msg = f"from_schema is the same as to_schema and no data_adjustment, nothing to do.\n{self._from_schema}"
             logger.info(msg)
             return
-        if not isinstance(self._from_time_config, DatetimeRange):
+        if not isinstance(self._from_schema.time_config, DatetimeRange):
             msg = "Source schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
-        if not isinstance(self._to_time_config, DatetimeRange):
+        if not isinstance(self._to_schema.time_config, DatetimeRange):
             msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
+        self._from_time_config: DatetimeRange = self._from_schema.time_config
+        self._to_time_config: DatetimeRange = self._to_schema.time_config
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""

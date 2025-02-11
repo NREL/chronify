@@ -33,12 +33,14 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         super().__init__(
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         )
-        if not isinstance(self._from_time_config, RepresentativePeriodTime):
+        if not isinstance(from_schema.time_config, RepresentativePeriodTime):
             msg = "source schema does not have RepresentativePeriodTime time config. Use a different mapper."
             raise InvalidParameter(msg)
-        if not isinstance(self._to_time_config, DatetimeRange):
+        if not isinstance(to_schema.time_config, DatetimeRange):
             msg = "destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
+        self._from_time_config: RepresentativePeriodTime = from_schema.time_config
+        self._to_time_config: DatetimeRange = to_schema.time_config
         self._generator = RepresentativePeriodTimeGenerator(self._from_time_config)
 
     def check_schema_consistency(self) -> None:
@@ -60,6 +62,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         check_mapped_timestamps: bool = False,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
+        assert isinstance(self._to_time_config, DatetimeRange)
         is_tz_naive = self._to_time_config.start_time_is_tz_naive()
         self.check_schema_consistency()
         if not is_tz_naive:
