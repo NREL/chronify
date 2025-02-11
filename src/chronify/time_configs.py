@@ -247,7 +247,7 @@ class IndexTimeRangeLocalTime(IndexTimeRangeBase):
     @classmethod
     def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
         if start_timestamp.tzinfo is not None:
-            msg = "start_timestamp must be tz-naive for IndexTimeRangeLocalTime model"
+            msg = "start_timestamp must be tz-naive for IndexTimeRangeLocalTime"
             raise InvalidParameter(msg)
         return start_timestamp
 
