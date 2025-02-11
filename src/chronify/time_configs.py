@@ -229,7 +229,7 @@ class IndexTimeRangeTZ(IndexTimeRangeBase):
     @classmethod
     def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
         if start_timestamp.tzinfo is None:
-            msg = "start_timestamp must be tz-aware for IndexTimeRangeTZ model"
+            msg = "start_timestamp must be tz-aware for IndexTimeRangeTZ"
             raise InvalidParameter(msg)
         return start_timestamp
 
