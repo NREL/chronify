@@ -45,7 +45,7 @@ spark = [
 ]
 
 dev = [
-    "mypy",
+    "mypy >= 1.15, < 2",
     "pandas-stubs",
     "pre-commit",
     "pytest",

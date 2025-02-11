@@ -21,16 +21,16 @@ class DropTable(DDLElement):
         self.name = name
 
 
-@compiler.compiles(CreateTable)  # type: ignore
-def _create_table(element, compiler, **kw):
+@compiler.compiles(CreateTable)
+def _create_table(element: Any, compiler: Any, **kw: Any) -> str:
     return "CREATE TABLE %s AS %s" % (
         element.name,
         compiler.sql_compiler.process(element.selectable, literal_binds=True),
     )
 
 
-@compiler.compiles(DropTable)  # type: ignore
-def _drop_table(element, compiler, **kw):
+@compiler.compiles(DropTable)
+def _drop_table(element: Any, compiler: Any, **kw: Any) -> str:
     return "DROP TABLE %s" % (element.name)
 
 
