@@ -32,7 +32,7 @@ class TimeBasedDataAdjustment(ChronifyBaseModel):
         LeapDayAdjustmentType,
         Field(
             title="leap_day_adjustment",
-            description="Leap day adjustment method applied to change the dataframe based on the time column",
+            description="Leap day adjustment method applied to change the table data based on the time column",
         ),
     ] = LeapDayAdjustmentType.NONE
     daylight_saving_adjustment: Annotated[
