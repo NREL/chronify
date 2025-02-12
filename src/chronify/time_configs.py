@@ -39,7 +39,7 @@ class TimeBasedDataAdjustment(ChronifyBaseModel):
         DaylightSavingAdjustmentType,
         Field(
             title="daylight_saving_adjustment",
-            description="Daylight saving adjustment method applied to change the dataframe based on the time column",
+            description="Daylight saving adjustment method applied to change the table data based on the time column",
         ),
     ] = DaylightSavingAdjustmentType.NONE
 
