@@ -121,7 +121,6 @@ class IndexTimeRangeBase(TimeBaseModel):
 class IndexTimeRangeNTZ(IndexTimeRangeBase):
     """Index time that represents tz-naive timestamps.
     start_timestamp is tz-naive
-    time_zone_column is None
     """
 
     time_type: Literal[TimeType.INDEX_NTZ] = TimeType.INDEX_NTZ
@@ -141,7 +140,6 @@ class IndexTimeRangeNTZ(IndexTimeRangeBase):
 class IndexTimeRangeTZ(IndexTimeRangeBase):
     """Index time that represents tz-aware timestamps of a single time zone.
     start_timestamp is tz-aware
-    time_zone_column is None
     """
 
     time_type: Literal[TimeType.INDEX_TZ] = TimeType.INDEX_TZ
@@ -161,7 +159,6 @@ class IndexTimeRangeTZ(IndexTimeRangeBase):
 class IndexTimeRangeLocalTime(IndexTimeRangeBase):
     """Index time that reprsents local time relative to a time zone column.
     start_timestamp is tz-naive
-    time_zone_column is not None
     """
 
     time_type: Literal[TimeType.INDEX_LOCAL] = TimeType.INDEX_LOCAL

@@ -12,6 +12,7 @@ from chronify.time_configs import (
     DatetimeRange,
     IndexTimeRanges,
     IndexTimeRangeBase,
+    IndexTimeRangeLocalTime,
     TimeBasedDataAdjustment,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -162,6 +163,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _create_interm_map(self) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_TZ or INDEX_NTZ time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
+        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data = make_time_range_generator(mapped_schema.time_config).list_timestamps()
 
@@ -188,6 +190,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
+        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
 
         from_time_col = "from_" + self._from_time_config.time_column
@@ -203,6 +206,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
         from_time_config = self._from_time_config.model_copy()
+        assert isinstance(from_time_config, IndexTimeRangeLocalTime)
         from_time_config.time_column = from_time_col
         from_time_config.time_zone_column = from_tz_col
 
@@ -243,6 +247,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         drops the spring-forward hour and duplicates the fall-back hour
         """
         mapped_schema = self._create_intermediate_schema()
+        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data_ntz = make_time_range_generator(
             mapped_schema.time_config
@@ -269,6 +274,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
         from_time_config = self._from_time_config.model_copy()
+        assert isinstance(from_time_config, IndexTimeRangeLocalTime)
         from_time_config.time_column = from_time_col
         from_time_config.time_zone_column = from_tz_col
 
