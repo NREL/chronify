@@ -37,7 +37,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         )
         self._dst_adjustment = self._data_adjustment.daylight_saving_adjustment
         if not isinstance(self._from_schema.time_config, IndexTimeRangeBase):
-            msg = "Source schema does not have IndexTimeRange time config. Use a different mapper."
+            msg = "Source schema does not have IndexTimeRangeBase time config. Use a different mapper."
             raise InvalidParameter(msg)
         if not isinstance(self._to_schema.time_config, DatetimeRange):
             msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
@@ -61,7 +61,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _check_time_length(self) -> None:
         flen, tlen = self._from_time_config.length, self._to_time_config.length
         if flen != tlen and not self._wrap_time_allowed:
-            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
+            msg = f"Length must match between {self._from_schema.__class__} from_schema and {self._to_schema.__class__} to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
             raise ConflictingInputsError(msg)
 
     def map_time(
@@ -77,7 +77,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         if self._from_time_config.time_type == TimeType.INDEX_LOCAL:
             if (
                 self._dst_adjustment
-                == DaylightSavingAdjustmentType.DROP_SPRINGFORWARD_DUPLICATE_FALLBACK
+                == DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
             ):
                 (
                     df,
@@ -86,9 +86,9 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 ) = self._create_interm_map_with_time_zone_and_dst_adj_drop_dup()
             elif (
                 self._dst_adjustment
-                == DaylightSavingAdjustmentType.DROP_SPRINGFORWARD_INTERPOLATE_FALLBACK
+                == DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK
             ):
-                msg = "Cannot use daylight saving adjustment type: DROP_SPRINGFORWARD_INTERPOLATE_FALLBACK for INDEX_LOCAL time"
+                msg = "Cannot use daylight saving adjustment type: DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK for INDEX_LOCAL time"
                 raise NotImplementedError(msg)
             else:
                 (
@@ -136,9 +136,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
 
         schema_kwargs = self._from_schema.model_dump()
         schema_kwargs["name"] += "_intermediate"
-        if time_kwargs["time_zone_column"] is not None:
-            schema_kwargs["time_array_id_columns"].append(time_kwargs["time_zone_column"])
-            time_kwargs["time_zone_column"] = None
 
         schema_kwargs["time_config"] = DatetimeRange(**time_kwargs)
         schema = TableSchema(**schema_kwargs)
@@ -154,7 +151,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         time_kwargs["time_type"] = TimeType.DATETIME
         time_kwargs["start"] = self._from_time_config.start_timestamp
         time_kwargs["time_column"] = "represented_time"
-        time_kwargs["time_zone_column"] = None
         time_config = DatetimeRange(**time_kwargs)
         assert (
             time_config.start.tzinfo is None
@@ -166,7 +162,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _create_interm_map(self) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_TZ or INDEX_NTZ time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
-        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data = make_time_range_generator(mapped_schema.time_config).list_timestamps()
 
@@ -193,15 +188,13 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
         """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
-        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
 
         from_time_col = "from_" + self._from_time_config.time_column
         from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
 
-        tz_col_list = self._from_time_config.list_time_zone_column()
-        assert tz_col_list != [], "Expecting a time zone column for INDEX_LOCAL"
-        tz_col = tz_col_list[0]
+        tz_col = self._from_time_config.get_time_zone_column()
+        assert tz_col is not None, "Expecting a time zone column for INDEX_LOCAL"
         from_tz_col = "from_" + tz_col
 
         with self._engine.connect() as conn:
@@ -250,7 +243,6 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         drops the spring-forward hour and duplicates the fall-back hour
         """
         mapped_schema = self._create_intermediate_schema()
-        assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
         mapped_time_data_ntz = make_time_range_generator(
             mapped_schema.time_config
@@ -267,9 +259,8 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         )
         df_ntz["clock_time"] = df_ntz["clock_time"].astype(str)
 
-        tz_col_list = self._from_time_config.list_time_zone_column()
-        assert tz_col_list != [], "Expecting a time zone column for INDEX_LOCAL"
-        tz_col = tz_col_list[0]
+        tz_col = self._from_time_config.get_time_zone_column()
+        assert tz_col is not None, "Expecting a time zone column for INDEX_LOCAL"
         from_tz_col = "from_" + tz_col
 
         with self._engine.connect() as conn:

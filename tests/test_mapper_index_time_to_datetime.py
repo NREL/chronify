@@ -19,15 +19,19 @@ from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
 
 
-def output_dst_schema(period_ending: bool = False) -> TableSchema:
+def output_dst_schema(period_ending: bool = False, standard_time: bool = False) -> TableSchema:
     if period_ending:
         interval_type = TimeIntervalType.PERIOD_ENDING
     else:
         interval_type = TimeIntervalType.PERIOD_BEGINNING
+    if standard_time:
+        tz = "MST"
+    else:
+        tz = "US/Mountain"
     return TableSchema(
         name="output_data",
         time_config=DatetimeRange(
-            start=pd.Timestamp("2018-01-01 01:00", tz="US/Mountain"),
+            start=pd.Timestamp("2018-01-01 01:00", tz=tz),
             resolution=timedelta(hours=1),
             length=8760,
             interval_type=interval_type,
@@ -40,7 +44,8 @@ def output_dst_schema(period_ending: bool = False) -> TableSchema:
 
 def data_for_simple_mapping(
     tz_naive: bool = False,
-    test_interval: bool = False,
+    interval_shift: bool = False,
+    standard_time: bool = False,
 ) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
     src_df = pd.DataFrame({"index_time": range(1, 8761), "value": range(1, 8761)})
 
@@ -69,12 +74,13 @@ def data_for_simple_mapping(
         value_column="value",
     )
 
-    dst_schema = output_dst_schema(period_ending=test_interval)
+    dst_schema = output_dst_schema(period_ending=interval_shift, standard_time=standard_time)
     return src_df, src_schema, dst_schema
 
 
 def data_for_unaligned_time_mapping(
-    test_interval: bool = False,
+    interval_shift: bool = False,
+    standard_time: bool = False,
 ) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
     src_df = pd.DataFrame(
         {
@@ -99,7 +105,7 @@ def data_for_unaligned_time_mapping(
         time_array_id_columns=[],
         value_column="value",
     )
-    dst_schema = output_dst_schema(period_ending=test_interval)
+    dst_schema = output_dst_schema(period_ending=interval_shift, standard_time=standard_time)
     dst_schema.time_array_id_columns = ["time_zone"]
     return src_df, src_schema, dst_schema
 
@@ -152,11 +158,14 @@ def get_output_table(engine: Engine, to_schema: TableSchema) -> pd.DataFrame:
     return queried
 
 
-@pytest.mark.parametrize("tz_naive", [True, False])
-@pytest.mark.parametrize("test_interval", [False, True])
-def test_simple_mapping(iter_engines: Engine, tz_naive: bool, test_interval: bool) -> None:
+@pytest.mark.parametrize("src_tz_naive", [True, False])
+@pytest.mark.parametrize("interval_shift", [False, True])
+@pytest.mark.parametrize("dst_std_time", [False, True])
+def test_simple_mapping(
+    iter_engines: Engine, src_tz_naive: bool, interval_shift: bool, dst_std_time: bool
+) -> None:
     src_df, src_schema, dst_schema = data_for_simple_mapping(
-        tz_naive=tz_naive, test_interval=test_interval
+        tz_naive=src_tz_naive, interval_shift=interval_shift, standard_time=dst_std_time
     )
     error = ()
     run_test(iter_engines, src_df, src_schema, dst_schema, error)
@@ -165,9 +174,14 @@ def test_simple_mapping(iter_engines: Engine, tz_naive: bool, test_interval: boo
     assert sorted(dfo["value"]) == sorted(src_df["value"])
 
 
-@pytest.mark.parametrize("test_interval", [False, True])
-def test_unaligned_time_mapping(iter_engines: Engine, test_interval: bool) -> None:
-    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(test_interval=test_interval)
+@pytest.mark.parametrize("interval_shift", [False, True])
+@pytest.mark.parametrize("dst_std_time", [False, True])
+def test_unaligned_time_mapping(
+    iter_engines: Engine, interval_shift: bool, dst_std_time: bool
+) -> None:
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(
+        interval_shift=interval_shift, standard_time=dst_std_time
+    )
     error = ()
     wrap_time_allowed = True
     run_test(
@@ -187,7 +201,7 @@ def test_unaligned_time_mapping_without_wrap_time(iter_engines: Engine) -> None:
     src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
     error = (
         ConflictingInputsError,
-        "DatetimeRange length must match between from_schema and to_schema",
+        "Length must match between",
     )
     run_test(
         iter_engines,
@@ -198,13 +212,18 @@ def test_unaligned_time_mapping_without_wrap_time(iter_engines: Engine) -> None:
     )
 
 
-@pytest.mark.parametrize("test_interval", [False, True])
-def test_industrial_time_mapping(iter_engines: Engine, test_interval: bool) -> None:
+@pytest.mark.parametrize("interval_shift", [False, True])
+@pytest.mark.parametrize("dst_std_time", [False, True])
+def test_industrial_time_mapping(
+    iter_engines: Engine, interval_shift: bool, dst_std_time: bool
+) -> None:
     """I.e., unaligned time mapping with data_adjustment"""
-    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(test_interval=test_interval)
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(
+        interval_shift=interval_shift, standard_time=dst_std_time
+    )
     error = ()
     data_adjustment = TimeBasedDataAdjustment(
-        daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRINGFORWARD_DUPLICATE_FALLBACK
+        daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
     )
     wrap_time_allowed = True
     run_test(

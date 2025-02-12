@@ -33,8 +33,10 @@ class TableSchemaBase(ChronifyBaseModel):
     @field_validator("time_config")
     @classmethod
     def check_time_config(cls, time_config: TimeConfig) -> TimeConfig:
-        for column in time_config.list_time_columns() + time_config.list_time_zone_column():
+        for column in time_config.list_time_columns():
             _check_name(column)
+        if time_config.get_time_zone_column() is not None:
+            _check_name(time_config.get_time_zone_column())  # type: ignore[arg-type]
         return time_config
 
     @field_validator("time_array_id_columns")
@@ -44,25 +46,19 @@ class TableSchemaBase(ChronifyBaseModel):
             _check_name(column)
         return columns
 
-    @model_validator(mode="before")
-    @classmethod
-    def update_time_array_id_columns(cls, data: dict[str, Any]) -> dict[str, Any]:
-        if "time_array_id_columns" not in data:
-            data["time_array_id_columns"] = []
-        if (
-            "time_zone_column" in data["time_config"]
-            and data["time_config"]["time_zone_column"] is not None
-        ):
-            data["time_array_id_columns"].append(data["time_config"]["time_zone_column"])
-        return data
+    @model_validator(mode="after")
+    def update_time_array_id_columns(self) -> "TableSchemaBase":
+        tz_col = self.time_config.get_time_zone_column()
+        if tz_col is not None and tz_col not in self.time_array_id_columns:
+            self.time_array_id_columns.append(tz_col)
+        return self
 
     def list_columns(self) -> list[str]:
         """Return the column names in the schema."""
-        return (
-            self.time_array_id_columns
-            + self.time_config.list_time_columns()
-            + self.time_config.list_time_zone_column()
-        )
+        columns = self.time_array_id_columns + self.time_config.list_time_columns()
+        # if self.time_config.get_time_zone_column() is not None:
+        #     columns.append(self.time_config.get_time_zone_column())
+        return columns
 
 
 class TableSchema(TableSchemaBase):

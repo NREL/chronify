@@ -86,7 +86,7 @@ class TimeSeriesChecker:
         on_expr = " AND ".join([f"t1.{x} = t2.{x}" for x in self._schema.time_array_id_columns])
         t1_id_cols = ",".join((f"t1.{x}" for x in self._schema.time_array_id_columns))
 
-        if self._schema.time_array_id_columns == []:
+        if not self._schema.time_array_id_columns:
             query = f"""
                 WITH distinct_time_values_by_array AS (
                     SELECT DISTINCT {time_cols}

@@ -34,7 +34,7 @@ dependencies = [
     "pydantic >= 2.7, < 3",
     "pytz",
     "rich",
-    "sqlalchemy >= 2.0, < 3",
+    "sqlalchemy == 2.0.37",
     "tzdata",
 ]
 [project.optional-dependencies]

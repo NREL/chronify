@@ -8,9 +8,9 @@ from chronify.time_series_mapper_representative import MapperRepresentativeTimeT
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
 from chronify.time_series_mapper_index_time import MapperIndexTimeToDatetime
 from chronify.time_configs import (
-    RepresentativePeriodTime,
     DatetimeRange,
     IndexTimeRangeBase,
+    RepresentativePeriodTimeBase,
     TimeBasedDataAdjustment,
 )
 
@@ -27,7 +27,7 @@ def map_time(
     check_mapped_timestamps: bool = False,
 ) -> None:
     """Function to map time using the appropriate TimeSeriesMapper model."""
-    if isinstance(from_schema.time_config, RepresentativePeriodTime) and isinstance(
+    if isinstance(from_schema.time_config, RepresentativePeriodTimeBase) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
         MapperRepresentativeTimeToDatetime(

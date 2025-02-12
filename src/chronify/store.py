@@ -45,7 +45,7 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.schema_manager import SchemaManager
-from chronify.time_configs import DatetimeRange, IndexTimeRangeBase
+from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDataAdjustment
 from chronify.time_series_checker import check_timestamps
 from chronify.time_series_mapper import map_time
 from chronify.utils.path_utils import check_overwrite, to_path
@@ -818,6 +818,8 @@ class Store:
         self,
         src_name: str,
         dst_schema: TableSchema,
+        data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
@@ -863,7 +865,7 @@ class Store:
         >>> schema = TableSchema(
         ...     name="devices_by_representative_time",
         ...     value_column="value",
-        ...     time_config=RepresentativePeriodTime(
+        ...     time_config=RepresentativePeriodTimeNTZ(
         ...         time_format=RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR,
         ...     ),
         ...     time_array_id_columns=["id"],
@@ -894,6 +896,8 @@ class Store:
             self._metadata,
             src_schema,
             dst_schema,
+            data_adjustment=data_adjustment,
+            wrap_time_allowed=wrap_time_allowed,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,

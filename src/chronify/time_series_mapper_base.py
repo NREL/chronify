@@ -41,13 +41,10 @@ class TimeSeriesMapperBase(abc.ABC):
         # data_adjustment is used in mapping creation and time check of mapped time
         self._data_adjustment = data_adjustment or TimeBasedDataAdjustment()
         self._wrap_time_allowed = wrap_time_allowed
-        if (
+        self._adjust_interval = (
             self._from_schema.time_config.interval_type
             != self._to_schema.time_config.interval_type
-        ):
-            self._adjust_interval = True
-        else:
-            self._adjust_interval = False
+        )
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:
@@ -187,10 +184,9 @@ def _apply_mapping(
 
     keys = from_schema.time_config.list_time_columns()
     # check time_zone
-    tz_col_list = from_schema.time_config.list_time_zone_column()
-    if len(tz_col_list) > 0:
-        keys += tz_col_list
-        tz_col = tz_col_list[0]
+    tz_col = from_schema.time_config.get_time_zone_column()
+    if tz_col is not None:
+        keys.append(tz_col)
         assert tz_col in left_table_columns, f"{tz_col} not in table={from_schema.name}"
         ftz_col = "from_" + tz_col
         assert (

@@ -7,7 +7,7 @@ from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
 
 class IndexTimeRangeGenerator(TimeRangeGeneratorBase):
-    """Generates datetime ranges based on a DatetimeRange model."""
+    """Generates datetime ranges based on an IndexTimeRangeBase model."""
 
     def __init__(self, model: IndexTimeRangeBase) -> None:
         super().__init__()

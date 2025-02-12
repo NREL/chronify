@@ -375,21 +375,19 @@ def test_load_parquet(iter_stores_by_engine_no_data_ingestion: Store, tmp_path):
         (False, 2021),
     ],
 )
-def test_map_datetime_to_one_week_per_month_by_hour(
+def test_map_one_week_per_month_by_hour_to_datetime(
     tmp_path,
     iter_stores_by_engine_no_data_ingestion: Store,
     one_week_per_month_by_hour_table,
+    one_week_per_month_by_hour_table_tz,
     params: tuple[bool, int],
 ):
     store = iter_stores_by_engine_no_data_ingestion
     use_time_zone, year = params
-    df, num_time_arrays, src_schema = one_week_per_month_by_hour_table
     if use_time_zone:
-        df["time_zone"] = df["id"].map(
-            dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
-        )
-        # "time_zone" is added automatically to time_array_id_columns by line below
-        src_schema.time_config.time_zone_column = "time_zone"
+        df, num_time_arrays, src_schema = one_week_per_month_by_hour_table_tz
+    else:
+        df, num_time_arrays, src_schema = one_week_per_month_by_hour_table
     tzinfo = ZoneInfo("America/Denver") if use_time_zone else None
     time_array_len = 8784 if year % 4 == 0 else 8760
     dst_schema = TableSchema(
@@ -505,6 +503,9 @@ def test_map_datetime_to_datetime(
     assert actual[0] == src_schema.time_config.start + timedelta(hours=1)
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
     check_timestamp_lists(actual, expected)
+
+
+# TODO add test for index time
 
 
 def test_to_parquet(tmp_path, generators_schema):

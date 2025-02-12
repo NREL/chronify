@@ -8,7 +8,7 @@ from chronify.time import (
     RepresentativePeriodFormat,
 )
 from chronify.time import OneWeekPerMonthByHour, OneWeekdayDayOneWeekendDayPerMonthByHour
-from chronify.time_configs import RepresentativePeriodTime
+from chronify.time_configs import RepresentativePeriodTimeBase
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
     """Implements Behavior in the Representative Period Time."""
 
-    def __init__(self, model: RepresentativePeriodTime) -> None:
+    def __init__(self, model: RepresentativePeriodTimeBase) -> None:
         super().__init__()
         self._model = model
         self._handler: RepresentativeTimeFormatHandlerBase
