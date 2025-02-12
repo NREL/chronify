@@ -77,7 +77,7 @@ class LeapDayAdjustmentType(StrEnum):
 class DaylightSavingAdjustmentType(StrEnum):
     """Daylight saving data adjustment enum types"""
 
-    DROP_SPRING_FORWARD_DUPLICATE_FALLBACK = "DROP_SPRING_FORWARD_duplicate_fallback"
+    DROP_SPRING_FORWARD_DUPLICATE_FALLBACK = "drop_spring_forward_duplicate_fallback"
     DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK = "DROP_SPRING_FORWARD_interpolate_fallback"
     NONE = "none"
 
