@@ -212,7 +212,6 @@ class RepresentativePeriodTimeTZ(RepresentativePeriodTimeBase):
     time_type: Literal[TimeType.REPRESENTATIVE_PERIOD_TZ] = TimeType.REPRESENTATIVE_PERIOD_TZ
     time_zone_column: str = Field(
         description="Column in the table that has time zone or offset information.",
-        default=None,
     )
 
     def get_time_zone_column(self) -> str:

@@ -1,7 +1,7 @@
 from zoneinfo import ZoneInfo
 import pytest
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
@@ -43,7 +43,7 @@ def run_test(
     df: pd.DataFrame,
     from_schema: TableSchema,
     to_schema: TableSchema,
-    error: tuple[Any, str],
+    error: Optional[tuple[Any, str]],
 ) -> None:
     # Ingest
     metadata = MetaData()
@@ -130,7 +130,7 @@ def test_one_week_per_month_by_hour_tz_naive(
     to_schema.time_array_id_columns += ["time_zone"]
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
-    error = ()
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
@@ -147,7 +147,7 @@ def test_one_week_per_month_by_hour_tz_aware(
     to_schema.time_array_id_columns += ["time_zone"]
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
-    error = ()
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
@@ -165,7 +165,7 @@ def test_one_weekday_day_and_one_weekend_day_per_month_by_hour_tz_naive(
     to_schema = get_datetime_schema(2020, tzinfo)
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
-    error = ()
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
@@ -184,7 +184,7 @@ def test_one_weekday_day_and_one_weekend_day_per_month_by_hour_tz_aware(
     to_schema.time_array_id_columns += ["time_zone"]
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
-    error = ()
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
@@ -196,18 +196,5 @@ def test_instantaneous_interval_type(
     schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
     to_schema = get_datetime_schema(2020, None)
     to_schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
-    error = ()
-    run_test(iter_engines, df, schema, to_schema, error)
-
-
-def test_missing_time_zone(
-    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
-) -> None:
-    df, _, schema = one_week_per_month_by_hour_table
-
-    to_schema = get_datetime_schema(2020, ZoneInfo("US/Mountain"))
-    error = (
-        AssertionError,
-        "Expecting a time zone column for REPRESENTATIVE time",
-    )
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)

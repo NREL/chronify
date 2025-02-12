@@ -19,11 +19,7 @@ from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
 
 
-def output_dst_schema(period_ending: bool = False, standard_time: bool = False) -> TableSchema:
-    if period_ending:
-        interval_type = TimeIntervalType.PERIOD_ENDING
-    else:
-        interval_type = TimeIntervalType.PERIOD_BEGINNING
+def output_dst_schema(interval_type: TimeIntervalType, standard_time: bool = False) -> TableSchema:
     if standard_time:
         tz = "MST"
     else:
@@ -73,8 +69,12 @@ def data_for_simple_mapping(
         time_array_id_columns=[],
         value_column="value",
     )
+    if interval_shift:
+        interval_type = TimeIntervalType.PERIOD_ENDING
+    else:
+        interval_type = TimeIntervalType.PERIOD_BEGINNING
 
-    dst_schema = output_dst_schema(period_ending=interval_shift, standard_time=standard_time)
+    dst_schema = output_dst_schema(interval_type, standard_time=standard_time)
     return src_df, src_schema, dst_schema
 
 
@@ -105,7 +105,11 @@ def data_for_unaligned_time_mapping(
         time_array_id_columns=[],
         value_column="value",
     )
-    dst_schema = output_dst_schema(period_ending=interval_shift, standard_time=standard_time)
+    if interval_shift:
+        interval_type = TimeIntervalType.PERIOD_ENDING
+    else:
+        interval_type = TimeIntervalType.PERIOD_BEGINNING
+    dst_schema = output_dst_schema(interval_type, standard_time=standard_time)
     dst_schema.time_array_id_columns = ["time_zone"]
     return src_df, src_schema, dst_schema
 
@@ -115,7 +119,7 @@ def run_test(
     df: pd.DataFrame,
     from_schema: TableSchema,
     to_schema: TableSchema,
-    error: tuple[Any, str],
+    error: Optional[tuple[Any, str]],
     data_adjustment: Optional[TimeBasedDataAdjustment] = None,
     wrap_time_allowed: bool = False,
 ) -> None:
@@ -167,7 +171,7 @@ def test_simple_mapping(
     src_df, src_schema, dst_schema = data_for_simple_mapping(
         tz_naive=src_tz_naive, interval_shift=interval_shift, standard_time=dst_std_time
     )
-    error = ()
+    error = None
     run_test(iter_engines, src_df, src_schema, dst_schema, error)
 
     dfo = get_output_table(iter_engines, dst_schema)
@@ -182,7 +186,7 @@ def test_unaligned_time_mapping(
     src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(
         interval_shift=interval_shift, standard_time=dst_std_time
     )
-    error = ()
+    error = None
     wrap_time_allowed = True
     run_test(
         iter_engines,
@@ -221,7 +225,7 @@ def test_industrial_time_mapping(
     src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(
         interval_shift=interval_shift, standard_time=dst_std_time
     )
-    error = ()
+    error = None
     data_adjustment = TimeBasedDataAdjustment(
         daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
     )
