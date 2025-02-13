@@ -4,6 +4,7 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from itertools import chain
 
 import duckdb
 import numpy as np
@@ -577,8 +578,27 @@ def test_map_index_time_to_datetime(
     else:
         result = pd.read_parquet(output_file)
 
-    result.sort_values(by=["generator", "timestamp"], inplace=True)
-    # TODO: Decide how to verify
+    # Format data for display
+    result = result.sort_values(by=["generator", "timestamp"]).reset_index(drop=True)[
+        ["generator", "timestamp", "value"]
+    ]
+    result["timestamp"] = result["timestamp"].dt.tz_convert(dst_schema.time_config.start.tzinfo)
+
+    # Check skips, dups, and time-wrapped values
+    for i in range(len(time_zones)):
+        df = result.loc[result["generator"] == f"gen{i}"].reset_index(drop=True)
+        val_skipped, val_dupped = 1658 + i, 7369 + i
+        expected_values = np.roll(
+            list(
+                chain(
+                    range(i, val_skipped),
+                    range(val_skipped + 1, val_dupped + 1),
+                    range(val_dupped, i + time_array_len),
+                )
+            ),
+            i,
+        )
+        assert np.array_equal(df["value"].values, expected_values)
 
 
 def test_to_parquet(tmp_path, generators_schema):
