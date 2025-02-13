@@ -47,13 +47,6 @@ class TableSchemaBase(ChronifyBaseModel):
             _check_name(column)
         return columns
 
-    @model_validator(mode="after")
-    def update_time_array_id_columns(self) -> "TableSchemaBase":
-        tz_col = self.time_config.get_time_zone_column()
-        if tz_col is not None and tz_col not in self.time_array_id_columns:
-            self.time_array_id_columns.append(tz_col)
-        return self
-
     def list_columns(self) -> list[str]:
         """Return the column names in the schema."""
         return self.time_array_id_columns + self.time_config.list_time_columns()
