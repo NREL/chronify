@@ -99,6 +99,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 ) = self._create_interm_map_with_time_zone()
         else:
             df, mapping_schema, mapped_schema = self._create_interm_map()
+
         apply_mapping(
             df,
             mapping_schema,
@@ -108,7 +109,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             self._metadata,
             TimeBasedDataAdjustment(),
             scratch_dir=scratch_dir,
-            output_file=output_file,
+            check_mapped_timestamps=False,
         )
 
         # Convert from represented datetime to dst time_config
