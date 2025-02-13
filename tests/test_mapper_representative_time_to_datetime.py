@@ -124,10 +124,8 @@ def test_one_week_per_month_by_hour_tz_naive(
     df["time_zone"] = df["id"].map(
         dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
     )
-    schema.time_array_id_columns += ["time_zone"]
 
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
     error = None
@@ -144,7 +142,6 @@ def test_one_week_per_month_by_hour_tz_aware(
     df, _, schema = one_week_per_month_by_hour_table_tz
 
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
     error = None
@@ -181,7 +178,6 @@ def test_one_weekday_day_and_one_weekend_day_per_month_by_hour_tz_aware(
     df, _, schema = one_weekday_day_and_one_weekend_day_per_month_by_hour_table_tz
 
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
     if interval_shift:
         to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
     error = None

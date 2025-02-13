@@ -3,7 +3,6 @@ from sqlalchemy import Engine, MetaData
 import pytest
 from datetime import timedelta
 from typing import Any, Optional
-import numpy as np
 
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_series_mapper import map_time
@@ -82,17 +81,31 @@ def data_for_unaligned_time_mapping(
     interval_shift: bool = False,
     standard_time: bool = False,
 ) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
-    src_df = pd.DataFrame(
-        {
-            "index_time": np.tile(range(1, 8761), 2),
-            "value": np.concatenate([range(1, 8761), range(10, 87610, 10)]),
-            "time_zone": np.repeat(["US/Mountain", "US/Central"], 8760),
-        }
+    time_array_len = 8760
+    src_df = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "index_time": range(1, time_array_len + 1),
+                    "value": range(1, time_array_len + 1),
+                    "time_zone": ["US/Mountain"] * time_array_len,
+                    "id": [1] * time_array_len,
+                },
+            ),
+            pd.DataFrame(
+                {
+                    "index_time": range(1, time_array_len + 1),
+                    "value": range(10, time_array_len * 10 + 10, 10),
+                    "time_zone": ["US/Central"] * time_array_len,
+                    "id": [2] * time_array_len,
+                },
+            ),
+        ]
     )
 
     time_config = IndexTimeRangeLocalTime(
         start=1,
-        length=8760,
+        length=time_array_len,
         start_timestamp=pd.Timestamp("2018-01-01 00:00"),
         resolution=timedelta(hours=1),
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
@@ -102,7 +115,7 @@ def data_for_unaligned_time_mapping(
     src_schema = TableSchema(
         name="input_data",
         time_config=time_config,
-        time_array_id_columns=[],
+        time_array_id_columns=["id"],
         value_column="value",
     )
     if interval_shift:
@@ -110,7 +123,7 @@ def data_for_unaligned_time_mapping(
     else:
         interval_type = TimeIntervalType.PERIOD_BEGINNING
     dst_schema = output_dst_schema(interval_type, standard_time=standard_time)
-    dst_schema.time_array_id_columns = ["time_zone"]
+    dst_schema.time_array_id_columns = ["id"]
     return src_df, src_schema, dst_schema
 
 
