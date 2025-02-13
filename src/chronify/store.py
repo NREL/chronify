@@ -833,6 +833,12 @@ class Store:
             Refers to the table name of the source data.
         dst_schema
             Defines the table to create in the database. Must not already exist.
+        data_adjustment
+            Defines how the dataframe may need to be adjusted with respect to time.
+            Data is only adjusted when the conditions apply.
+        wrap_time_allowed
+            Defines whether the time column is allowed to be wrapped according to the time
+            config in dst_schema when it does not line up with the time config
         scratch_dir
             Directory to use for temporary writes. Default to the system's tmp filesystem.
         check_mapped_timestamps

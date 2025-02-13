@@ -89,6 +89,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
                 self._dst_adjustment
                 == DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK
             ):
+                # TODO Issue #40
                 msg = "Cannot use daylight saving adjustment type: DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK for INDEX_LOCAL time"
                 raise NotImplementedError(msg)
             else:
