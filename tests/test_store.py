@@ -32,8 +32,8 @@ from chronify.exceptions import (
 )
 from chronify.models import ColumnDType, CsvTableSchema, PivotedTableSchema, TableSchema
 from chronify.store import Store
-from chronify.time import TimeIntervalType
-from chronify.time_configs import DatetimeRange
+from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
+from chronify.time_configs import DatetimeRange, IndexTimeRangeLocalTime, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import check_timestamp_lists
 from chronify.utils.sql import make_temp_view_name
@@ -505,7 +505,80 @@ def test_map_datetime_to_datetime(
     check_timestamp_lists(actual, expected)
 
 
-# TODO add test for index time
+def test_map_index_time_to_datetime(
+    tmp_path: Path, iter_stores_by_engine_no_data_ingestion: Store
+) -> None:
+    store = iter_stores_by_engine_no_data_ingestion
+    year = 2018
+    time_array_len = 8760
+    src_schema = TableSchema(
+        name="generators_index",
+        time_array_id_columns=["generator", "time_zone"],
+        value_column="value",
+        time_config=IndexTimeRangeLocalTime(
+            start=0,
+            length=time_array_len,
+            start_timestamp=pd.Timestamp(f"{year}-01-01 00:00"),
+            resolution=timedelta(hours=1),
+            interval_type=TimeIntervalType.PERIOD_BEGINNING,
+            time_column="index_time",
+            time_zone_column="time_zone",
+        ),
+    )
+    dst_schema = TableSchema(
+        name="generators_datetime",
+        time_array_id_columns=["generator"],
+        value_column="value",
+        time_config=DatetimeRange(
+            start=datetime(year=year, month=1, day=1, hour=1, tzinfo=ZoneInfo("EST")),
+            resolution=timedelta(hours=1),
+            length=time_array_len,
+            interval_type=TimeIntervalType.PERIOD_ENDING,
+            time_column="timestamp",
+        ),
+    )
+    time_zones = ("US/Eastern", "US/Central", "US/Mountain", "US/Pacific")
+    src_df = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "index_time": range(time_array_len),
+                    "value": range(i, i + time_array_len),
+                    "time_zone": [time_zone] * time_array_len,
+                    "generator": [f"gen{i}"] * time_array_len,
+                },
+            )
+            for i, time_zone in enumerate(time_zones)
+        ]
+    )
+    if store.engine.name == "hive":
+        out_file = tmp_path / "data.parquet"
+        src_df.to_parquet(out_file)
+        store.create_view_from_parquet(out_file, src_schema)
+    else:
+        store.ingest_table(src_df, src_schema)
+
+    if store.engine.name != "sqlite":
+        output_file = tmp_path / "mapped_data"
+    else:
+        output_file = None
+    store.map_table_time_config(
+        src_schema.name,
+        dst_schema,
+        output_file=output_file,
+        check_mapped_timestamps=True,
+        wrap_time_allowed=True,
+        data_adjustment=TimeBasedDataAdjustment(
+            daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
+        ),
+    )
+    if output_file is None or store.engine.name == "sqlite":
+        result = store.read_table(dst_schema.name)
+    else:
+        result = pd.read_parquet(output_file)
+
+    result.sort_values(by=["generator", "timestamp"], inplace=True)
+    # TODO: Decide how to verify
 
 
 def test_to_parquet(tmp_path, generators_schema):
