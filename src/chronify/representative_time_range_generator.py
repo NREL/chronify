@@ -8,7 +8,7 @@ from chronify.time import (
     RepresentativePeriodFormat,
 )
 from chronify.time import OneWeekPerMonthByHour, OneWeekdayDayOneWeekendDayPerMonthByHour
-from chronify.time_configs import RepresentativePeriodTime
+from chronify.time_configs import RepresentativePeriodTimeBase
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
     """Implements Behavior in the Representative Period Time."""
 
-    def __init__(self, model: RepresentativePeriodTime) -> None:
+    def __init__(self, model: RepresentativePeriodTimeBase) -> None:
         super().__init__()
         self._model = model
         self._handler: RepresentativeTimeFormatHandlerBase
@@ -56,6 +56,7 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
         df: pd.DataFrame,
         timestamp_col: str,
         time_zones: list[str],
+        time_zone_col: str,
     ) -> pd.DataFrame:
         """Create time zone-aware time mapping dataframe."""
         dfm = []
@@ -63,7 +64,7 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
             dft = df.copy()
             dft["timestamp_tmp"] = dft[timestamp_col].dt.tz_convert(tz)
             dft = self._handler.add_time_attribute_columns(dft, "timestamp_tmp")
-            dft["time_zone"] = tz
+            dft[time_zone_col] = tz
             dfm.append(dft.drop(columns=["timestamp_tmp"]))
         return pd.concat(dfm, ignore_index=True)
 

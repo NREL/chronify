@@ -131,3 +131,4 @@ dmypy.json
 .pixi
 
 .DS_Store
+.vscode

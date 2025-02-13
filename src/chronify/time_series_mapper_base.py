@@ -15,12 +15,11 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import (
-    ConflictingInputsError,
-)
+from chronify.exceptions import ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
+from chronify.time_configs import TimeBasedDataAdjustment
 
 
 class TimeSeriesMapperBase(abc.ABC):
@@ -32,13 +31,20 @@ class TimeSeriesMapperBase(abc.ABC):
         metadata: MetaData,
         from_schema: TableSchema,
         to_schema: TableSchema,
+        data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
         self._from_schema = from_schema
         self._to_schema = to_schema
-        # self._from_time_config = from_schema.time_config
-        # self._to_time_config = to_schema.time_config
+        # data_adjustment is used in mapping creation and time check of mapped time
+        self._data_adjustment = data_adjustment or TimeBasedDataAdjustment()
+        self._wrap_time_allowed = wrap_time_allowed
+        self._adjust_interval = (
+            self._from_schema.time_config.interval_type
+            != self._to_schema.time_config.interval_type
+        )
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:
@@ -84,6 +90,7 @@ def apply_mapping(
     to_schema: TableSchema,
     engine: Engine,
     metadata: MetaData,
+    data_adjustment: TimeBasedDataAdjustment,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -121,7 +128,12 @@ def apply_mapping(
             mapped_table = Table(to_schema.name, metadata)
             with engine.connect() as conn:
                 try:
-                    check_timestamps(conn, mapped_table, to_schema)
+                    check_timestamps(
+                        conn,
+                        mapped_table,
+                        to_schema,
+                        leap_day_adjustment=data_adjustment.leap_day_adjustment,
+                    )
                 except Exception:
                     logger.exception(
                         "check_timestamps failed on mapped table {}. Drop it",
@@ -171,10 +183,15 @@ def _apply_mapping(
     select_stmt += [right_table.c[x] for x in right_cols]
 
     keys = from_schema.time_config.list_time_columns()
-    # infer the use of time_zone
-    if "from_time_zone" in right_table_columns:
-        keys.append("time_zone")
-        assert "time_zone" in left_table_columns, f"time_zone not in table={from_schema.name}"
+    # check time_zone
+    tz_col = from_schema.time_config.get_time_zone_column()
+    if tz_col is not None:
+        keys.append(tz_col)
+        assert tz_col in left_table_columns, f"{tz_col} not in table={from_schema.name}"
+        ftz_col = "from_" + tz_col
+        assert (
+            ftz_col in right_table_columns
+        ), f"{ftz_col} not in mapping table={mapping_table_name}"
 
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)

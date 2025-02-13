@@ -24,7 +24,7 @@ import pandas as pd
 from chronify import (
     DatetimeRange,
     RepresentativePeriodFormat,
-    RepresentativePeriodTime,
+    RepresentativePeriodTimeNTZ,
     Store,
     CsvTableSchema,
     TableSchema,
@@ -44,7 +44,7 @@ df = pd.DataFrame({
 schema = TableSchema(
     name=src_table_name,
     value_column="value",
-    time_config=RepresentativePeriodTime(
+    time_config=RepresentativePeriodTimeNTZ(
         time_format=RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR,
     ),
     time_array_id_columns=["id"],

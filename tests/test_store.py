@@ -4,6 +4,7 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from itertools import chain
 
 import duckdb
 import numpy as np
@@ -32,8 +33,8 @@ from chronify.exceptions import (
 )
 from chronify.models import ColumnDType, CsvTableSchema, PivotedTableSchema, TableSchema
 from chronify.store import Store
-from chronify.time import TimeIntervalType
-from chronify.time_configs import DatetimeRange
+from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
+from chronify.time_configs import DatetimeRange, IndexTimeRangeLocalTime, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import check_timestamp_lists
 from chronify.utils.sql import make_temp_view_name
@@ -375,20 +376,19 @@ def test_load_parquet(iter_stores_by_engine_no_data_ingestion: Store, tmp_path):
         (False, 2021),
     ],
 )
-def test_map_datetime_to_one_week_per_month_by_hour(
+def test_map_one_week_per_month_by_hour_to_datetime(
     tmp_path,
     iter_stores_by_engine_no_data_ingestion: Store,
     one_week_per_month_by_hour_table,
+    one_week_per_month_by_hour_table_tz,
     params: tuple[bool, int],
 ):
     store = iter_stores_by_engine_no_data_ingestion
     use_time_zone, year = params
-    df, num_time_arrays, src_schema = one_week_per_month_by_hour_table
     if use_time_zone:
-        df["time_zone"] = df["id"].map(
-            dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
-        )
-        src_schema.time_array_id_columns += ["time_zone"]
+        df, num_time_arrays, src_schema = one_week_per_month_by_hour_table_tz
+    else:
+        df, num_time_arrays, src_schema = one_week_per_month_by_hour_table
     tzinfo = ZoneInfo("America/Denver") if use_time_zone else None
     time_array_len = 8784 if year % 4 == 0 else 8760
     dst_schema = TableSchema(
@@ -504,6 +504,101 @@ def test_map_datetime_to_datetime(
     assert actual[0] == src_schema.time_config.start + timedelta(hours=1)
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
     check_timestamp_lists(actual, expected)
+
+
+def test_map_index_time_to_datetime(
+    tmp_path: Path, iter_stores_by_engine_no_data_ingestion: Store
+) -> None:
+    store = iter_stores_by_engine_no_data_ingestion
+    year = 2018
+    time_array_len = 8760
+    src_schema = TableSchema(
+        name="generators_index",
+        time_array_id_columns=["generator", "time_zone"],
+        value_column="value",
+        time_config=IndexTimeRangeLocalTime(
+            start=0,
+            length=time_array_len,
+            start_timestamp=pd.Timestamp(f"{year}-01-01 00:00"),
+            resolution=timedelta(hours=1),
+            interval_type=TimeIntervalType.PERIOD_BEGINNING,
+            time_column="index_time",
+            time_zone_column="time_zone",
+        ),
+    )
+    dst_schema = TableSchema(
+        name="generators_datetime",
+        time_array_id_columns=["generator"],
+        value_column="value",
+        time_config=DatetimeRange(
+            start=datetime(year=year, month=1, day=1, hour=1, tzinfo=ZoneInfo("EST")),
+            resolution=timedelta(hours=1),
+            length=time_array_len,
+            interval_type=TimeIntervalType.PERIOD_ENDING,
+            time_column="timestamp",
+        ),
+    )
+    time_zones = ("US/Eastern", "US/Central", "US/Mountain", "US/Pacific")
+    src_df = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "index_time": range(time_array_len),
+                    "value": range(i, i + time_array_len),
+                    "time_zone": [time_zone] * time_array_len,
+                    "generator": [f"gen{i}"] * time_array_len,
+                },
+            )
+            for i, time_zone in enumerate(time_zones)
+        ]
+    )
+    if store.engine.name == "hive":
+        out_file = tmp_path / "data.parquet"
+        src_df.to_parquet(out_file)
+        store.create_view_from_parquet(out_file, src_schema)
+    else:
+        store.ingest_table(src_df, src_schema)
+
+    if store.engine.name != "sqlite":
+        output_file = tmp_path / "mapped_data"
+    else:
+        output_file = None
+    store.map_table_time_config(
+        src_schema.name,
+        dst_schema,
+        output_file=output_file,
+        check_mapped_timestamps=True,
+        wrap_time_allowed=True,
+        data_adjustment=TimeBasedDataAdjustment(
+            daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
+        ),
+    )
+    if output_file is None or store.engine.name == "sqlite":
+        result = store.read_table(dst_schema.name)
+    else:
+        result = pd.read_parquet(output_file)
+
+    # Format data for display
+    result = result.sort_values(by=["generator", "timestamp"]).reset_index(drop=True)[
+        ["generator", "timestamp", "value"]
+    ]
+    result["timestamp"] = result["timestamp"].dt.tz_convert(dst_schema.time_config.start.tzinfo)
+
+    # Check skips, dups, and time-wrapped values
+    for i in range(len(time_zones)):
+        df = result.loc[result["generator"] == f"gen{i}"].reset_index(drop=True)
+        val_skipped, val_dupped = 1658 + i, 7369 + i
+        expected_values = np.roll(
+            list(
+                chain(
+                    range(i, val_skipped),
+                    range(val_skipped + 1, val_dupped + 1),
+                    range(val_dupped, i + time_array_len),
+                )
+            ),
+            i,
+        )
+        assert np.array_equal(df["value"].values, expected_values)
 
 
 def test_to_parquet(tmp_path, generators_schema):

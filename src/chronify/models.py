@@ -35,6 +35,9 @@ class TableSchemaBase(ChronifyBaseModel):
     def check_time_config(cls, time_config: TimeConfig) -> TimeConfig:
         for column in time_config.list_time_columns():
             _check_name(column)
+        tz_column = time_config.get_time_zone_column()
+        if tz_column is not None:
+            _check_name(tz_column)
         return time_config
 
     @field_validator("time_array_id_columns")

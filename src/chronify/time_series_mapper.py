@@ -6,7 +6,13 @@ from chronify.models import TableSchema
 
 from chronify.time_series_mapper_representative import MapperRepresentativeTimeToDatetime
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
-from chronify.time_configs import RepresentativePeriodTime, DatetimeRange
+from chronify.time_series_mapper_index_time import MapperIndexTimeToDatetime
+from chronify.time_configs import (
+    DatetimeRange,
+    IndexTimeRangeBase,
+    RepresentativePeriodTimeBase,
+    TimeBasedDataAdjustment,
+)
 
 
 def map_time(
@@ -14,16 +20,19 @@ def map_time(
     metadata: MetaData,
     from_schema: TableSchema,
     to_schema: TableSchema,
+    data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+    wrap_time_allowed: bool = False,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
 ) -> None:
     """Function to map time using the appropriate TimeSeriesMapper model."""
-
-    if isinstance(from_schema.time_config, RepresentativePeriodTime) and isinstance(
+    if isinstance(from_schema.time_config, RepresentativePeriodTimeBase) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
-        MapperRepresentativeTimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
+        MapperRepresentativeTimeToDatetime(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
@@ -31,7 +40,19 @@ def map_time(
     elif isinstance(from_schema.time_config, DatetimeRange) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
-        MapperDatetimeToDatetime(engine, metadata, from_schema, to_schema).map_time(
+        MapperDatetimeToDatetime(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        ).map_time(
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
+        )
+    elif isinstance(from_schema.time_config, IndexTimeRangeBase) and isinstance(
+        to_schema.time_config, DatetimeRange
+    ):
+        MapperIndexTimeToDatetime(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,

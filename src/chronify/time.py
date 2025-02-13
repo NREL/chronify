@@ -12,8 +12,11 @@ class TimeType(StrEnum):
 
     DATETIME = "datetime"
     ANNUAL = "annual"
-    REPRESENTATIVE_PERIOD = "representative_period"
-    INDEX = "index"
+    INDEX_NTZ = "index_ntz"
+    INDEX_TZ = "index_tz"
+    INDEX_LOCAL = "index_local"
+    REPRESENTATIVE_PERIOD_NTZ = "representative_period_ntz"
+    REPRESENTATIVE_PERIOD_TZ = "representative_period_tz"
 
 
 class DatetimeFormat(StrEnum):
@@ -71,18 +74,11 @@ class LeapDayAdjustmentType(StrEnum):
     NONE = "none"
 
 
-class DaylightSavingSpringForwardType(StrEnum):
-    """Daylight saving spring forward adjustment enum types"""
+class DaylightSavingAdjustmentType(StrEnum):
+    """Daylight saving data adjustment enum types"""
 
-    DROP = "drop"
-    NONE = "none"
-
-
-class DaylightSavingFallBackType(StrEnum):
-    """Daylight saving fall back adjustment enum types"""
-
-    INTERPOLATE = "interpolate"
-    DUPLICATE = "duplicate"
+    DROP_SPRING_FORWARD_DUPLICATE_FALLBACK = "drop_spring_forward_duplicate_fallback"
+    DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK = "drop_spring_forward_interpolate_fallback"
     NONE = "none"
 
 

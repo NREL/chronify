@@ -82,7 +82,7 @@ def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> N
 def _convert_database_input_for_datetime(
     df: pd.DataFrame, config: DatetimeRange, copied: bool
 ) -> tuple[pd.DataFrame, bool]:
-    if config.is_time_zone_naive():
+    if config.start_time_is_tz_naive():
         return df, copied
 
     if copied:
@@ -101,7 +101,7 @@ def _convert_database_input_for_datetime(
 
 def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> None:
     if config.time_column in df.columns:
-        if not config.is_time_zone_naive():
+        if not config.start_time_is_tz_naive():
             if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=True)
             else:
@@ -181,7 +181,7 @@ def _read_from_hive(
     query: Selectable | str, conn: Connection, config: TimeBaseModel, params: Any = None
 ) -> pd.DataFrame:
     df = pd.read_sql_query(query, conn, params=params)
-    if isinstance(config, DatetimeRange) and not config.is_time_zone_naive():
+    if isinstance(config, DatetimeRange) and not config.start_time_is_tz_naive():
         # This is tied to the fact that we set the Spark session to UTC.
         # Otherwise, there is confusion with the computer's local time zone.
         df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")

@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
@@ -8,48 +9,55 @@ from sqlalchemy import Engine, MetaData
 from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
-from chronify.time_configs import DatetimeRange
+from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_utils import roll_time_interval
+from chronify.time_utils import roll_time_interval, wrap_timestamps
 
 logger = logging.getLogger(__name__)
 
 
 class MapperDatetimeToDatetime(TimeSeriesMapperBase):
     def __init__(
-        self, engine: Engine, metadata: MetaData, from_schema: TableSchema, to_schema: TableSchema
+        self,
+        engine: Engine,
+        metadata: MetaData,
+        from_schema: TableSchema,
+        to_schema: TableSchema,
+        data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
     ) -> None:
-        super().__init__(engine, metadata, from_schema, to_schema)
-        if from_schema == to_schema:
-            msg = (
-                f"From table schema is the same as to table schema. Nothing to do.\n{from_schema}"
-            )
+        super().__init__(
+            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+        )
+        if self._from_schema == self._to_schema and self._data_adjustment is None:
+            msg = f"from_schema is the same as to_schema and no data_adjustment, nothing to do.\n{self._from_schema}"
             logger.info(msg)
-            return
-        if not isinstance(from_schema.time_config, DatetimeRange):
+        if not isinstance(self._from_schema.time_config, DatetimeRange):
             msg = "Source schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
-        if not isinstance(to_schema.time_config, DatetimeRange):
+        if not isinstance(self._to_schema.time_config, DatetimeRange):
             msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
-        self._from_time_config = from_schema.time_config
-        self._to_time_config = to_schema.time_config
+        self._from_time_config: DatetimeRange = self._from_schema.time_config
+        self._to_time_config: DatetimeRange = self._to_schema.time_config
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
         self._check_table_columns_producibility()
         self._check_measurement_type_consistency()
         self._check_time_interval_type()
-        self._check_time_resolution_and_length()
+        self._check_time_resolution()
+        self._check_time_length()
 
-    def _check_time_resolution_and_length(self) -> None:
+    def _check_time_resolution(self) -> None:
         if self._from_time_config.resolution != self._to_time_config.resolution:
             msg = "Handling of changing time resolution is not supported yet."
             raise NotImplementedError(msg)
 
+    def _check_time_length(self) -> None:
         flen, tlen = self._from_time_config.length, self._to_time_config.length
-        if flen != tlen:
-            msg = f"DatetimeRange length must match between from_schema and to_schema. {flen} vs. {tlen}"
+        if flen != tlen and not self._wrap_time_allowed:
+            msg = f"Length must match between {self._from_schema.__class__} from_schema and {self._to_schema.__class__} to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
             raise ConflictingInputsError(msg)
 
     def map_time(
@@ -68,6 +76,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             self._to_schema,
             self._engine,
             self._metadata,
+            self._data_adjustment,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
@@ -80,29 +89,47 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         """
         from_time_col = "from_" + self._from_time_config.time_column
         to_time_col = self._to_time_config.time_column
-        to_time_data = make_time_range_generator(self._to_time_config).list_timestamps()
+        from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
+        to_time_data = make_time_range_generator(
+            self._to_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
+        ).list_timestamps()
+
+        ser_from = pd.Series(from_time_data)
+        # If from_tz or to_tz is naive, use tz_localize
+        fm_tz = self._from_time_config.start.tzinfo
+        to_tz = self._to_time_config.start.tzinfo
+        match (fm_tz is None, to_tz is None):
+            case (True, False):
+                # get standard time zone of to_tz
+                year = self._to_time_config.start.year
+                to_tz_std = datetime(year=year, month=1, day=1, tzinfo=to_tz).tzname()
+                # tz-naive time does not have skips/dups, so always localize in std tz first
+                ser_from = ser_from.dt.tz_localize(to_tz_std).dt.tz_convert(to_tz)
+            case (False, True):
+                ser_from = ser_from.dt.tz_localize(to_tz)
+        match (self._adjust_interval, self._wrap_time_allowed):
+            case (True, _):
+                ser = roll_time_interval(
+                    ser_from,
+                    self._from_time_config.interval_type,
+                    self._to_time_config.interval_type,
+                    to_time_data,
+                )
+            case (False, True):
+                ser = wrap_timestamps(ser_from, to_time_data)
+            case (False, False):
+                ser = pd.Series(to_time_data)
+
         df = pd.DataFrame(
             {
-                from_time_col: make_time_range_generator(self._from_time_config).list_timestamps(),
+                from_time_col: from_time_data,
+                to_time_col: ser,
             }
         )
-        if self._from_time_config.interval_type != self._to_time_config.interval_type:
-            # If from_tz or to_tz is naive, use tz_localize
-            fm_tz = self._from_time_config.start.tzinfo
-            to_tz = self._to_time_config.start.tzinfo
-            from_timestamps = df[from_time_col]
-            if None in (fm_tz, to_tz) and (fm_tz, to_tz) != (None, None):
-                from_timestamps = from_timestamps.dt.tz_localize(to_tz)
 
-            df[to_time_col] = roll_time_interval(
-                from_timestamps,
-                self._from_time_config.interval_type,
-                self._to_time_config.interval_type,
-                to_time_data,
-            )
-        else:
-            df[to_time_col] = to_time_data
-
+        assert (
+            df[to_time_col].nunique() == self._to_time_config.length
+        ), "to_time_col does not have the right number of timestamps"
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col
         mapping_schema = MappingTableSchema(

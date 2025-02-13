@@ -45,7 +45,7 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.schema_manager import SchemaManager
-from chronify.time_configs import DatetimeRange, IndexTimeRange
+from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDataAdjustment
 from chronify.time_series_checker import check_timestamps
 from chronify.time_series_mapper import map_time
 from chronify.utils.path_utils import check_overwrite, to_path
@@ -463,7 +463,7 @@ class Store:
         check_columns(rel.columns, columns)
 
         # TODO
-        if isinstance(src_schema.time_config, IndexTimeRange):
+        if isinstance(src_schema.time_config, IndexTimeRangeBase):
             if isinstance(dst_schema.time_config, DatetimeRange):
                 raise NotImplementedError
                 # timestamps = IndexTimeRangeGenerator(src_schema.time_config).list_timestamps()
@@ -478,7 +478,7 @@ class Store:
                 # )
             else:
                 cls_name = dst_schema.time_config.__class__.__name__
-                msg = f"IndexTimeRange cannot be converted to {cls_name}"
+                msg = f"{src_schema.time_config.__class__.__name__} cannot be converted to {cls_name}"
                 raise NotImplementedError(msg)
 
         if src_schema.pivoted_dimension_name is not None:
@@ -818,6 +818,8 @@ class Store:
         self,
         src_name: str,
         dst_schema: TableSchema,
+        data_adjustment: Optional[TimeBasedDataAdjustment] = None,
+        wrap_time_allowed: bool = False,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
@@ -831,6 +833,12 @@ class Store:
             Refers to the table name of the source data.
         dst_schema
             Defines the table to create in the database. Must not already exist.
+        data_adjustment
+            Defines how the dataframe may need to be adjusted with respect to time.
+            Data is only adjusted when the conditions apply.
+        wrap_time_allowed
+            Defines whether the time column is allowed to be wrapped according to the time
+            config in dst_schema when it does not line up with the time config
         scratch_dir
             Directory to use for temporary writes. Default to the system's tmp filesystem.
         check_mapped_timestamps
@@ -863,7 +871,7 @@ class Store:
         >>> schema = TableSchema(
         ...     name="devices_by_representative_time",
         ...     value_column="value",
-        ...     time_config=RepresentativePeriodTime(
+        ...     time_config=RepresentativePeriodTimeNTZ(
         ...         time_format=RepresentativePeriodFormat.ONE_WEEK_PER_MONTH_BY_HOUR,
         ...     ),
         ...     time_array_id_columns=["id"],
@@ -894,6 +902,8 @@ class Store:
             self._metadata,
             src_schema,
             dst_schema,
+            data_adjustment=data_adjustment,
+            wrap_time_allowed=wrap_time_allowed,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,

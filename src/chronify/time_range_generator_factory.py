@@ -1,10 +1,13 @@
+from typing import Optional
+
 from chronify.time_configs import (
     AnnualTimeRange,
     DatetimeRange,
-    IndexTimeRange,
-    RepresentativePeriodTime,
+    IndexTimeRangeBase,
+    RepresentativePeriodTimeBase,
     TimeBaseModel,
 )
+from chronify.time import LeapDayAdjustmentType
 from chronify.annual_time_range_generator import AnnualTimeRangeGenerator
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 from chronify.index_time_range_generator import IndexTimeRangeGenerator
@@ -12,15 +15,18 @@ from chronify.representative_time_range_generator import RepresentativePeriodTim
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 
 
-def make_time_range_generator(model: TimeBaseModel) -> TimeRangeGeneratorBase:
+def make_time_range_generator(
+    model: TimeBaseModel,
+    leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
+) -> TimeRangeGeneratorBase:
     match model:
         case DatetimeRange():
-            return DatetimeRangeGenerator(model)
+            return DatetimeRangeGenerator(model, leap_day_adjustment=leap_day_adjustment)
         case AnnualTimeRange():
             return AnnualTimeRangeGenerator(model)
-        case IndexTimeRange():
+        case IndexTimeRangeBase():
             return IndexTimeRangeGenerator(model)
-        case RepresentativePeriodTime():
+        case RepresentativePeriodTimeBase():
             return RepresentativePeriodTimeGenerator(model)
         case _:
             msg = str(type(model))

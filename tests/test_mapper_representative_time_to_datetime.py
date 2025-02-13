@@ -1,16 +1,16 @@
-import pandas as pd
-from sqlalchemy import Engine, MetaData
 from zoneinfo import ZoneInfo
 import pytest
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Optional
+
+import pandas as pd
+from sqlalchemy import Engine, MetaData
 
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.time_series_mapper import map_time
 from chronify.time_configs import DatetimeRange
 from chronify.models import TableSchema
 from chronify.time import TimeIntervalType
-from chronify.exceptions import MissingParameter
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 
 
@@ -38,20 +38,12 @@ def get_datetime_schema(year: int, tzinfo: ZoneInfo | None) -> TableSchema:
     return schema
 
 
-def add_time_zone_data(df: pd.DataFrame, schema: TableSchema) -> tuple[pd.DataFrame, TableSchema]:
-    df["time_zone"] = df["id"].map(
-        dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
-    )
-    schema.time_array_id_columns += ["time_zone"]
-    return df, schema
-
-
 def run_test(
     engine: Engine,
     df: pd.DataFrame,
     from_schema: TableSchema,
     to_schema: TableSchema,
-    error: tuple[Any, str],
+    error: Optional[tuple[Any, str]],
 ) -> None:
     # Ingest
     metadata = MetaData()
@@ -119,50 +111,76 @@ def check_mapped_values(dfo: pd.DataFrame, dfi: pd.DataFrame, time_delta: timede
     assert len(diff) == 0, f"Mapped values are inconsistent. {diff}"
 
 
-@pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Pacific"), None])
-def test_one_week_per_month_by_hour(
+@pytest.mark.parametrize("interval_shift", [False, True])
+def test_one_week_per_month_by_hour_tz_naive(
     iter_engines: Engine,
     one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema],
-    tzinfo: ZoneInfo | None,
+    interval_shift: bool,
 ) -> None:
+    tzinfo = None
     df, _, schema = one_week_per_month_by_hour_table
-    df, schema = add_time_zone_data(df, schema)  # allowed in tz-naive
+    # For tz-naive case, time_zone can exist in the table and not get used,
+    # but it needs to be added to time_array_id.
+    df["time_zone"] = df["id"].map(
+        dict(zip([1, 2, 3], ["US/Central", "US/Mountain", "US/Pacific"]))
+    )
 
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
-    error = ()
+    if interval_shift:
+        to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
-@pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
-def test_one_weekday_day_and_one_weekend_day_per_month_by_hour(
+@pytest.mark.parametrize("interval_shift", [False, True])
+def test_one_week_per_month_by_hour_tz_aware(
+    iter_engines: Engine,
+    one_week_per_month_by_hour_table_tz: tuple[pd.DataFrame, int, TableSchema],
+    interval_shift: bool,
+) -> None:
+    tzinfo = ZoneInfo("US/Pacific")
+    df, _, schema = one_week_per_month_by_hour_table_tz
+
+    to_schema = get_datetime_schema(2020, tzinfo)
+    if interval_shift:
+        to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
+    error = None
+    run_test(iter_engines, df, schema, to_schema, error)
+
+
+@pytest.mark.parametrize("interval_shift", [False, True])
+def test_one_weekday_day_and_one_weekend_day_per_month_by_hour_tz_naive(
     iter_engines: Engine,
     one_weekday_day_and_one_weekend_day_per_month_by_hour_table: tuple[
         pd.DataFrame, int, TableSchema
     ],
-    tzinfo: ZoneInfo | None,
+    interval_shift: bool,
 ) -> None:
+    tzinfo = None
     df, _, schema = one_weekday_day_and_one_weekend_day_per_month_by_hour_table
+
     to_schema = get_datetime_schema(2020, tzinfo)
-    if tzinfo is not None:
-        df, schema = add_time_zone_data(df, schema)
-        to_schema.time_array_id_columns += ["time_zone"]
-    error = ()
+    if interval_shift:
+        to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
-@pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
-def test_time_interval_shift(
+@pytest.mark.parametrize("interval_shift", [False, True])
+def test_one_weekday_day_and_one_weekend_day_per_month_by_hour_tz_aware(
     iter_engines: Engine,
-    one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema],
-    tzinfo: ZoneInfo | None,
+    one_weekday_day_and_one_weekend_day_per_month_by_hour_table_tz: tuple[
+        pd.DataFrame, int, TableSchema
+    ],
+    interval_shift: bool,
 ) -> None:
-    df, _, schema = one_week_per_month_by_hour_table
-    df, schema = add_time_zone_data(df, schema)
+    tzinfo = ZoneInfo("US/Eastern")
+    df, _, schema = one_weekday_day_and_one_weekend_day_per_month_by_hour_table_tz
+
     to_schema = get_datetime_schema(2020, tzinfo)
-    to_schema.time_array_id_columns += ["time_zone"]
-    to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
-    error = ()
+    if interval_shift:
+        to_schema.time_config.interval_type = TimeIntervalType.PERIOD_ENDING
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
 
 
@@ -174,18 +192,5 @@ def test_instantaneous_interval_type(
     schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
     to_schema = get_datetime_schema(2020, None)
     to_schema.time_config.interval_type = TimeIntervalType.INSTANTANEOUS
-    error = ()
-    run_test(iter_engines, df, schema, to_schema, error)
-
-
-def test_missing_time_zone(
-    iter_engines: Engine, one_week_per_month_by_hour_table: tuple[pd.DataFrame, int, TableSchema]
-) -> None:
-    df, _, schema = one_week_per_month_by_hour_table
-
-    to_schema = get_datetime_schema(2020, ZoneInfo("US/Mountain"))
-    error = (
-        MissingParameter,
-        "time_zone is required for tz-aware representative time mapping and must be part of the time_array_id_columns for source table",
-    )
+    error = None
     run_test(iter_engines, df, schema, to_schema, error)
