@@ -755,7 +755,7 @@ class Store:
         try:
             if connection is None:
                 with self._engine.begin() as conn:
-                    created_table = self._ingest_tables(conn, data, schema)
+                    created_table = self._ingest_tables(conn, data, schema, **kwargs)
             else:
                 created_table = self._ingest_tables(connection, data, schema, **kwargs)
         except Exception:
