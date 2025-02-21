@@ -152,7 +152,8 @@ class TimeSeriesChecker:
 
 
 def check_timestamp_lists(actual: list[pd.Timestamp], expected: list[pd.Timestamp]) -> None:
-    match = set(actual) == set(expected)
+    match = actual == expected
+    breakpoint()
     if not match:
         if len(actual) != len(expected):
             msg = f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}\n"

@@ -61,9 +61,14 @@ class ColumnRepresentativeTimeGenerator(TimeRangeGeneratorBase):
                 self._model.month_column,
                 self._model.day_column,
             ]
-            df = df[int_columns].astype(int).drop_duplicates()
+            df = df[int_columns].astype(int).drop_duplicates().sort_values(int_columns)
         else:
-            df = df[self._time_columns].astype(int)
+            df = (
+                df[self._time_columns]
+                .astype(int)
+                .drop_duplicates()
+                .sort_values(self._time_columns)
+            )
         return df.to_records(index=False).tolist()
 
     def list_time_columns(self):
