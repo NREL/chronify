@@ -215,6 +215,68 @@ class RepresentativePeriodTimeTZ(RepresentativePeriodTimeBase):
         return self.time_zone_column
 
 
+class ColumnRepresentativeBase(TimeBaseModel):
+    year: Optional[int] = Field(description="Year to use for the time.", default=None)
+    length: int = Field(description="Length of time series arrays, number of hours.")
+    month_column: str = Field(description="Column in the table that represents the month.")
+    day_column: str = Field(description="Column in the table that represents the day.")
+    hour_columns: list[str] = Field(
+        description="Columns in the table that represent the hour.",
+        default=[str(x) for x in range(1, 25)],
+    )
+    is_pivoted: bool = Field(description="True if the data is pivoted")
+
+
+class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
+    length: int = Field(description="Number of days covered by an individual time series array")
+    time_type: Literal[TimeType.YEAR_MONTH_DAY_PERIOD_NTZ] = TimeType.YEAR_MONTH_DAY_PERIOD_NTZ
+    year_column: str = Field(description="Column in the table that represents the year.")
+
+    @field_validator("hour_columns", mode="before")
+    @classmethod
+    def one_hour_column(cls, value: list[str]) -> list[str]:
+        if len(value) != 1:
+            msg = "YearMonthDayPeriodTimeNTZ requires exactly one hour column."
+            raise ValueError(msg)
+        return value
+
+    def list_time_columns(self) -> list[str]:
+        return [self.year_column, self.month_column, self.day_column, *self.hour_columns]
+
+    def get_time_zone_column(self) -> None:
+        return None
+
+
+class YearMonthDayHourTimeNTZ(ColumnRepresentativeBase):
+    """Defines a tz-naive time dimension that uses year, month, and day columns."""
+
+    time_type: Literal[TimeType.YEAR_MONTH_DAY_HOUR_NTZ] = TimeType.YEAR_MONTH_DAY_HOUR_NTZ
+    year_column: str = Field(description="Column in the table that represents the year.")
+
+    def list_time_columns(self) -> list[str]:
+        return [self.year_column, self.month_column, self.day_column, *self.hour_columns]
+
+    def get_time_zone_column(self) -> None:
+        return None
+
+
+class MonthDayHourTimeNTZ(ColumnRepresentativeBase):
+    """Defines a tz-naive time dimension that uses month, and day columns."""
+
+    time_type: Literal[TimeType.MONTH_DAY_HOUR_NTZ] = TimeType.MONTH_DAY_HOUR_NTZ
+
+    def list_time_columns(self) -> list[str]:
+        return [self.month_column, self.day_column, *self.hour_columns]
+
+    def get_time_zone_column(self) -> None:
+        return None
+
+
+ColumnRepresentativeTimes = Union[
+    YearMonthDayPeriodTimeNTZ, YearMonthDayHourTimeNTZ, MonthDayHourTimeNTZ
+]
+
+
 RepresentativePeriodTimes = Union[
     RepresentativePeriodTimeNTZ,
     RepresentativePeriodTimeTZ,
@@ -229,6 +291,9 @@ TimeConfig = Annotated[
         IndexTimeRangeLocalTime,
         RepresentativePeriodTimeNTZ,
         RepresentativePeriodTimeTZ,
+        YearMonthDayPeriodTimeNTZ,
+        YearMonthDayHourTimeNTZ,
+        MonthDayHourTimeNTZ,
     ],
     Field(
         description="Defines the times in a time series table.",
