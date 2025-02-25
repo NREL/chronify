@@ -216,6 +216,8 @@ class RepresentativePeriodTimeTZ(RepresentativePeriodTimeBase):
 
 
 class ColumnRepresentativeBase(TimeBaseModel):
+    """Base class for time formats that use multiple integer columns to represent time."""
+
     year: Optional[int] = Field(description="Year to use for the time.", default=None)
     length: int = Field(description="Length of time series arrays, number of hours.")
     month_column: str = Field(description="Column in the table that represents the month.")
@@ -224,10 +226,19 @@ class ColumnRepresentativeBase(TimeBaseModel):
         description="Columns in the table that represent the hour.",
         default=[str(x) for x in range(1, 25)],
     )
-    is_pivoted: bool = Field(description="True if the data is pivoted")
+
+    @property
+    def n_timestamps(self) -> int:
+        """Returns the expected number of unique timestamps given the input length"""
+        return self.length
 
 
 class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
+    """
+    Time config for data with time stored as year, month, day, period columns.
+    Period represents a range of hours like H1-5 (hours 1 through 5).
+    """
+
     length: int = Field(description="Number of days covered by an individual time series array")
     time_type: Literal[TimeType.YEAR_MONTH_DAY_PERIOD_NTZ] = TimeType.YEAR_MONTH_DAY_PERIOD_NTZ
     year_column: str = Field(description="Column in the table that represents the year.")
@@ -245,6 +256,10 @@ class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
 
     def get_time_zone_column(self) -> None:
         return None
+
+    @property
+    def n_timestamps(self) -> int:
+        return int(self.length / 24)
 
 
 class YearMonthDayHourTimeNTZ(ColumnRepresentativeBase):
