@@ -1,5 +1,5 @@
 from pathlib import Path
-from chronify.plexos_time_series import PlexosTimeSeriesFormats, PlexosTimeSeriesParser
+from chronify.csv_time_series_parser import CsvTimeSeriesFormats, CsvTimeSeriesParser
 from tempfile import NamedTemporaryFile
 import pytest
 
@@ -37,30 +37,30 @@ def time_series_NYMDPV():
 
 
 """
-case PlexosTimeSeriesFormats.TS_NMDH:
+case CsvTimeSeriesFormats.TS_NMDH:
     pass
-case PlexosTimeSeriesFormats.TS_NYMDH:
+case CsvTimeSeriesFormats.TS_NYMDH:
     pass
-case PlexosTimeSeriesFormats.TS_NYMDPV:
+case CsvTimeSeriesFormats.TS_NYMDPV:
     pass
 """
 
 
 def test_NMDH_parser(time_series_NMDH, iter_engines):
-    parser = PlexosTimeSeriesParser(iter_engines)
-    parser.ingest_to_datetime(time_series_NMDH)
+    parser = CsvTimeSeriesParser(iter_engines)
+    parser.ingest_to_datetime(time_series_NMDH, "test_NMDH", 2023, 48)
 
 
 def test_NYMDH_parser(time_series_NYMDH, iter_engines):
-    parser = PlexosTimeSeriesParser(iter_engines)
-    parser.ingest_to_datetime(time_series_NYMDH)
+    parser = CsvTimeSeriesParser(iter_engines)
+    parser.ingest_to_datetime(time_series_NYMDH, "test_NYMDH", 2025, 48)
 
 
 def test_NYMDPV_parser(time_series_NYMDPV, iter_engines):
-    parser = PlexosTimeSeriesParser(iter_engines)
-    parser.ingest_to_datetime(time_series_NYMDPV)
+    parser = CsvTimeSeriesParser(iter_engines)
+    parser.ingest_to_datetime(time_series_NYMDPV, "test_NYMDPV", 2025, 24)
 
 
 def test_plexos():
     columns = ["name", "year", "month", "day", "period", "value"]
-    _tmp = PlexosTimeSeriesFormats.from_columns(columns)
+    _tmp = CsvTimeSeriesFormats.from_columns(columns)
