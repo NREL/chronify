@@ -38,7 +38,6 @@ def test_MDH_mapper(time_series_NMDH, iter_store: Store):
             month_column="month",
             day_column="day",
             hour_columns=["hour"],
-            is_pivoted=False,
         ),
         time_array_id_columns=["name"],
     )
@@ -50,7 +49,6 @@ def test_MDH_mapper(time_series_NMDH, iter_store: Store):
             year=2023,
             month_column="month",
             day_column="day",
-            is_pivoted=True,
         ),
     )
     data = pd.read_csv(time_series_NMDH)
@@ -91,7 +89,6 @@ def test_YMDH_mapper(time_series_NYMDH, iter_store):
             month_column="month",
             day_column="day",
             hour_columns=["hour"],
-            is_pivoted=False,
         ),
         time_array_id_columns=["name"],
     )
@@ -104,7 +101,6 @@ def test_YMDH_mapper(time_series_NYMDH, iter_store):
             year_column="year",
             month_column="month",
             day_column="day",
-            is_pivoted=True,
         ),
     )
     data = pd.read_csv(time_series_NYMDH)
@@ -145,7 +141,6 @@ def test_NYMDPV_mapper(time_series_NYMDPV, iter_store: Store):
             month_column="month",
             day_column="day",
             hour_columns=["period"],
-            is_pivoted=False,
         ),
         time_array_id_columns=["name"],
     )

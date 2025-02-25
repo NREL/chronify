@@ -12,7 +12,7 @@ from chronify.time_configs import (
     YearMonthDayPeriodTimeNTZ,
     MonthDayHourTimeNTZ,
     DatetimeRange,
-    ColumnRepresentativeTimes,
+    ColumnRepresentativeBase,
 )
 from chronify.datetime_range_generator import DatetimeRangeGenerator
 from chronify.models import MappingTableSchema, TableSchema
@@ -21,6 +21,22 @@ from chronify.utils.sqlalchemy_table import create_table
 
 
 class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
+
+    """
+    Mapper class to convert column representative time to datetime.
+
+    Example:
+        | year | month | day | hour | value |
+        |------|-------|-----|------|-------|
+        | 2024 |   2   |  15 |  10  |  123  |
+
+        converts to:
+        |     timestamp     | value |
+        |-------------------|-------|
+        | 2024-02-15T10:0:0 |  123  |
+
+    """
+
     def __init__(
         self,
         engine,
@@ -29,21 +45,21 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         to_schema,
         data_adjustment=None,
         wrap_time_allowed=False,
-    ):
+    ) -> None:
         super().__init__(
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         )
 
-        self._validate_time_configs(ColumnRepresentativeTimes, DatetimeRange)
+        self._validate_time_configs(ColumnRepresentativeBase, DatetimeRange)
         self._to_time_config: DatetimeRange = to_schema.time_config
-        self._from_time_config: ColumnRepresentativeTimes = from_schema.time_config
+        self._from_time_config: ColumnRepresentativeBase = from_schema.time_config
 
     def map_time(
         self,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
-    ):
+    ) -> None:
         from_schema = self._from_schema
         drop_table = None
         if isinstance(self._from_time_config, YearMonthDayHourTimeNTZ):
@@ -59,6 +75,9 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
             df_mapping, mapping_schema = self._create_YMDH_mapping(
                 col_names=int_mapping.time_config.list_time_columns()
             )
+        else:
+            msg = f"No mapping available for {type(self._from_time_config)}"
+            raise InvalidParameter(msg)
 
         apply_mapping(
             df_mapping,
@@ -78,11 +97,11 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
                 table_type = "view" if self._engine.name == "hive" else "table"
                 conn.execute(sa.text(f"DROP {table_type} IF EXISTS {drop_table}"))
 
-    def check_schema_consistency(self):
+    def check_schema_consistency(self) -> None:
         if isinstance(self._from_time_config, MonthDayHourTimeNTZ):
             self._validate_MDH_time_config()
 
-    def _validate_length_and_resolution(self):
+    def _validate_length_and_resolution(self) -> None:
         # not true for all input time config types
         if self._from_time_config.length != self._to_time_config.length:
             msg = "Length of time series arrays must match."
@@ -96,7 +115,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
             msg = "Year is required for MDH time range to be converter to DatetimeRange."
             raise InvalidParameter(msg)
 
-    def _intermediate_mapping_YMDP_to_YMDH(self):
+    def _intermediate_mapping_YMDP_to_YMDH(self) -> TableSchema:
         """Convert YMDP to YMDH for intermediate mapping."""
         mapping_table_name = "intermediate_YMDP_to_YMDH"
         period_col = self._from_time_config.hour_columns[0]
@@ -136,7 +155,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
 
     def _create_intermediate_YMDH_schema(
         self, table_name: str, schema: TableSchema, time_config: YearMonthDayPeriodTimeNTZ
-    ):
+    ) -> TableSchema:
         """Create intermediate schema for YMDH time range from YMDP schema."""
         return TableSchema(
             name=table_name,
@@ -148,7 +167,6 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
                 month_column=time_config.month_column,
                 day_column=time_config.day_column,
                 hour_columns=["hour"],
-                is_pivoted=False,
             ),
             time_array_id_columns=schema.time_array_id_columns,
         )
@@ -158,8 +176,8 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         yield from datetime_generator.iter_timestamps()
 
     def _create_YMDH_mapping(
-        self, col_names: list[str, str, str, str] = ["year", "month", "day", "hour"]
-    ):
+        self, col_names: list[str] = ["year", "month", "day", "hour"]
+    ) -> tuple[pd.DataFrame, MappingTableSchema]:
         """create mapping table and schema for YMDH time range."""
         row_generator = map(lambda ts: (ts, *YMDH_from_datetime(ts)), self._iter_datetime())
         df_mapping = pd.DataFrame(
@@ -171,21 +189,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         )
         return df_mapping, mapping_schema
 
-    # def _create_YMDPV_mapping(self):
-    #     """ create mapping table and schema for YMDPV time range. """
-    #     # row_generator = map(lambda ts: (ts, *YMDPV_from_datetime(ts)), self._iter_datetime())
-    #     period_col = self._from_time_config.hour_columns[0]
-    #     with self._engine.begin() as conn:
-    #         periods = read_database(f"SELECT DISTINCT {period_col} FROM {self._from_schema.name}", conn, self._from_time_config)
-    #     df_mapping = generate_period_mapping(periods.iloc[:, 0])
-
-    #     mapping_schema = MappingTableSchema(
-    #         name="YMDPV_mapping_table",
-    #         time_configs=[self._to_time_config, self._from_time_config],
-    #     )
-    #     return df_mapping, mapping_schema
-
-    def _create_MDH_mapping(self):
+    def _create_MDH_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema]:
         """create mapping table and schema for MDH time range."""
         row_generator = map(lambda ts: (ts, *MDH_from_datetime(ts)), self._iter_datetime())
         df_mapping = pd.DataFrame(
@@ -202,7 +206,7 @@ def YMDH_from_datetime(timestamp: datetime) -> tuple[int, int, int, int]:
     return timestamp.year, timestamp.month, timestamp.day, timestamp.hour + 1
 
 
-def MDH_from_datetime(timestamp: datetime) -> tuple[int, int, int, int]:
+def MDH_from_datetime(timestamp: datetime) -> tuple[int, int, int]:
     return timestamp.month, timestamp.day, timestamp.hour + 1
 
 
