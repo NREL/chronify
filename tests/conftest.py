@@ -225,7 +225,9 @@ def temp_csv_file(data: str):
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp_file:
         tmp_file.write(data)
         tmp_file.flush()
-        return Path(tmp_file.name)
+        yield Path(tmp_file.name)
+
+    tmp_file.unlink()
 
 
 @pytest.fixture

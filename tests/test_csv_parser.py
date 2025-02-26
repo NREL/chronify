@@ -1,5 +1,5 @@
 from pathlib import Path
-from chronify.csv_time_series_parser import CsvTimeSeriesFormats, CsvTimeSeriesParser
+from chronify.csv_time_series_parser import CsvTimeSeriesParser
 from tempfile import NamedTemporaryFile
 import pytest
 
@@ -36,16 +36,6 @@ def time_series_NYMDPV():
     return temp_csv_file(header + data)
 
 
-"""
-case CsvTimeSeriesFormats.TS_NMDH:
-    pass
-case CsvTimeSeriesFormats.TS_NYMDH:
-    pass
-case CsvTimeSeriesFormats.TS_NYMDPV:
-    pass
-"""
-
-
 def test_NMDH_parser(time_series_NMDH, iter_engines):
     parser = CsvTimeSeriesParser(iter_engines)
     parser.ingest_to_datetime(time_series_NMDH, "test_NMDH", 2023, 48)
@@ -59,8 +49,3 @@ def test_NYMDH_parser(time_series_NYMDH, iter_engines):
 def test_NYMDPV_parser(time_series_NYMDPV, iter_engines):
     parser = CsvTimeSeriesParser(iter_engines)
     parser.ingest_to_datetime(time_series_NYMDPV, "test_NYMDPV", 2025, 24)
-
-
-def test_plexos():
-    columns = ["name", "year", "month", "day", "period", "value"]
-    _tmp = CsvTimeSeriesFormats.from_columns(columns)
