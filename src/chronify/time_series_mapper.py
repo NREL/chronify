@@ -15,7 +15,7 @@ from chronify.time_configs import (
     IndexTimeRangeBase,
     RepresentativePeriodTimeBase,
     TimeBasedDataAdjustment,
-    ColumnRepresentativeTimes,
+    ColumnRepresentativeBase,
     YearMonthDayPeriodTimeNTZ,
 )
 
@@ -62,7 +62,7 @@ def map_time(
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
         )
-    elif isinstance(from_schema.time_config, ColumnRepresentativeTimes) and isinstance(
+    elif isinstance(from_schema.time_config, ColumnRepresentativeBase) and isinstance(
         to_schema.time_config, DatetimeRange
     ):
         # No way to generate expected timestamps for YearMonthDayPeriodTimeNTZ

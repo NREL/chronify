@@ -88,7 +88,7 @@ class PivotedTableSchema(TableSchemaBase):
         "an unpivot operation.",
     )
     value_columns: list[str] = Field(description="Columns in the table that contain values.")
-    time_array_id_columns: list = []
+    time_array_id_columns: list[str] = []
 
     @field_validator("value_columns")
     @classmethod

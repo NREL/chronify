@@ -116,11 +116,12 @@ class CsvTimeSeriesParser:
     def _read_data_file(data_file: Path) -> pd.DataFrame:
         return pd.read_csv(data_file, header=0, dtype=COLUMN_DTYPES)
 
-    def _ingest_data(self, data: pd.DataFrame, table_name: str, year: int, length: int):
+    def _ingest_data(self, data: pd.DataFrame, table_name: str, year: int, length: int) -> None:
         csv_fmt = CsvTimeSeriesFormats.from_columns(data.columns)
         src_schema, dst_schema = self._create_schemas(csv_fmt, table_name, year, length)
         match csv_fmt:
             case fmt if fmt in PIVOTED_TABLES:
+                assert src_schema is not None
                 self._store.ingest_pivoted_table(data, src_schema, dst_schema)
             case fmt if fmt in UNPIVOTED_TABLES:
                 self._store.ingest_table(data, dst_schema, bypass_time_checks=True)
@@ -180,7 +181,9 @@ class CsvTimeSeriesParser:
 
         return pivoted_schema, table_schema
 
-    def ingest_to_datetime(self, data_file: Path, table_name: str, data_year: int, length: int):
+    def ingest_to_datetime(
+        self, data_file: Path, table_name: str, data_year: int, length: int
+    ) -> None:
         """
         Given a file of csv time series data, convert the time format to datetime timestamps
         and ingest into database
