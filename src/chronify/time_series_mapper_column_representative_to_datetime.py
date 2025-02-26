@@ -55,12 +55,12 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         if not isinstance(to_schema.time_config, DatetimeRange):
             msg = "Target schema does not have DatetimeRange time config. Use a different mapper."
             raise InvalidParameter(msg)
-        if not isinstance(from_schema.time_config, ColumnRepresentativeTimes):
+        if not isinstance(from_schema.time_config, ColumnRepresentativeBase):
             msg = "Source schema does not have a ColumnRepresentative time config. Use a different mapper."
             raise InvalidParameter(msg)
 
         self._to_time_config: DatetimeRange = to_schema.time_config
-        self._from_time_config: ColumnRepresentativeBase = from_schema.time_config
+        self._from_time_config: ColumnRepresentativeTimes = from_schema.time_config
 
     def map_time(
         self,
@@ -118,7 +118,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
             msg = "Resolution of destination schema must be 1 hour."
             raise InvalidParameter(msg)
 
-    def _validate_mdh_time_config(self):
+    def _validate_mdh_time_config(self) -> None:
         if self._from_time_config.year is None:
             msg = "Year is required for mdh time range to be converter to DatetimeRange."
             raise InvalidParameter(msg)
@@ -157,6 +157,9 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         intermediate_ymdh_table_name = "intermediate_Ymdh"
         create_table(intermediate_ymdh_table_name, query, self._engine, self._metadata)
 
+        assert isinstance(
+            self._from_time_config, YearMonthDayPeriodTimeNTZ
+        ), "Intermediate mapping only valid for YearMonthDayPeriodNTZ time config"
         return self._create_intermediate_ymdh_schema(
             intermediate_ymdh_table_name, self._from_schema, self._from_time_config
         )
@@ -218,7 +221,7 @@ def mdh_from_datetime(timestamp: datetime) -> tuple[int, int, int]:
     return timestamp.month, timestamp.day, timestamp.hour + 1
 
 
-def generate_period_mapping(periods: pd.Series[str]) -> pd.DataFrame:
+def generate_period_mapping(periods: pd.Series) -> pd.DataFrame:  # type: ignore
     unique_periods = periods.unique()
     mappings = []
     for period_str in unique_periods:
