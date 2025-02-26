@@ -225,7 +225,8 @@ def temp_csv_file(data: str):
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp_file:
         tmp_file.write(data)
         tmp_file.flush()
-        yield Path(tmp_file.name)
+        tmp_file = Path(tmp_file.name)
+        yield tmp_file
 
     tmp_file.unlink()
 
@@ -235,7 +236,9 @@ def time_series_NMDH():
     hours = ",".join((str(x) for x in range(1, 25)))
     load1 = ",".join((str(x) for x in range(25, 49)))
     load2 = ",".join((str(x) for x in range(49, 73)))
-    return temp_csv_file(f"name,month,day,{hours}\nGeneration,1,1,{load1}\nGeneration,1,2,{load2}")
+    yield from temp_csv_file(
+        f"name,month,day,{hours}\nGeneration,1,1,{load1}\nGeneration,1,2,{load2}"
+    )
 
 
 @pytest.fixture
@@ -243,7 +246,7 @@ def time_series_NYMDH():
     hours = ",".join((str(x) for x in range(1, 25)))
     load1 = ",".join((str(x) for x in range(25, 49)))
     load2 = ",".join((str(x) for x in range(49, 73)))
-    return temp_csv_file(
+    yield from temp_csv_file(
         f"name,year,month,day,{hours}\ntest_generator,2023,1,1,{load1}\ntest_generator,2023,1,2,{load2}"
     )
 
@@ -252,4 +255,4 @@ def time_series_NYMDH():
 def time_series_NYMDPV():
     header = "name,year,month,day,period,value\n"
     data = "test_generator,2023,1,1,H1-5,100\ntest_generator,2023,1,1,H6-12,200\ntest_generator,2023,1,1,H13-24,300\ntest_generator,2023,1,2,H1-24,400"
-    return temp_csv_file(header + data)
+    yield from temp_csv_file(header + data)
