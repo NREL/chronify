@@ -236,6 +236,11 @@ class ColumnRepresentativeBase(TimeBaseModel):
     def check_timestamps(self) -> bool:
         return True
 
+    @classmethod
+    @abc.abstractmethod
+    def default_config(cls, length: int, year: int) -> "ColumnRepresentativeBase":
+        """Returns the default config for given parameters."""
+
 
 class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
     """
@@ -269,6 +274,17 @@ class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
     def check_timestamps(self) -> bool:
         return False
 
+    @classmethod
+    def default_config(cls, length: int, year: int) -> "YearMonthDayPeriodTimeNTZ":
+        return cls(
+            hour_columns=["period"],
+            day_column="day",
+            month_column="month",
+            year_column="year",
+            year=year,
+            length=length,
+        )
+
 
 class YearMonthDayHourTimeNTZ(ColumnRepresentativeBase):
     """Defines a tz-naive time dimension that uses year, month, and day columns."""
@@ -282,6 +298,17 @@ class YearMonthDayHourTimeNTZ(ColumnRepresentativeBase):
     def get_time_zone_column(self) -> None:
         return None
 
+    @classmethod
+    def default_config(cls, length: int, year: int) -> "YearMonthDayHourTimeNTZ":
+        return cls(
+            hour_columns=["hour"],
+            day_column="day",
+            month_column="month",
+            year_column="year",
+            year=year,
+            length=length,
+        )
+
 
 class MonthDayHourTimeNTZ(ColumnRepresentativeBase):
     """Defines a tz-naive time dimension that uses month, and day columns."""
@@ -293,6 +320,16 @@ class MonthDayHourTimeNTZ(ColumnRepresentativeBase):
 
     def get_time_zone_column(self) -> None:
         return None
+
+    @classmethod
+    def default_config(cls, length: int, year: int) -> "MonthDayHourTimeNTZ":
+        return cls(
+            hour_columns=["hour"],
+            day_column="day",
+            month_column="month",
+            year=year,
+            length=length,
+        )
 
 
 ColumnRepresentativeTimes = Union[
