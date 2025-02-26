@@ -13,6 +13,7 @@ from chronify.time_configs import (
     MonthDayHourTimeNTZ,
     DatetimeRange,
     ColumnRepresentativeBase,
+    ColumnRepresentativeTimes,
     TimeBasedDataAdjustment,
 )
 from chronify.datetime_range_generator import DatetimeRangeGenerator
@@ -51,7 +52,13 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         )
 
-        self._validate_time_configs(ColumnRepresentativeBase, DatetimeRange)
+        if not isinstance(to_schema.time_config, DatetimeRange):
+            msg = "Target schema does not have DatetimeRange time config. Use a different mapper."
+            raise InvalidParameter(msg)
+        if not isinstance(from_schema.time_config, ColumnRepresentativeTimes):
+            msg = "Source schema does not have a ColumnRepresentative time config. Use a different mapper."
+            raise InvalidParameter(msg)
+
         self._to_time_config: DatetimeRange = to_schema.time_config
         self._from_time_config: ColumnRepresentativeBase = from_schema.time_config
 
