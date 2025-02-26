@@ -7,7 +7,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData
 
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import ConflictingInputsError
+from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -32,7 +32,12 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         if self._from_schema == self._to_schema and self._data_adjustment is None:
             msg = f"from_schema is the same as to_schema and no data_adjustment, nothing to do.\n{self._from_schema}"
             logger.info(msg)
-        self._validate_time_configs(DatetimeRange, DatetimeRange)
+        if not isinstance(self._from_schema.time_config, DatetimeRange):
+            msg = "Source schema does not have DatetimeRange time config. Use a different mapper."
+            raise InvalidParameter(msg)
+        if not isinstance(self._to_schema.time_config, DatetimeRange):
+            msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
+            raise InvalidParameter(msg)
         self._from_time_config: DatetimeRange = self._from_schema.time_config
         self._to_time_config: DatetimeRange = self._to_schema.time_config
 

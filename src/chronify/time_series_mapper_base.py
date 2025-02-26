@@ -15,11 +15,11 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import ConflictingInputsError, InvalidParameter
+from chronify.exceptions import ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType
-from chronify.time_configs import TimeBasedDataAdjustment, TimeConfig
+from chronify.time_configs import TimeBasedDataAdjustment
 
 
 class TimeSeriesMapperBase(abc.ABC):
@@ -81,16 +81,6 @@ class TimeSeriesMapperBase(abc.ABC):
     @abc.abstractmethod
     def map_time(self) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
-
-    def _validate_time_configs(
-        self, expected_src_time_config: TimeConfig, expected_dst_time_config: TimeConfig
-    ):
-        if not isinstance(self._from_schema.time_config, expected_src_time_config):
-            msg = f"Source schema does not have {expected_src_time_config.__class__.__name__} time config. Use a different mapper."
-            raise InvalidParameter(msg)
-        if not isinstance(self._to_schema.time_config, expected_dst_time_config):
-            msg = f"Destination schema does not have {expected_dst_time_config.__class__.__name__} time config. Use a different mapper."
-            raise InvalidParameter(msg)
 
 
 def apply_mapping(

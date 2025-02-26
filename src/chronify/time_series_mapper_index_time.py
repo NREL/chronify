@@ -6,7 +6,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
 
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import ConflictingInputsError
+from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import (
     DatetimeRange,
@@ -37,7 +37,12 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         )
         self._dst_adjustment = self._data_adjustment.daylight_saving_adjustment
-        self._validate_time_configs(IndexTimeRangeBase, DatetimeRange)
+        if not isinstance(self._from_schema.time_config, IndexTimeRangeBase):
+            msg = "Source schema does not have IndexTimeRangeBase time config. Use a different mapper."
+            raise InvalidParameter(msg)
+        if not isinstance(self._to_schema.time_config, DatetimeRange):
+            msg = "Destination schema does not have DatetimeRange time config. Use a different mapper."
+            raise InvalidParameter(msg)
         self._from_time_config: IndexTimeRanges = self._from_schema.time_config
         self._to_time_config: DatetimeRange = self._to_schema.time_config
 

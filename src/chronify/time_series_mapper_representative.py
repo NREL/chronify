@@ -7,6 +7,9 @@ from sqlalchemy import Engine, MetaData, Table, select
 
 from chronify.sqlalchemy.functions import read_database
 from chronify.models import TableSchema, MappingTableSchema
+from chronify.exceptions import (
+    InvalidParameter,
+)
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.representative_time_range_generator import RepresentativePeriodTimeGenerator
@@ -34,7 +37,12 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         super().__init__(
             engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
         )
-        self._validate_time_configs(RepresentativePeriodTimeBase, DatetimeRange)
+        if not isinstance(from_schema.time_config, RepresentativePeriodTimeBase):
+            msg = "source schema does not have RepresentativePeriodTimeBase time config. Use a different mapper."
+            raise InvalidParameter(msg)
+        if not isinstance(to_schema.time_config, DatetimeRange):
+            msg = "destination schema does not have DatetimeRange time config. Use a different mapper."
+            raise InvalidParameter(msg)
         self._from_time_config: RepresentativePeriodTimes = from_schema.time_config
         self._to_time_config: DatetimeRange = to_schema.time_config
         self._generator = RepresentativePeriodTimeGenerator(self._from_time_config)
