@@ -232,6 +232,10 @@ class ColumnRepresentativeBase(TimeBaseModel):
         """Returns the expected number of unique timestamps given the input length"""
         return self.length
 
+    @property
+    def check_timestamps(self) -> bool:
+        return True
+
 
 class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
     """
@@ -260,6 +264,10 @@ class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
     @property
     def n_timestamps(self) -> int:
         return int(self.length / 24)
+
+    @property
+    def check_timestamps(self) -> bool:
+        return False
 
 
 class YearMonthDayHourTimeNTZ(ColumnRepresentativeBase):
