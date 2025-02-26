@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from enum import Enum
+from functools import singledispatch
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import Engine
@@ -7,6 +8,7 @@ from sqlalchemy import Engine
 
 from chronify import exceptions
 from chronify.time_configs import (
+    ColumnRepresentativeTimes,
     YearMonthDayHourTimeNTZ,
     MonthDayHourTimeNTZ,
     YearMonthDayPeriodTimeNTZ,
@@ -135,34 +137,15 @@ class CsvTimeSeriesParser:
         pivoted_dimension_name = "hour"
         value_columns = [str(x) for x in range(1, 25)]
 
+        time_config: ColumnRepresentativeTimes
         match csv_fmt:
             case CsvTimeSeriesFormats.TS_NMDH:
-                time_config = MonthDayHourTimeNTZ(
-                    hour_columns=["hour"],
-                    day_column="day",
-                    month_column="month",
-                    year=year,
-                    length=length,
-                )
+                time_config = default_time_config(MonthDayHourTimeNTZ, year, length)
             case CsvTimeSeriesFormats.TS_NYMDH:
-                time_config = YearMonthDayHourTimeNTZ(
-                    hour_columns=["hour"],
-                    day_column="day",
-                    month_column="month",
-                    year_column="year",
-                    year=year,
-                    length=length,
-                )
+                time_config = default_time_config(YearMonthDayHourTimeNTZ, year, length)
             case CsvTimeSeriesFormats.TS_NYMDPV:
                 create_pivoted_schema = False
-                time_config = YearMonthDayPeriodTimeNTZ(
-                    hour_columns=["period"],
-                    day_column="day",
-                    month_column="month",
-                    year_column="year",
-                    year=year,
-                    length=length,
-                )
+                time_config = default_time_config(YearMonthDayPeriodTimeNTZ, year, length)
 
         table_schema = TableSchema(
             name=name,
@@ -191,3 +174,47 @@ class CsvTimeSeriesParser:
         self._check_input_format(data_file)
         df = self._read_data_file(data_file)
         self._ingest_data(df, table_name, data_year, length)
+
+
+@singledispatch
+def default_time_config(time_config_type, year: int, length: int) -> ColumnRepresentativeTimes:  # type: ignore
+    pass
+
+
+@default_time_config.register(type(YearMonthDayPeriodTimeNTZ))
+def _(
+    time_config_type: type[YearMonthDayPeriodTimeNTZ], year: int, length: int
+) -> YearMonthDayPeriodTimeNTZ:
+    return time_config_type(
+        hour_columns=["period"],
+        day_column="day",
+        month_column="month",
+        year_column="year",
+        year=year,
+        length=length,
+    )
+
+
+@default_time_config.register(type(YearMonthDayHourTimeNTZ))
+def _(
+    time_config_type: type[YearMonthDayHourTimeNTZ], year: int, length: int
+) -> YearMonthDayHourTimeNTZ:
+    return time_config_type(
+        hour_columns=["hour"],
+        day_column="day",
+        month_column="month",
+        year_column="year",
+        year=year,
+        length=length,
+    )
+
+
+@default_time_config.register(type(MonthDayHourTimeNTZ))
+def _(time_config_type: type[MonthDayHourTimeNTZ], year: int, length: int) -> MonthDayHourTimeNTZ:
+    return time_config_type(
+        hour_columns=["hour"],
+        day_column="day",
+        month_column="month",
+        year=year,
+        length=length,
+    )
