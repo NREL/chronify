@@ -1,6 +1,7 @@
 from pathlib import Path
 from chronify.csv_time_series_parser import CsvTimeSeriesParser
 from tempfile import NamedTemporaryFile
+from chronify.store import Store
 import pytest
 
 
@@ -37,15 +38,18 @@ def time_series_NYMDPV():
 
 
 def test_NMDH_parser(time_series_NMDH, iter_engines):
-    parser = CsvTimeSeriesParser(iter_engines)
+    store = Store(iter_engines)
+    parser = CsvTimeSeriesParser(store)
     parser.ingest_to_datetime(time_series_NMDH, "test_NMDH", 2023, 48)
 
 
 def test_NYMDH_parser(time_series_NYMDH, iter_engines):
-    parser = CsvTimeSeriesParser(iter_engines)
+    store = Store(iter_engines)
+    parser = CsvTimeSeriesParser(store)
     parser.ingest_to_datetime(time_series_NYMDH, "test_NYMDH", 2025, 48)
 
 
 def test_NYMDPV_parser(time_series_NYMDPV, iter_engines):
-    parser = CsvTimeSeriesParser(iter_engines)
+    store = Store(iter_engines)
+    parser = CsvTimeSeriesParser(store)
     parser.ingest_to_datetime(time_series_NYMDPV, "test_NYMDPV", 2025, 24)

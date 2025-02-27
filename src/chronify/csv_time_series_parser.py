@@ -102,8 +102,8 @@ UNPIVOTED_TABLES = {CsvTimeSeriesFormats.TS_NYMDPV}
 
 
 class CsvTimeSeriesParser:
-    def __init__(self, store: Store | None = None) -> None:
-        self._store = store or Store()
+    def __init__(self, store: Store) -> None:
+        self._store = store
 
     @staticmethod
     def _check_input_format(data_file: Path) -> None:
