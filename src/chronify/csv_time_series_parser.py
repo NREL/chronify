@@ -5,7 +5,7 @@ import pandas as pd
 from sqlalchemy import Engine
 
 
-from chronify import exceptions
+from chronify.exceptions import InvalidValue
 from chronify.time_configs import (
     ColumnRepresentativeTimes,
     YearMonthDayHourTimeNTZ,
@@ -95,11 +95,11 @@ class CsvTimeSeriesFormats(Enum):
                 return selected_enum
 
         msg = f"No format for columns: {columns}"
-        raise exceptions.InvalidValue(msg)
+        raise InvalidValue(msg)
 
 
-PIVOTED_TABLES = [CsvTimeSeriesFormats.TS_NMDH, CsvTimeSeriesFormats.TS_NYMDH]
-UNPIVOTED_TABLES = [CsvTimeSeriesFormats.TS_NYMDPV]
+PIVOTED_TABLES = {CsvTimeSeriesFormats.TS_NMDH, CsvTimeSeriesFormats.TS_NYMDH}
+UNPIVOTED_TABLES = {CsvTimeSeriesFormats.TS_NYMDPV}
 
 
 class CsvTimeSeriesParser:
@@ -111,7 +111,7 @@ class CsvTimeSeriesParser:
         valid_extensions = [".csv"]
         if data_file.suffix not in valid_extensions:
             msg = f"{data_file.name} does not have a file extension in the supported extensions: {valid_extensions}"
-            raise exceptions.InvalidValue(msg)
+            raise InvalidValue(msg)
 
     @staticmethod
     def _read_data_file(data_file: Path) -> pd.DataFrame:

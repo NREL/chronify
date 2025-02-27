@@ -16,7 +16,7 @@ from chronify.time_range_generator_base import TimeRangeGeneratorBase
 class ColumnRepresentativeTimeGenerator(TimeRangeGeneratorBase):
     """
     Class to generate time for integer based representative time like:
-        (year, month, day, hour) or (month, day, hour) as examples
+        (year, month, day, hour) or (month, day, hour) as examples.
     """
 
     def __init__(self, model: ColumnRepresentativeBase):
@@ -48,13 +48,23 @@ class ColumnRepresentativeTimeGenerator(TimeRangeGeneratorBase):
 
 
 class ColumnRepresentativeHandlerBase:
+    """
+    Base class for handling timestamps in different Column Representative formats.
+
+    Methods
+    -------
+    list_distinct_timestamps_from_dataframe
+        list the unique timestamps as a tuple of integers (for example (2024, 12, 31, 7) for year, month, day, hour)
+        given a dataframe of time representing columns
+    """
+
     @abc.abstractmethod
     def _iter_timestamps(self) -> Generator[tuple[int, ...], None, None]:
         """Iterates over a tuples that represent times from column schema."""
 
     @abc.abstractmethod
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[tuple[int, ...]]:
-        """Returns all unique tuples of representative column time"""
+        """Returns all unique tuples of representative column time, sorted by longest to shortest duration columns (year > month > day > hour)."""
 
 
 class ColumnRepresentativeHandlerHourly(ColumnRepresentativeHandlerBase):
@@ -65,7 +75,9 @@ class ColumnRepresentativeHandlerHourly(ColumnRepresentativeHandlerBase):
 
     def _iter_timestamps(self) -> Generator[tuple[int, ...], None, None]:
         for dt in pd.date_range(
-            start=datetime(self._year, 1, 1), periods=self._model.n_timestamps, freq="1h"
+            start=datetime(self._year, 1, 1),
+            periods=self._model.unique_timestamps_length,
+            freq="1h",
         ):
             if isinstance(self._model, YearMonthDayHourTimeNTZ):
                 yield dt.year, dt.month, dt.day, dt.hour + 1
@@ -85,7 +97,9 @@ class ColumnRepresentativeHandlerPeriod(ColumnRepresentativeHandlerBase):
 
     def _iter_timestamps(self) -> Generator[tuple[int, ...], None, None]:
         for dt in pd.date_range(
-            start=datetime(self._year, 1, 1), periods=self._model.n_timestamps, freq="1D"
+            start=datetime(self._year, 1, 1),
+            periods=self._model.unique_timestamps_length,
+            freq="1D",
         ):
             yield dt.year, dt.month, dt.day
 
@@ -95,5 +109,8 @@ class ColumnRepresentativeHandlerPeriod(ColumnRepresentativeHandlerBase):
             self._model.month_column,
             self._model.day_column,
         ]
+        assert all(
+            col in df.columns for col in int_columns
+        ), f"Not all {int_columns=}, are in the input dataframe {df.columns=}"
         df = df[int_columns].astype(int).drop_duplicates().sort_values(int_columns)
         return df.to_records(index=False).tolist()  # type: ignore

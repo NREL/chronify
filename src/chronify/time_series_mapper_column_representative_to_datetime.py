@@ -27,16 +27,26 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
     """
     Mapper class to convert column representative time to datetime.
 
-    Example:
-        | year | month | day | hour | value |
-        |------|-------|-----|------|-------|
-        | 2024 |   2   |  15 |  10  |  123  |
+    Example
+    -------
 
-    converts to:
-        |      timestamp      | value |
-        |---------------------|-------|
-        | 2024-02-15T10:00:00 |  123  |
+    Given the input row:
 
+    | year | month | day | hour | value |
+    |------|-------|-----|------|-------|
+    | 2024 |   2   |  15 |  10  |  123  |
+
+    Convert the row to datetime:
+
+    |      timestamp      | value |
+    |---------------------|-------|
+    | 2024-02-15T10:00:00 |  123  |
+
+    Methods
+    -------
+
+    map_time
+        maps the column representative time to datetime in the provided sql engine.
     """
 
     def __init__(

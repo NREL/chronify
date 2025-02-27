@@ -218,7 +218,7 @@ class RepresentativePeriodTimeTZ(RepresentativePeriodTimeBase):
 class ColumnRepresentativeBase(TimeBaseModel):
     """Base class for time formats that use multiple integer columns to represent time."""
 
-    year: Optional[int] = Field(description="Year to use for the time.", default=None)
+    year: int | None = Field(description="Year to use for the time.", default=None)
     length: int = Field(description="Length of time series arrays, number of hours.")
     month_column: str = Field(description="Column in the table that represents the month.")
     day_column: str = Field(description="Column in the table that represents the day.")
@@ -228,7 +228,7 @@ class ColumnRepresentativeBase(TimeBaseModel):
     )
 
     @property
-    def n_timestamps(self) -> int:
+    def unique_timestamps_length(self) -> int:
         """Returns the expected number of unique timestamps given the input length"""
         return self.length
 
@@ -267,7 +267,7 @@ class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
         return None
 
     @property
-    def n_timestamps(self) -> int:
+    def unique_timestamps_length(self) -> int:
         return int(self.length / 24)
 
     @property
