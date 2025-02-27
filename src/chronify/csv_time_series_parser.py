@@ -2,7 +2,6 @@ from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
 import pandas as pd
-from sqlalchemy import Engine
 
 
 from chronify.exceptions import InvalidValue
@@ -103,8 +102,8 @@ UNPIVOTED_TABLES = {CsvTimeSeriesFormats.TS_NYMDPV}
 
 
 class CsvTimeSeriesParser:
-    def __init__(self, engine: Engine | None = None) -> None:
-        self._store = Store(engine=engine)
+    def __init__(self, store: Store | None = None) -> None:
+        self._store = store or Store()
 
     @staticmethod
     def _check_input_format(data_file: Path) -> None:
