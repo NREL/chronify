@@ -17,6 +17,9 @@ class TimeType(StrEnum):
     INDEX_LOCAL = "index_local"
     REPRESENTATIVE_PERIOD_NTZ = "representative_period_ntz"
     REPRESENTATIVE_PERIOD_TZ = "representative_period_tz"
+    YEAR_MONTH_DAY_HOUR_NTZ = "year_month_day_hour"
+    MONTH_DAY_HOUR_NTZ = "month_day_hour"
+    YEAR_MONTH_DAY_PERIOD_NTZ = "year_month_day_period"
 
 
 class DatetimeFormat(StrEnum):

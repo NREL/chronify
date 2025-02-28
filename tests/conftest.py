@@ -1,14 +1,16 @@
 import os
 from typing import Any, Generator
-
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 import numpy as np
 import pandas as pd
 import pytest
+
 from sqlalchemy import Engine, create_engine, text
+
 from chronify.models import TableSchema
 from chronify.store import Store
 from chronify.time import RepresentativePeriodFormat
-
 from chronify.time_configs import RepresentativePeriodTimeNTZ, RepresentativePeriodTimeTZ
 
 
@@ -217,3 +219,40 @@ def one_weekday_day_and_one_weekend_day_per_month_by_hour_table_tz() -> (
         time_array_id_columns=["id"],
     )
     return df, num_time_arrays, schema
+
+
+def temp_csv_file(data: str):
+    with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp_file:
+        tmp_file.write(data)
+        tmp_file.flush()
+        tmp_file = Path(tmp_file.name)
+        yield tmp_file
+
+    tmp_file.unlink()
+
+
+@pytest.fixture
+def time_series_NMDH():
+    hours = ",".join((str(x) for x in range(1, 25)))
+    load1 = ",".join((str(x) for x in range(25, 49)))
+    load2 = ",".join((str(x) for x in range(49, 73)))
+    yield from temp_csv_file(
+        f"name,month,day,{hours}\nGeneration,1,1,{load1}\nGeneration,1,2,{load2}"
+    )
+
+
+@pytest.fixture
+def time_series_NYMDH():
+    hours = ",".join((str(x) for x in range(1, 25)))
+    load1 = ",".join((str(x) for x in range(25, 49)))
+    load2 = ",".join((str(x) for x in range(49, 73)))
+    yield from temp_csv_file(
+        f"name,year,month,day,{hours}\ntest_generator,2023,1,1,{load1}\ntest_generator,2023,1,2,{load2}"
+    )
+
+
+@pytest.fixture
+def time_series_NYMDPV():
+    header = "name,year,month,day,period,value\n"
+    data = "test_generator,2023,1,1,H1-5,100\ntest_generator,2023,1,1,H6-12,200\ntest_generator,2023,1,1,H13-24,300\ntest_generator,2023,1,2,H1-24,400"
+    yield from temp_csv_file(header + data)
