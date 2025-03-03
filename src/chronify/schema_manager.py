@@ -52,7 +52,7 @@ class SchemaManager:
                 table = Table(
                     self.SCHEMAS_TABLE,
                     self._metadata,
-                    Column("name", String),
+                    Column("name", String, nullable=False, unique=True),
                     Column("schema", String),  # schema encoded as JSON
                 )
                 self._metadata.create_all(self._engine, tables=[table])
