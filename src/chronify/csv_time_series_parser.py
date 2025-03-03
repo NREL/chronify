@@ -124,7 +124,7 @@ class CsvTimeSeriesParser:
                 assert src_schema is not None
                 self._store.ingest_pivoted_table(data, src_schema, dst_schema)
             case fmt if fmt in UNPIVOTED_TABLES:
-                self._store.ingest_table(data, dst_schema, bypass_time_checks=True)
+                self._store.ingest_table(data, dst_schema, skip_time_checks=True)
 
     @staticmethod
     def _create_schemas(

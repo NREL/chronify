@@ -15,6 +15,7 @@ from sqlalchemy import (
     text,
 )
 
+from chronify.time_configs import TimeConfig
 from chronify.exceptions import (
     TableNotStored,
 )
@@ -52,7 +53,7 @@ class SchemaManager:
                 table = Table(
                     self.SCHEMAS_TABLE,
                     self._metadata,
-                    Column("name", String),
+                    Column("name", String, nullable=False, unique=True),
                     Column("schema", String),  # schema encoded as JSON
                 )
                 self._metadata.create_all(self._engine, tables=[table])
@@ -90,6 +91,27 @@ class SchemaManager:
             raise TableNotStored(msg)
 
         return self._cache[name]
+
+    def list_schemas(
+        self, name: str | None = None, time_config: TimeConfig | None = None
+    ) -> list[TableSchema]:
+        """List all schemas in the store, optionally matching the input filters.
+
+        Parameters
+        ----------
+        name : str, optional
+            Only list schemas with this name, by default None
+        time_config : TimeConfig
+            Only list schemas with this time configuration, by default None
+        """
+        schemas = []
+        for schema_name, schema in self._cache.items():
+            if name is not None and name != schema_name:
+                continue
+            if time_config is not None and schema.time_config != time_config:
+                continue
+            schemas.append(schema)
+        return schemas
 
     def remove_schema(self, conn: Connection, name: str) -> None:
         """Remove the schema from the store."""

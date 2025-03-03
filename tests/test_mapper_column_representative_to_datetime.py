@@ -146,7 +146,7 @@ def test_NYMDPV_mapper(time_series_NYMDPV, iter_store: Store):
     )
 
     data = pd.read_csv(time_series_NYMDPV)
-    iter_store.ingest_table(data, from_schema, bypass_time_checks=True)
+    iter_store.ingest_table(data, from_schema, skip_time_checks=True)
 
     metadata = MetaData()
     metadata.reflect(iter_store.engine, views=True)
