@@ -259,6 +259,30 @@ class Store:
         """Return the store's schema manager."""
         return self._schema_mgr
 
+    def check_timestamps(self, name: str, connection: Connection | None = None) -> None:
+        """Check the timestamps in the table.
+
+        This is useful if you call a :meth:`ingest_table` many times with skip_time_checks=True
+        and then want to check the final table.
+
+        Parameters
+        ----------
+        name
+            Name of the table to check.
+
+        Raises
+        ------
+        InvalidTable
+            Raised if the timestamps do not match the schema.
+        """
+        table = self.get_table(name)
+        schema = self._schema_mgr.get_schema(name)
+        if connection is None:
+            with self._engine.connect() as conn:
+                check_timestamps(conn, table, schema)
+        else:
+            check_timestamps(connection, table, schema)
+
     def create_view_from_parquet(
         self, path: Path, schema: TableSchema, bypass_checks: bool = False
     ) -> None:
@@ -771,13 +795,13 @@ class Store:
         conn: Connection,
         data: Iterable[pd.DataFrame | DuckDBPyRelation],
         schema: TableSchema,
-        bypass_time_checks: bool = False,
+        skip_time_checks: bool = False,
     ) -> bool:
         created_table = False
         for table in data:
             if self._ingest_table(conn, table, schema):
                 created_table = True
-        if not bypass_time_checks:
+        if not skip_time_checks:
             check_timestamps(conn, Table(schema.name, self._metadata), schema)
         return created_table
 

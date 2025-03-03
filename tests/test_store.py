@@ -770,3 +770,12 @@ def test_read_raw_query(iter_stores_by_engine: Store, one_week_per_month_by_hour
     with store.engine.connect() as conn:
         df2 = store.read_raw_query(query, params=params, connection=conn)
     assert df2.equals(df[df["id"] == 2].reset_index(drop=True))
+
+
+def test_check_timestamps(iter_stores_by_engine: Store, one_week_per_month_by_hour_table) -> None:
+    store = iter_stores_by_engine
+    df, _, schema = one_week_per_month_by_hour_table
+    store.ingest_table(df, schema)
+    store.check_timestamps(schema.name)
+    with store.engine.begin() as conn:
+        store.check_timestamps(schema.name, connection=conn)
