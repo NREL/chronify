@@ -17,6 +17,7 @@ from sqlalchemy import (
     Table,
     create_engine,
     delete,
+    func,
     select,
     text,
 )
@@ -1078,7 +1079,7 @@ class Store:
         name: str,
         time_array_id_values: dict[str, Any],
         connection: Optional[Connection] = None,
-    ) -> None:
+    ) -> int:
         """Delete all rows matching the time_array_id_values.
 
         Parameters
@@ -1089,6 +1090,11 @@ class Store:
             Values for the time_array_id_values. Keys must match the columns in the schema.
         connnection
             Optional connection to the database. Refer :meth:`ingest_table` for notes.
+
+        Returns
+        -------
+        int
+            Number of deleted rows
 
         Examples
         --------
@@ -1114,15 +1120,26 @@ class Store:
 
         assert time_array_id_values
         stmt = delete(table)
+
+        # duckdb does not offer a way to retrieve the number of deleted rows, so we must
+        # compute it manually.
+        # Deletions are not common. We are trading accuracy for peformance.
+        count_stmt = select(func.count()).select_from(table)
+
         for column, value in time_array_id_values.items():
             stmt = stmt.where(table.c[column] == value)
+            count_stmt = count_stmt.where(table.c[column] == value)
 
         if connection is None:
             with self._engine.begin() as conn:
-                conn.execute(stmt)
+                num_deleted = self._run_delete(conn, stmt, count_stmt)
         else:
-            connection.execute(stmt)
+            num_deleted = self._run_delete(connection, stmt, count_stmt)
             # Let the caller commit or rollback when ready.
+
+        if num_deleted < 1:
+            msg = f"Failed to delete rows: {stmt=} {num_deleted=}"
+            raise InvalidParameter(msg)
 
         logger.info(
             "Delete all rows from table {} with time_array_id_values {}",
@@ -1144,6 +1161,25 @@ class Store:
         if is_empty:
             logger.info("Delete empty table {}", name)
             self.drop_table(name, connection=connection)
+
+        return num_deleted
+
+    def _run_delete(self, conn: Connection, stmt: Any, count_stmt: Any) -> int:
+        count1: int | None = None
+        if self._engine.name == "duckdb":
+            res1 = conn.execute(count_stmt).fetchone()
+            assert res1 is not None
+            count1 = res1[0]
+        res = conn.execute(stmt)
+        if self._engine.name == "duckdb":
+            res2 = conn.execute(count_stmt).fetchone()
+            assert res2 is not None
+            count2 = res2[0]
+            assert count1 is not None
+            num_deleted = count1 - count2
+        else:
+            num_deleted = res.rowcount
+        return num_deleted  # type: ignore
 
     def drop_table(
         self,
