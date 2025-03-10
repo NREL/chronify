@@ -118,6 +118,29 @@ class IndexTimeRangeBase(TimeBaseModel):
         return [self.time_column]
 
 
+class IndexTimeRangeMultiYear(IndexTimeRangeBase):
+    """Index time that covers multiple years
+    E.g., for year 2019 and 2020: index covers 1-8760 and 1-8784, respectively, at hourly resolution
+    """
+
+    time_column: str = Field(description="Column in the table that represents index time.")
+    start: int = Field(description="starting index")
+    years: list[int]
+    start_timestamp: datetime = Field(
+        description="The timestamp represented by the starting index."
+    )
+    resolution: timedelta = Field(description="The resolution of time represented by the indexes.")
+    time_type: TimeType
+
+    @field_validator("start_timestamp")
+    @classmethod
+    def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
+        if start_timestamp.tzinfo is not None:
+            msg = "start_timestamp must be tz-naive for IndexTimeRangeNTZ"
+            raise ValueError(msg)
+        return start_timestamp
+
+
 class IndexTimeRangeNTZ(IndexTimeRangeBase):
     """Index time that represents tz-naive timestamps.
     start_timestamp is tz-naive
