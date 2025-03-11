@@ -17,7 +17,7 @@ from chronify.time_configs import (
 )
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
-from chronify.time import TimeType, DaylightSavingAdjustmentType
+from chronify.time import TimeType, DaylightSavingAdjustmentType, ResamplingOperationType
 from chronify.sqlalchemy.functions import read_database
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,16 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
     ) -> None:
         super().__init__(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         )
         self._dst_adjustment = self._data_adjustment.daylight_saving_adjustment
         if not isinstance(self._from_schema.time_config, IndexTimeRangeBase):

@@ -168,25 +168,6 @@ def test_time_interval_shift(
     check_time_shift_values(df, queried, from_schema.time_config, to_schema.time_config)
 
 
-@pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern")])  # , None])
-def test_map_time_resolution(
-    iter_engines: Engine,
-    tzinfo: ZoneInfo | None,
-) -> None:
-    from_schema = get_datetime_schema(
-        2020, tzinfo, TimeIntervalType.PERIOD_BEGINNING, "from_table"
-    )
-    df = generate_datetime_dataframe(from_schema)
-    to_schema = get_datetime_schema(2020, tzinfo, TimeIntervalType.PERIOD_ENDING, "to_table")
-    to_schema.time_config.resolution = timedelta(minutes=30)
-
-    breakpoint()
-
-    queried = get_mapped_results(iter_engines, df, from_schema, to_schema)
-    check_time_shift_timestamps(df, queried, to_schema.time_config)
-    check_time_shift_values(df, queried, from_schema.time_config, to_schema.time_config)
-
-
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
 def test_time_interval_shift_different_time_ranges(
     iter_engines: Engine,

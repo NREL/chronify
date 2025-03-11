@@ -18,7 +18,7 @@ from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
-from chronify.time import TimeIntervalType
+from chronify.time import TimeIntervalType, ResamplingOperationType
 from chronify.time_configs import TimeBasedDataAdjustment
 
 
@@ -33,6 +33,7 @@ class TimeSeriesMapperBase(abc.ABC):
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
@@ -45,6 +46,7 @@ class TimeSeriesMapperBase(abc.ABC):
             self._from_schema.time_config.interval_type
             != self._to_schema.time_config.interval_type
         )
+        self._resampling_operation = resampling_operation
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:

@@ -218,7 +218,7 @@ def test_unaligned_time_mapping_without_wrap_time(iter_engines: Engine) -> None:
     src_df, src_schema, dst_schema = data_for_unaligned_time_mapping()
     error = (
         ConflictingInputsError,
-        "Length must match between",
+        "For unchanging time resolution, length must match between",
     )
     run_test(
         iter_engines,

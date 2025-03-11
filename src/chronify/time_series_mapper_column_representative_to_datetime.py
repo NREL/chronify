@@ -20,6 +20,7 @@ from chronify.datetime_range_generator import DatetimeRangeGenerator
 from chronify.models import MappingTableSchema, TableSchema
 from chronify.sqlalchemy.functions import read_database, write_database
 from chronify.utils.sqlalchemy_table import create_table
+from chronify.time import ResamplingOperationType
 
 
 class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
@@ -57,9 +58,16 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
     ) -> None:
         super().__init__(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         )
 
         if not isinstance(to_schema.time_config, DatetimeRange):

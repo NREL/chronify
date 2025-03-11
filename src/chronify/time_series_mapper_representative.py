@@ -20,6 +20,7 @@ from chronify.time_configs import (
     TimeBasedDataAdjustment,
 )
 from chronify.time_utils import shift_time_interval
+from chronify.time import ResamplingOperationType
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,16 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
     ) -> None:
         super().__init__(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         )
         if not isinstance(from_schema.time_config, RepresentativePeriodTimeBase):
             msg = "source schema does not have RepresentativePeriodTimeBase time config. Use a different mapper."
