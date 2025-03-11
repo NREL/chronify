@@ -106,7 +106,11 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 # tz-naive time does not have skips/dups, so always localize in std tz first
                 ser_from = ser_from.dt.tz_localize(to_tz_std).dt.tz_convert(to_tz)
             case (False, True):
-                ser_from = ser_from.dt.tz_localize(to_tz)
+                # get standard time zone of fm_tz
+                year = self._from_time_config.start.year
+                fm_tz_std = datetime(year=year, month=1, day=1, tzinfo=fm_tz).tzname()
+                # convert to standard time zone of fm_tz before making it tz-naive
+                ser_from = ser_from.dt.tz_convert(fm_tz_std).dt.tz_localize(to_tz)
         match (self._adjust_interval, self._wrap_time_allowed):
             case (True, _):
                 ser = roll_time_interval(
@@ -126,7 +130,6 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 to_time_col: ser,
             }
         )
-
         assert (
             df[to_time_col].nunique() == self._to_time_config.length
         ), "to_time_col does not have the right number of timestamps"
