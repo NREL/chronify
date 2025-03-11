@@ -70,18 +70,18 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         flen, tlen = self._from_time_config.length, self._to_time_config.length
         fres, tres = self._from_time_config.resolution, self._to_time_config.resolution
         if fres == tres and flen != tlen and not self._wrap_time_allowed:
-            msg = f"For unchanging time resolution, length must match between {self._from_schema.__class__} from_schema and {self._to_schema.__class__} to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
+            msg = f"For unchanging time resolution, length must match between from_time_config and to_time_config. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
             raise ConflictingInputsError(msg)
 
         # Resolution must be mutiples of each other
-        if fres < tres and tres % fres > 0:
-            msg = f"For aggregation, the time resolution in {self._to_schema.__class__} to_schema must be a multiple of that in {self._from_schema.__class__} from_schema. {tres} vs {fres}"
-        if fres > tres and fres % tres > 0:
-            msg = f"For disaggregation, the time resolution in {self._from_schema.__class__} from_schema must be a multiple of that in {self._to_schema.__class__} to_schema. {fres} vs {tres}"
+        if fres < tres and tres.total_seconds() % fres.total_seconds() > 0:
+            msg = f"For aggregation, the time resolution in to_time_config must be a multiple of that in from_time_config. {tres} vs {fres}"
+        if fres > tres and fres.total_seconds() % tres.total_seconds() > 0:
+            msg = f"For disaggregation, the time resolution in from_time_config must be a multiple of that in to_time_config. {fres} vs {tres}"
 
         # No extrapolation allowed
-        if flen * fres < tlen * tres:
-            msg = f"The product of time resolution and length in {self._from_schema.__class__} from_schema cannot be greater than that in {self._to_schema.__class__} to_schema."
+        if flen * fres.total_seconds() < tlen * tres.total_seconds():
+            msg = "The product of time resolution and length in from_time_config cannot be greater than that in to_time_config."
             raise ConflictingInputsError(msg)
 
     def _check_resampling_consistency(self) -> None:
@@ -95,6 +95,18 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 msg = f"{typ} detected, {self._resampling_operation=} must be set to an option from {opt}"
                 raise ConflictingInputsError(msg)
 
+    def _create_intermediate_schema(self) -> TableSchema:
+        """Create the intermediate table schema for all time processing except resampling,
+        by producing a version of to_schema with the same time resolution and length as from_schema
+        """
+        schema_kwargs = self._to_schema.model_dump()
+        schema_kwargs["time_config"]["resolution"] = self._from_time_config.resolution
+        schema_kwargs["time_config"]["length"] = self._from_time_config.length
+        schema_kwargs["name"] += "_intermediate"
+        schema = TableSchema(**schema_kwargs)
+
+        return schema
+
     def map_time(
         self,
         scratch_dir: Optional[Path] = None,
@@ -103,9 +115,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
         if self._resampling_type:
-            to_schema = self._to_schema.model_copy(deep=True)
-            to_schema.time_config.resolution = self._from_time_config.resolution
-            to_schema.time_config.length = self._from_time_config.length
+            to_schema = self._create_intermediate_schema()
             to_time_config = to_schema.time_config
         else:
             to_schema = self._to_schema
@@ -125,9 +135,23 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
         )
+
         if self._resampling_type == "aggregation":
             df, mapping_schema = self._create_aggregation_mapping(
                 to_time_config, self._to_time_config
+            )
+            apply_mapping(
+                df,
+                mapping_schema,
+                to_schema,
+                self._to_schema,
+                self._engine,
+                self._metadata,
+                TimeBasedDataAdjustment(),
+                resampling_operation=self._resampling_operation,
+                scratch_dir=scratch_dir,
+                output_file=output_file,
+                check_mapped_timestamps=check_mapped_timestamps,
             )
         # elif self._resampling_type == "disaggregation":
         #     df, mapping_schema = self._create_disaggregation_mapping(to_time_config, self._to_time_config)
@@ -214,13 +238,13 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         )
         limit = to_time_config.resolution / from_time_config.resolution - 1
         assert limit % 1 == 0, f"limit is not a whole number {limit}"
-        df[to_time_col].ffill(limit=int(limit), inplace=True)
+        df[to_time_col] = df[to_time_col].ffill(limit=int(limit))
 
         # mapping schema
         from_time_config = from_time_config.model_copy()
         from_time_config.time_column = from_time_col
         mapping_schema = MappingTableSchema(
-            name="mapping_table",
+            name="aggregation_table",
             time_configs=[
                 from_time_config,
                 to_time_config,

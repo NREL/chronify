@@ -69,7 +69,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _check_time_length(self) -> None:
         flen, tlen = self._from_time_config.length, self._to_time_config.length
         if flen != tlen and not self._wrap_time_allowed:
-            msg = f"Length must match between {self._from_schema.__class__} from_schema and {self._to_schema.__class__} to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
+            msg = f"Length must match between from_time_config and to_time_config. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
             raise ConflictingInputsError(msg)
 
     def map_time(

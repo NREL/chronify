@@ -506,33 +506,35 @@ def test_map_datetime_to_datetime(
     check_timestamp_lists(actual, expected)
 
 
-@pytest.mark.skip()
+@pytest.mark.parametrize("tzinfo", [ZoneInfo("EST")])  # , None])
 @pytest.mark.parametrize(
     "params",
     [
-        (ZoneInfo("EST"), timedelta(hours=1), timedelta(hours=24), AggregationType.SUM),
-        # (None, timedelta(hours=1)), timedelta(hours=24), AggregationType.SUM)
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.SUM),
     ],
 )
 def test_map_datetime_to_datetime_with_resampling(
-    tmp_path, iter_stores_by_engine_no_data_ingestion: Store, params
+    tmp_path, iter_stores_by_engine_no_data_ingestion: Store, tzinfo, params
 ):
-    tzinfo, fm_res, to_res, operation = params
+    fm_res, to_res, operation = params
     store = iter_stores_by_engine_no_data_ingestion
-    time_array_len = 8784
     year = 2020
+    start = datetime(year=year, month=1, day=1, hour=0, tzinfo=tzinfo)
+    end = datetime(year=year + 1, month=1, day=1, hour=0, tzinfo=tzinfo)
+    fm_time_array_len = (end - start) / fm_res
+    to_time_array_len = (end - start) / to_res
 
     src_time_config = DatetimeRange(
-        start=datetime(year=year, month=1, day=1, hour=0, tzinfo=tzinfo),
+        start=start,
         resolution=fm_res,
-        length=time_array_len,
+        length=fm_time_array_len,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         time_column="timestamp",
     )
     dst_time_config = DatetimeRange(
-        start=datetime(year=year, month=1, day=1, hour=1, tzinfo=tzinfo),
+        start=start,
         resolution=to_res,
-        length=time_array_len,
+        length=to_time_array_len,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         time_column="timestamp",
     )
@@ -586,10 +588,9 @@ def test_map_datetime_to_datetime_with_resampling(
         df2 = store.read_table(dst_schema.name)
     else:
         df2 = pd.read_parquet(output_file)
-    assert len(df2) == time_array_len * 3
+    assert len(df2) == to_time_array_len * 3
     actual = sorted(df2["timestamp"].unique())
     assert isinstance(src_schema.time_config, DatetimeRange)
-    assert actual[0] == src_schema.time_config.start + timedelta(hours=1)
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
     check_timestamp_lists(actual, expected)
 

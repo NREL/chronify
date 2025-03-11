@@ -6,7 +6,7 @@ from typing import Optional
 
 import pandas as pd
 from loguru import logger
-from sqlalchemy import Engine, MetaData, Table, select, text
+from sqlalchemy import Engine, MetaData, Table, select, text, func
 from chronify.hive_functions import create_materialized_view
 
 from chronify.sqlalchemy.functions import (
@@ -18,7 +18,7 @@ from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
-from chronify.time import TimeIntervalType, ResamplingOperationType
+from chronify.time import TimeIntervalType, ResamplingOperationType, AggregationType
 from chronify.time_configs import TimeBasedDataAdjustment
 
 
@@ -93,6 +93,7 @@ def apply_mapping(
     engine: Engine,
     metadata: MetaData,
     data_adjustment: TimeBasedDataAdjustment,
+    resampling_operation: Optional[ResamplingOperationType] = None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -118,6 +119,7 @@ def apply_mapping(
             to_schema,
             engine,
             metadata,
+            resampling_operation,
             scratch_dir,
             output_file,
         )
@@ -130,6 +132,11 @@ def apply_mapping(
             mapped_table = Table(to_schema.name, metadata)
             with engine.connect() as conn:
                 try:
+                    # TODO <---
+                    # if resampling_operation:
+                    # with engine.connect() as conn:
+                    #     df = read_database(f"select * from {mapped_table.name}", conn, to_schema.time_config)
+                    # breakpoint()
                     check_timestamps(
                         conn,
                         mapped_table,
@@ -163,6 +170,7 @@ def _apply_mapping(
     to_schema: TableSchema,
     engine: Engine,
     metadata: MetaData,
+    resampling_operation: Optional[ResamplingOperationType] = None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
 ) -> None:
@@ -177,12 +185,31 @@ def _apply_mapping(
         set(from_schema.list_columns())
     )
 
+    val_col = to_schema.value_column  # from left_table
     final_cols = set(to_schema.list_columns()).union(left_table_pass_thru_columns)
     right_cols = set(right_table_columns).intersection(final_cols)
-    left_cols = final_cols - right_cols
+    left_cols = final_cols - right_cols - {val_col}
 
     select_stmt = [left_table.c[x] for x in left_cols]
     select_stmt += [right_table.c[x] for x in right_cols]
+
+    tval_col = left_table.c[val_col]
+    if not resampling_operation:
+        select_stmt.append(tval_col)
+    else:
+        groupby_stmt = select_stmt.copy()
+        match resampling_operation:
+            case AggregationType.SUM:
+                select_stmt.append(func.sum(tval_col).label(val_col))
+            case AggregationType.AVG:
+                select_stmt.append(func.avg(tval_col).label(val_col))
+            case AggregationType.MIN:
+                select_stmt.append(func.min(tval_col).label(val_col))
+            case AggregationType.MAX:
+                select_stmt.append(func.max(tval_col).label(val_col))
+            case _:
+                msg = f"Unsupported {resampling_operation=}"
+                raise ValueError(msg)
 
     keys = from_schema.time_config.list_time_columns()
     # check time_zone
@@ -197,6 +224,14 @@ def _apply_mapping(
 
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
+    if resampling_operation:
+        query = query.group_by(*groupby_stmt)
+
+        # TODO <---
+        # with engine.connect() as conn:
+        #     df_map = read_database(f"select * from {mapping_table_name}", conn, to_schema.time_config)
+        #     df = read_database(query, conn, to_schema.time_config)
+        # breakpoint()
 
     if output_file is not None:
         write_query_to_parquet(engine, str(query), output_file, overwrite=True)
