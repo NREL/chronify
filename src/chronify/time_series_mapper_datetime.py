@@ -40,19 +40,21 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             raise InvalidParameter(msg)
         self._from_time_config: DatetimeRange = self._from_schema.time_config
         self._to_time_config: DatetimeRange = self._to_schema.time_config
+        self._resampling_type = self.get_resampling_type()
+
+    def get_resampling_type(self) -> Optional[str]:
+        if self._from_time_config.resolution < self._to_time_config.resolution:
+            return "aggregation"
+        if self._from_time_config.resolution > self._to_time_config.resolution:
+            return "disaggregation"
+        return None
 
     def check_schema_consistency(self) -> None:
         """Check that from_schema can produce to_schema."""
         self._check_table_columns_producibility()
         self._check_measurement_type_consistency()
         self._check_time_interval_type()
-        self._check_time_resolution()
         self._check_time_length()
-
-    def _check_time_resolution(self) -> None:
-        if self._from_time_config.resolution != self._to_time_config.resolution:
-            msg = "Handling of changing time resolution is not supported yet."
-            raise NotImplementedError(msg)
 
     def _check_time_length(self) -> None:
         flen, tlen = self._from_time_config.length, self._to_time_config.length
@@ -67,13 +69,21 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         check_mapped_timestamps: bool = False,
     ) -> None:
         """Convert time columns with from_schema to to_schema configuration."""
+        if self._resampling_type:
+            to_schema = self._to_schema.model_copy(deep=True)
+            to_schema.time_config.resolution = self._from_time_config.resolution
+            to_time_config = to_schema.time_config
+        else:
+            to_schema = self._to_schema
+            to_time_config = self._to_time_config
+
         self.check_schema_consistency()
-        df, mapping_schema = self._create_mapping()
+        df, mapping_schema = self._create_mapping(to_time_config)
         apply_mapping(
             df,
             mapping_schema,
             self._from_schema,
-            self._to_schema,
+            to_schema,
             self._engine,
             self._metadata,
             self._data_adjustment,
@@ -81,27 +91,33 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
         )
+        # if self._resampling_type == "aggregation":
+        #     df, mapping_schema = self._create_aggregation_mapping(from_res, to_res)
+        # elif self._resampling_type == "disaggregation":
+        #     df, mapping_schema = self._create_disaggregation_mapping(from_res, to_res)
         # TODO - add handling for changing resolution - Issue #30
 
-    def _create_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema]:
+    def _create_mapping(
+        self, to_time_config: DatetimeRange
+    ) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe
         Handles time interval type
         """
         from_time_col = "from_" + self._from_time_config.time_column
-        to_time_col = self._to_time_config.time_column
+        to_time_col = to_time_config.time_column
         from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
         to_time_data = make_time_range_generator(
-            self._to_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
+            to_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
         ).list_timestamps()
 
         ser_from = pd.Series(from_time_data)
         # If from_tz or to_tz is naive, use tz_localize
         fm_tz = self._from_time_config.start.tzinfo
-        to_tz = self._to_time_config.start.tzinfo
+        to_tz = to_time_config.start.tzinfo
         match (fm_tz is None, to_tz is None):
             case (True, False):
                 # get standard time zone of to_tz
-                year = self._to_time_config.start.year
+                year = to_time_config.start.year
                 to_tz_std = datetime(year=year, month=1, day=1, tzinfo=to_tz).tzname()
                 # tz-naive time does not have skips/dups, so always localize in std tz first
                 ser_from = ser_from.dt.tz_localize(to_tz_std).dt.tz_convert(to_tz)
@@ -116,7 +132,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 ser = roll_time_interval(
                     ser_from,
                     self._from_time_config.interval_type,
-                    self._to_time_config.interval_type,
+                    to_time_config.interval_type,
                     to_time_data,
                 )
             case (False, True):
@@ -131,7 +147,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             }
         )
         assert (
-            df[to_time_col].nunique() == self._to_time_config.length
+            df[to_time_col].nunique() == to_time_config.length
         ), "to_time_col does not have the right number of timestamps"
         from_time_config = self._from_time_config.model_copy()
         from_time_config.time_column = from_time_col
@@ -139,7 +155,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             name="mapping_table",
             time_configs=[
                 from_time_config,
-                self._to_time_config,
+                to_time_config,
             ],
         )
         return df, mapping_schema
