@@ -194,6 +194,8 @@ def _apply_mapping(
     select_stmt += [right_table.c[x] for x in right_cols]
 
     tval_col = left_table.c[val_col]
+    if "factor" in right_table_columns:
+        tval_col *= right_table.c["factor"]
     if not resampling_operation:
         select_stmt.append(tval_col)
     else:
@@ -227,7 +229,8 @@ def _apply_mapping(
     if resampling_operation:
         query = query.group_by(*groupby_stmt)
 
-        # TODO <---
+        # # TODO <---
+        # from chronify.sqlalchemy.functions import read_database
         # with engine.connect() as conn:
         #     df_map = read_database(f"select * from {mapping_table_name}", conn, to_schema.time_config)
         #     df = read_database(query, conn, to_schema.time_config)

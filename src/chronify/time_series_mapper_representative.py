@@ -80,6 +80,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             self._engine,
             self._metadata,
             self._data_adjustment,
+            resampling_operation=self._resampling_operation,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,

@@ -113,9 +113,10 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
             self._engine,
             self._metadata,
             self._data_adjustment,
-            scratch_dir,
-            output_file,
-            check_mapped_timestamps,
+            resampling_operation=self._resampling_operation,
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
         )
 
         if drop_table:

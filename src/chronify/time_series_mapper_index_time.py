@@ -116,7 +116,9 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             self._engine,
             self._metadata,
             TimeBasedDataAdjustment(),
+            resampling_operation=None,
             scratch_dir=scratch_dir,
+            output_file=None,
             check_mapped_timestamps=False,
         )
 
@@ -128,6 +130,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             self._to_schema,
             self._data_adjustment,
             self._wrap_time_allowed,
+            resampling_operation=self._resampling_operation,
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,

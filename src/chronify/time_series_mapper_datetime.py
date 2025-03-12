@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+import numpy as np
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
@@ -12,7 +13,12 @@ from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_utils import roll_time_interval, wrap_timestamps
-from chronify.time import ResamplingOperationType, AggregationType, DisaggregationType
+from chronify.time import (
+    ResamplingOperationType,
+    AggregationType,
+    DisaggregationType,
+    LeapDayAdjustmentType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,15 +137,26 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             self._engine,
             self._metadata,
             self._data_adjustment,
+            resampling_operation=None,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
         )
 
-        if self._resampling_type == "aggregation":
-            df, mapping_schema = self._create_aggregation_mapping(
-                to_time_config, self._to_time_config
-            )
+        if self._resampling_type:
+            if self._resampling_type == "aggregation":
+                df, mapping_schema = self._create_aggregation_mapping(
+                    to_time_config, self._to_time_config, self._data_adjustment.leap_day_adjustment
+                )
+                resampling_operation = self._resampling_operation
+
+            else:
+                df, resampling_operation, mapping_schema = self._create_disaggregation_mapping(
+                    to_time_config,
+                    self._to_time_config,
+                    self._data_adjustment.leap_day_adjustment,
+                    self._resampling_operation,
+                )
             apply_mapping(
                 df,
                 mapping_schema,
@@ -148,13 +165,11 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 self._engine,
                 self._metadata,
                 TimeBasedDataAdjustment(),
-                resampling_operation=self._resampling_operation,
+                resampling_operation=resampling_operation,
                 scratch_dir=scratch_dir,
                 output_file=output_file,
                 check_mapped_timestamps=check_mapped_timestamps,
             )
-        # elif self._resampling_type == "disaggregation":
-        #     df, mapping_schema = self._create_disaggregation_mapping(to_time_config, self._to_time_config)
         # TODO - add handling for changing resolution - Issue #30
 
     def _create_mapping(
@@ -220,17 +235,20 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         )
         return df, mapping_schema
 
+    @staticmethod
     def _create_aggregation_mapping(
-        self, from_time_config: DatetimeRange, to_time_config: DatetimeRange
+        from_time_config: DatetimeRange,
+        to_time_config: DatetimeRange,
+        leap_day_adjustment: LeapDayAdjustmentType,
     ) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe for aggregation"""
         from_time_col = "from_" + from_time_config.time_column
         to_time_col = to_time_config.time_column
         from_time_data = make_time_range_generator(
-            from_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
+            from_time_config, leap_day_adjustment=leap_day_adjustment
         ).list_timestamps()
         to_time_data = make_time_range_generator(
-            to_time_config, leap_day_adjustment=self._data_adjustment.leap_day_adjustment
+            to_time_config, leap_day_adjustment=leap_day_adjustment
         ).list_timestamps()
         df = pd.Series(from_time_data).rename(from_time_col).to_frame()
         df = df.join(
@@ -251,3 +269,85 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             ],
         )
         return df, mapping_schema
+
+    @staticmethod
+    def _create_disaggregation_mapping(
+        from_time_config: DatetimeRange,
+        to_time_config: DatetimeRange,
+        leap_day_adjustment: LeapDayAdjustmentType,
+        resampling_operation: DisaggregationType,
+    ) -> tuple[pd.DataFrame, AggregationType, MappingTableSchema]:
+        """Create mapping dataframe for disaggregation"""
+        from_time_col = "from_" + from_time_config.time_column
+        to_time_col = to_time_config.time_column
+        from_time_data = make_time_range_generator(
+            from_time_config, leap_day_adjustment=leap_day_adjustment
+        ).list_timestamps()
+        to_time_data = make_time_range_generator(
+            to_time_config, leap_day_adjustment=leap_day_adjustment
+        ).list_timestamps()
+
+        df = pd.Series(to_time_data).rename(to_time_col).to_frame()
+        df = df.join(
+            pd.Series(from_time_data, index=from_time_data).rename(from_time_col), on=to_time_col
+        )
+        limit = from_time_config.resolution / to_time_config.resolution - 1
+        assert limit % 1 == 0, f"limit is not a whole number {limit}"
+        limit = int(limit)
+
+        match resampling_operation:
+            case DisaggregationType.DUPLICATE_FFILL:
+                df[from_time_col] = df[from_time_col].ffill(limit=limit)
+                # floor: cap rows below the from_time_config start time at start time
+                if df[from_time_col].isna().sum() > 0:
+                    assert df[from_time_col].isna().sum() <= limit
+                    df[from_time_col] = df[from_time_col].bfill(limit=limit)
+                aggregation_operation = None
+            case DisaggregationType.DUPLICATE_BFILL:
+                df[from_time_col] = df[from_time_col].bfill(limit=limit)
+                # ceiling: cap rows beyond the from_time_config end time at end time
+                if df[from_time_col].isna().sum() > 0:
+                    assert df[from_time_col].isna().sum() <= limit
+                    df[from_time_col] = df[from_time_col].ffill(limit=limit)
+                aggregation_operation = None
+            case DisaggregationType.INTERPOLATE:
+                df.loc[~df[from_time_col].isna(), "factor"] = 1
+                df["lb"] = df[from_time_col].ffill(limit=limit).where(df[from_time_col].isna())
+                df["lb_factor"] = 1 + (df["lb"] - df["timestamp"]).div(from_time_config.resolution)
+                df["ub"] = df[from_time_col].bfill(limit=limit).where(df[from_time_col].isna())
+                df["ub_factor"] = 1 + (df["timestamp"] - df["ub"]).div(from_time_config.resolution)
+                # capping: if a row do not have both lb and ub, cannot interpolate, set factor to 1
+                for fact_col in ["lb_factor", "ub_factor"]:
+                    cond = ~(df[fact_col].where(df["lb"].isna() | df["ub"].isna()).isna())
+                    df.loc[cond, fact_col] = 1
+                lst = []
+                for ts_col, fact_col in zip(
+                    [from_time_col, "lb", "ub"], ["factor", "lb_factor", "ub_factor"]
+                ):
+                    lst.append(
+                        df.loc[~df[ts_col].isna(), [to_time_col, ts_col, fact_col]].rename(
+                            columns={ts_col: from_time_col, fact_col: "factor"}
+                        )
+                    )
+                df = pd.concat(lst).sort_values(by=[to_time_col], ignore_index=True)
+                assert df.groupby(to_time_col)["factor"].sum().unique().round(3) == np.array([1])
+                aggregation_operation = AggregationType.SUM
+            case DisaggregationType.UNIFORM_DISAGGREGATE:
+                df[from_time_col] = df[from_time_col].ffill(limit=int(limit))
+                df["factor"] = to_time_config.resolution / from_time_config.resolution
+                aggregation_operation = AggregationType.SUM
+            case _:
+                msg = f"Unsupported disaggregation {resampling_operation=}"
+                raise ValueError(msg)
+
+        # mapping schema
+        from_time_config = from_time_config.model_copy()
+        from_time_config.time_column = from_time_col
+        mapping_schema = MappingTableSchema(
+            name="disaggregation_table",
+            time_configs=[
+                from_time_config,
+                to_time_config,
+            ],
+        )
+        return df, aggregation_operation, mapping_schema

@@ -33,7 +33,12 @@ from chronify.exceptions import (
 )
 from chronify.models import ColumnDType, CsvTableSchema, PivotedTableSchema, TableSchema
 from chronify.store import Store
-from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType, AggregationType
+from chronify.time import (
+    TimeIntervalType,
+    DaylightSavingAdjustmentType,
+    AggregationType,
+    DisaggregationType,
+)
 from chronify.time_configs import DatetimeRange, IndexTimeRangeLocalTime, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import check_timestamp_lists
@@ -506,14 +511,21 @@ def test_map_datetime_to_datetime(
     check_timestamp_lists(actual, expected)
 
 
-@pytest.mark.parametrize("tzinfo", [ZoneInfo("EST")])  # , None])
+@pytest.mark.parametrize("tzinfo", [ZoneInfo("EST")])  # [ZoneInfo("EST"), None])
 @pytest.mark.parametrize(
     "params",
     [
         (timedelta(hours=1), timedelta(hours=24), AggregationType.SUM),
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.AVG),
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.MIN),
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.MAX),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.DUPLICATE_FFILL),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.DUPLICATE_BFILL),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.UNIFORM_DISAGGREGATE),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.INTERPOLATE),
     ],
 )
-def test_map_datetime_to_datetime_with_resampling(
+def test_map_datetime_to_datetime_with_resampling(  # noqa: C901
     tmp_path, iter_stores_by_engine_no_data_ingestion: Store, tzinfo, params
 ):
     fm_res, to_res, operation = params
@@ -593,6 +605,28 @@ def test_map_datetime_to_datetime_with_resampling(
     assert isinstance(src_schema.time_config, DatetimeRange)
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
     check_timestamp_lists(actual, expected)
+
+    if isinstance(operation, AggregationType):
+        val = df2[df2["generator"] == "gen1"].sort_values(by="timestamp").iloc[0, 2]
+        if operation == AggregationType.SUM:
+            assert val == (1 + 24) * 24 / 2
+        if operation == AggregationType.AVG:
+            assert val == (1 + 24) * 24 / 2 / 24
+        if operation == AggregationType.MIN:
+            assert val == 1
+        if operation == AggregationType.MAX:
+            assert val == 24
+
+    if isinstance(operation, DisaggregationType):
+        val = df2[df2["generator"] == "gen1"].sort_values(by="timestamp").iloc[1, 2].round(3)
+        if operation == DisaggregationType.DUPLICATE_FFILL:
+            assert val == 1
+        if operation == DisaggregationType.DUPLICATE_BFILL:
+            assert val == 2
+        if operation == DisaggregationType.INTERPOLATE:
+            assert val == 1.333
+        if operation == DisaggregationType.UNIFORM_DISAGGREGATE:
+            assert val == 0.333
 
 
 def test_map_index_time_to_datetime(
