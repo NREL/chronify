@@ -936,7 +936,7 @@ class Store:
             wrap_time_allowed=wrap_time_allowed,
             resampling_operation=resampling_operation,
             scratch_dir=scratch_dir,
-            output_file=output_file,
+            output_file=Path(output_file),
             check_mapped_timestamps=check_mapped_timestamps,
         )
         with self._engine.begin() as conn:

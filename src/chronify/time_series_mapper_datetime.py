@@ -139,7 +139,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             self._data_adjustment,
             resampling_operation=None,
             scratch_dir=scratch_dir,
-            output_file=None,
+            output_file=None if self._resampling_type else output_file,
             check_mapped_timestamps=check_mapped_timestamps,
         )
 
