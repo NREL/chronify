@@ -119,9 +119,9 @@ def apply_mapping(
             to_schema,
             engine,
             metadata,
-            resampling_operation,
-            scratch_dir,
-            output_file,
+            resampling_operation=resampling_operation,
+            scratch_dir=scratch_dir,
+            output_file=output_file,
         )
         if check_mapped_timestamps:
             if output_file is not None:
@@ -233,6 +233,7 @@ def _apply_mapping(
         # from chronify.sqlalchemy.functions import read_database
         # with engine.connect() as conn:
         #     df_map = read_database(f"select * from {mapping_table_name}", conn, to_schema.time_config)
+        #     dfi = read_database(f"select * from {from_schema.name}", conn, from_schema.time_config)
         #     df = read_database(query, conn, to_schema.time_config)
         # breakpoint()
 

@@ -139,7 +139,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             self._data_adjustment,
             resampling_operation=None,
             scratch_dir=scratch_dir,
-            output_file=output_file,
+            output_file=None,
             check_mapped_timestamps=check_mapped_timestamps,
         )
 
@@ -313,9 +313,9 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             case DisaggregationType.INTERPOLATE:
                 df.loc[~df[from_time_col].isna(), "factor"] = 1
                 df["lb"] = df[from_time_col].ffill(limit=limit).where(df[from_time_col].isna())
-                df["lb_factor"] = 1 + (df["lb"] - df["timestamp"]).div(from_time_config.resolution)
+                df["lb_factor"] = 1 + (df["lb"] - df[to_time_col]).div(from_time_config.resolution)
                 df["ub"] = df[from_time_col].bfill(limit=limit).where(df[from_time_col].isna())
-                df["ub_factor"] = 1 + (df["timestamp"] - df["ub"]).div(from_time_config.resolution)
+                df["ub_factor"] = 1 + (df[to_time_col] - df["ub"]).div(from_time_config.resolution)
                 # capping: if a row do not have both lb and ub, cannot interpolate, set factor to 1
                 for fact_col in ["lb_factor", "ub_factor"]:
                     cond = ~(df[fact_col].where(df["lb"].isna() | df["ub"].isna()).isna())
