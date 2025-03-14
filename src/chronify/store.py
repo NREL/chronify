@@ -51,6 +51,7 @@ from chronify.time_series_checker import check_timestamps
 from chronify.time_series_mapper import map_time
 from chronify.utils.path_utils import check_overwrite, to_path
 from chronify.utils.sqlalchemy_view import create_view
+from chronify.time import ResamplingOperationType
 
 
 class Store:
@@ -845,6 +846,7 @@ class Store:
         dst_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
@@ -864,6 +866,9 @@ class Store:
         wrap_time_allowed
             Defines whether the time column is allowed to be wrapped according to the time
             config in dst_schema when it does not line up with the time config
+        resampling_operation
+            Defines the operation type for resampling when the time resolution in the source
+            data differs from the dst_schema
         scratch_dir
             Directory to use for temporary writes. Default to the system's tmp filesystem.
         check_mapped_timestamps
@@ -929,6 +934,7 @@ class Store:
             dst_schema,
             data_adjustment=data_adjustment,
             wrap_time_allowed=wrap_time_allowed,
+            resampling_operation=resampling_operation,
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,

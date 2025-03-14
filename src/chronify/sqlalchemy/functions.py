@@ -17,7 +17,7 @@ from sqlalchemy import Connection, Engine, Selectable, text
 
 from chronify.exceptions import InvalidOperation, InvalidParameter
 from chronify.time_configs import DatetimeRange, TimeBaseModel
-from chronify.utils.path_utils import check_overwrite, delete_if_exists
+from chronify.utils.path_utils import check_overwrite, delete_if_exists, to_path
 
 # Copied from Pandas/Polars
 DbWriteMode: TypeAlias = Literal["replace", "append", "fail"]
@@ -224,6 +224,7 @@ def write_query_to_parquet(
     partition_columns: Optional[list[str]] = None,
 ) -> None:
     """Write the query to a Parquet file."""
+    output_file = to_path(output_file)
     check_overwrite(output_file, overwrite)
     match engine.name:
         case "duckdb":

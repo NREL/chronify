@@ -188,9 +188,9 @@ def test_time_interval_shift_different_time_ranges(
 @pytest.mark.parametrize(
     "tzinfo_tuple",
     [
-        # (ZoneInfo("US/Eastern"), None),
+        (ZoneInfo("US/Eastern"), None),
         (None, ZoneInfo("EST")),
-        # (ZoneInfo("US/Eastern"), ZoneInfo("US/Mountain")),
+        (ZoneInfo("US/Eastern"), ZoneInfo("US/Mountain")),
     ],
 )
 def test_time_shift_different_timezones(

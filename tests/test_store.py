@@ -33,7 +33,12 @@ from chronify.exceptions import (
 )
 from chronify.models import ColumnDType, CsvTableSchema, PivotedTableSchema, TableSchema
 from chronify.store import Store
-from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
+from chronify.time import (
+    TimeIntervalType,
+    DaylightSavingAdjustmentType,
+    AggregationType,
+    DisaggregationType,
+)
 from chronify.time_configs import DatetimeRange, IndexTimeRangeLocalTime, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import check_timestamp_lists
@@ -504,6 +509,124 @@ def test_map_datetime_to_datetime(
     assert actual[0] == src_schema.time_config.start + timedelta(hours=1)
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
     check_timestamp_lists(actual, expected)
+
+
+@pytest.mark.parametrize("tzinfo", [ZoneInfo("EST")])  # [ZoneInfo("EST"), None])
+@pytest.mark.parametrize(
+    "params",
+    [
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.SUM),
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.AVG),
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.MIN),
+        (timedelta(hours=1), timedelta(hours=24), AggregationType.MAX),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.DUPLICATE_FFILL),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.DUPLICATE_BFILL),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.UNIFORM_DISAGGREGATE),
+        (timedelta(hours=1), timedelta(minutes=20), DisaggregationType.INTERPOLATE),
+    ],
+)
+def test_map_datetime_to_datetime_with_resampling(  # noqa: C901
+    tmp_path, iter_stores_by_engine_no_data_ingestion: Store, tzinfo, params
+):
+    fm_res, to_res, operation = params
+    store = iter_stores_by_engine_no_data_ingestion
+    year = 2020
+    start = datetime(year=year, month=1, day=1, hour=0, tzinfo=tzinfo)
+    end = datetime(year=year + 1, month=1, day=1, hour=0, tzinfo=tzinfo)
+    fm_time_array_len = (end - start) / fm_res
+    to_time_array_len = (end - start) / to_res
+
+    src_time_config = DatetimeRange(
+        start=start,
+        resolution=fm_res,
+        length=fm_time_array_len,
+        interval_type=TimeIntervalType.PERIOD_BEGINNING,
+        time_column="timestamp",
+    )
+    dst_time_config = DatetimeRange(
+        start=start,
+        resolution=to_res,
+        length=to_time_array_len,
+        interval_type=TimeIntervalType.PERIOD_BEGINNING,
+        time_column="timestamp",
+    )
+
+    src_csv_schema = CsvTableSchema(
+        time_config=src_time_config,
+        column_dtypes=[
+            ColumnDType(name="timestamp", dtype=DateTime(timezone=False)),
+            ColumnDType(name="gen1", dtype=Double()),
+            ColumnDType(name="gen2", dtype=Double()),
+            ColumnDType(name="gen3", dtype=Double()),
+        ],
+        value_columns=["gen1", "gen2", "gen3"],
+        pivoted_dimension_name="generator",
+        time_array_id_columns=[],
+    )
+    dst_schema = TableSchema(
+        name="generators_pe",
+        time_config=dst_time_config,
+        time_array_id_columns=["generator"],
+        value_column="value",
+    )
+    rel = read_csv(GENERATOR_TIME_SERIES_FILE, src_csv_schema)
+    rel2 = unpivot(rel, ("gen1", "gen2", "gen3"), "generator", "value")  # noqa: F841
+
+    src_schema = TableSchema(
+        name="generators_pb",
+        time_config=src_time_config,
+        time_array_id_columns=["generator"],
+        value_column="value",
+    )
+    if store.engine.name == "hive":
+        out_file = tmp_path / "data.parquet"
+        rel2.to_df().to_parquet(out_file)
+        store.create_view_from_parquet(out_file, src_schema)
+    else:
+        store.ingest_table(rel2, src_schema)
+
+    if tzinfo is None and store.engine.name != "sqlite":
+        output_file = tmp_path / "mapped_data"
+    else:
+        output_file = None
+    store.map_table_time_config(
+        src_schema.name,
+        dst_schema,
+        resampling_operation=operation,
+        output_file=output_file,
+        check_mapped_timestamps=True,
+    )
+    if output_file is None or store.engine.name == "sqlite":
+        df2 = store.read_table(dst_schema.name)
+    else:
+        df2 = pd.read_parquet(output_file)
+    assert len(df2) == to_time_array_len * 3
+    actual = sorted(df2["timestamp"].unique())
+    assert isinstance(src_schema.time_config, DatetimeRange)
+    expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
+    check_timestamp_lists(actual, expected)
+
+    if isinstance(operation, AggregationType):
+        val = df2[df2["generator"] == "gen1"].sort_values(by="timestamp").iloc[0, 2]
+        if operation == AggregationType.SUM:
+            assert val == (1 + 24) * 24 / 2
+        if operation == AggregationType.AVG:
+            assert val == (1 + 24) * 24 / 2 / 24
+        if operation == AggregationType.MIN:
+            assert val == 1
+        if operation == AggregationType.MAX:
+            assert val == 24
+
+    if isinstance(operation, DisaggregationType):
+        val = df2[df2["generator"] == "gen1"].sort_values(by="timestamp").iloc[1, 2].round(3)
+        if operation == DisaggregationType.DUPLICATE_FFILL:
+            assert val == 1
+        if operation == DisaggregationType.DUPLICATE_BFILL:
+            assert val == 2
+        if operation == DisaggregationType.INTERPOLATE:
+            assert val == 1.333
+        if operation == DisaggregationType.UNIFORM_DISAGGREGATE:
+            assert val == 0.333
 
 
 def test_map_index_time_to_datetime(
