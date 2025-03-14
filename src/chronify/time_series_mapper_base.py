@@ -20,6 +20,7 @@ from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType, ResamplingOperationType, AggregationType
 from chronify.time_configs import TimeBasedDataAdjustment
+from chronify.utils.path_utils import to_path
 
 
 class TimeSeriesMapperBase(abc.ABC):
@@ -125,6 +126,7 @@ def apply_mapping(
         )
         if check_mapped_timestamps:
             if output_file is not None:
+                output_file = to_path(output_file)
                 with engine.begin() as conn:
                     create_view_from_parquet(conn, to_schema.name, output_file)
                 metadata.reflect(engine, views=True)
@@ -238,6 +240,7 @@ def _apply_mapping(
         # breakpoint()
 
     if output_file is not None:
+        output_file = to_path(output_file)
         write_query_to_parquet(engine, str(query), output_file, overwrite=True)
         return
 
