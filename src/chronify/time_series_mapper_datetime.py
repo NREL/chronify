@@ -12,7 +12,7 @@ from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_utils import roll_time_interval, wrap_timestamps
+from chronify.time_utils import roll_time_interval, wrap_timestamps, get_standard_time_zone
 from chronify.time import (
     ResamplingOperationType,
     AggregationType,
@@ -192,14 +192,12 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         match (fm_tz is None, to_tz is None):
             case (True, False):
                 # get standard time zone of to_tz
-                year = to_time_config.start.year
-                to_tz_std = datetime(year=year, month=1, day=1, tzinfo=to_tz).tzname()
+                to_tz_std = get_standard_time_zone(to_tz)
                 # tz-naive time does not have skips/dups, so always localize in std tz first
                 ser_from = ser_from.dt.tz_localize(to_tz_std).dt.tz_convert(to_tz)
             case (False, True):
                 # get standard time zone of fm_tz
-                year = self._from_time_config.start.year
-                fm_tz_std = datetime(year=year, month=1, day=1, tzinfo=fm_tz).tzname()
+                fm_tz_std = get_standard_time_zone(fm_tz)
                 # convert to standard time zone of fm_tz before making it tz-naive
                 ser_from = ser_from.dt.tz_convert(fm_tz_std).dt.tz_localize(to_tz)
         match (self._adjust_interval, self._wrap_time_allowed):
@@ -255,7 +253,8 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             pd.Series(to_time_data, index=to_time_data).rename(to_time_col), on=from_time_col
         )
         limit = to_time_config.resolution / from_time_config.resolution - 1
-        assert limit % 1 == 0, f"limit is not a whole number {limit}"
+        assert (limit % 1 == 0) and (limit > 0), f"limit must be an integer, {limit}"
+        limit = int(limit)
         df[to_time_col] = df[to_time_col].ffill(limit=int(limit))
 
         # mapping schema
@@ -292,7 +291,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             pd.Series(from_time_data, index=from_time_data).rename(from_time_col), on=to_time_col
         )
         limit = from_time_config.resolution / to_time_config.resolution - 1
-        assert limit % 1 == 0, f"limit is not a whole number {limit}"
+        assert (limit % 1 == 0) and (limit > 0), f"limit must be an integer, {limit}"
         limit = int(limit)
 
         match resampling_operation:
@@ -350,4 +349,5 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 to_time_config,
             ],
         )
+        if resampling_operation == DisaggregationType.INTERPOLATE:
         return df, aggregation_operation, mapping_schema
