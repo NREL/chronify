@@ -349,5 +349,4 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 to_time_config,
             ],
         )
-        if resampling_operation == DisaggregationType.INTERPOLATE:
         return df, aggregation_operation, mapping_schema
