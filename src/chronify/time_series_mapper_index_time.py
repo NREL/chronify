@@ -364,7 +364,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         to_tz = self._to_time_config.start.tzinfo
 
         limit = timedelta(hours=1) / self._from_time_config.resolution
-        assert (limit % 1 == 0) and (limit != 0), f"limit must be an integer, {limit}"
+        assert (limit % 1 == 0) and (limit > 0), f"limit must be an integer, {limit}"
         limit = int(limit)
 
         for time_zone in time_zones:
