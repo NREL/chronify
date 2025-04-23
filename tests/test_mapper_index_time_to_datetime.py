@@ -2,6 +2,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData
 import pytest
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from typing import Any, Optional
 
 from chronify.sqlalchemy.functions import read_database, write_database
@@ -16,6 +17,7 @@ from chronify.time_configs import (
 from chronify.exceptions import ConflictingInputsError
 from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
+from chronify.time_utils import get_standard_time_zone
 
 
 def output_dst_schema(interval_type: TimeIntervalType, standard_time: bool = False) -> TableSchema:
@@ -231,17 +233,26 @@ def test_unaligned_time_mapping_without_wrap_time(iter_engines: Engine) -> None:
 
 @pytest.mark.parametrize("interval_shift", [False, True])
 @pytest.mark.parametrize("dst_std_time", [False, True])
+@pytest.mark.parametrize("interpolate_fallback", [False, True])
 def test_industrial_time_mapping(
-    iter_engines: Engine, interval_shift: bool, dst_std_time: bool
+    iter_engines: Engine,
+    interval_shift: bool,
+    dst_std_time: bool,
+    interpolate_fallback: bool,
 ) -> None:
     """I.e., unaligned time mapping with data_adjustment"""
     src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(
         interval_shift=interval_shift, standard_time=dst_std_time
     )
     error = None
-    data_adjustment = TimeBasedDataAdjustment(
-        daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
-    )
+    if interpolate_fallback:
+        data_adjustment = TimeBasedDataAdjustment(
+            daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK
+        )
+    else:
+        data_adjustment = TimeBasedDataAdjustment(
+            daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
+        )
     wrap_time_allowed = True
     run_test(
         iter_engines,
@@ -261,6 +272,24 @@ def test_industrial_time_mapping(
     assert 1659 not in dfo["value"].values
     assert 16590 not in dfo["value"].values
 
-    # Check value associated with fallback hour is duplicated
-    assert dfo.loc[7367:7370]["value"].value_counts()[73700] == 2
-    assert dfo.loc[7367 + 8760 : 7370 + 8760]["value"].value_counts()[7370] == 2
+    # Check value associated with fallback hour
+    if interpolate_fallback:
+        if interval_shift:
+            fallback = pd.Timestamp("'2018-11-04 02:00:00")
+        else:
+            fallback = pd.Timestamp("'2018-11-04 01:00:00")
+
+        cond1 = dfo["value"] == 7370.5
+        tz1 = ZoneInfo(dfo.loc[cond1, "time_zone"].tolist()[0])
+        tz1_std = get_standard_time_zone(tz1)
+        truth1 = fallback.tz_localize(tz1_std)
+        assert dfo.loc[cond1, "timestamp"].tolist()[0] == truth1
+
+        cond2 = dfo["value"] == 73705
+        tz2 = ZoneInfo(dfo.loc[cond2, "time_zone"].tolist()[0])
+        tz2_std = get_standard_time_zone(tz2)
+        truth2 = fallback.tz_localize(tz2_std)
+        assert dfo.loc[cond2, "timestamp"].tolist()[0] == truth2
+    else:
+        assert dfo.loc[7367:7370]["value"].value_counts()[73700] == 2
+        assert dfo.loc[7367 + 8760 : 7370 + 8760]["value"].value_counts()[7370] == 2

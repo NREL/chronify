@@ -6,7 +6,7 @@ from typing import Optional
 
 import pandas as pd
 from loguru import logger
-from sqlalchemy import Engine, MetaData, Table, select, text
+from sqlalchemy import Engine, MetaData, Table, select, text, func
 from chronify.hive_functions import create_materialized_view
 
 from chronify.sqlalchemy.functions import (
@@ -18,8 +18,9 @@ from chronify.models import TableSchema, MappingTableSchema
 from chronify.exceptions import ConflictingInputsError
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
-from chronify.time import TimeIntervalType
+from chronify.time import TimeIntervalType, ResamplingOperationType, AggregationType
 from chronify.time_configs import TimeBasedDataAdjustment
+from chronify.utils.path_utils import to_path
 
 
 class TimeSeriesMapperBase(abc.ABC):
@@ -33,6 +34,7 @@ class TimeSeriesMapperBase(abc.ABC):
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
     ) -> None:
         self._engine = engine
         self._metadata = metadata
@@ -45,6 +47,7 @@ class TimeSeriesMapperBase(abc.ABC):
             self._from_schema.time_config.interval_type
             != self._to_schema.time_config.interval_type
         )
+        self._resampling_operation = resampling_operation
 
     @abc.abstractmethod
     def check_schema_consistency(self) -> None:
@@ -91,6 +94,7 @@ def apply_mapping(
     engine: Engine,
     metadata: MetaData,
     data_adjustment: TimeBasedDataAdjustment,
+    resampling_operation: Optional[ResamplingOperationType] = None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -116,11 +120,13 @@ def apply_mapping(
             to_schema,
             engine,
             metadata,
-            scratch_dir,
-            output_file,
+            resampling_operation=resampling_operation,
+            scratch_dir=scratch_dir,
+            output_file=output_file,
         )
         if check_mapped_timestamps:
             if output_file is not None:
+                output_file = to_path(output_file)
                 with engine.begin() as conn:
                     create_view_from_parquet(conn, to_schema.name, output_file)
                 metadata.reflect(engine, views=True)
@@ -161,6 +167,7 @@ def _apply_mapping(
     to_schema: TableSchema,
     engine: Engine,
     metadata: MetaData,
+    resampling_operation: Optional[ResamplingOperationType] = None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
 ) -> None:
@@ -175,12 +182,33 @@ def _apply_mapping(
         set(from_schema.list_columns())
     )
 
+    val_col = to_schema.value_column  # from left_table
     final_cols = set(to_schema.list_columns()).union(left_table_pass_thru_columns)
     right_cols = set(right_table_columns).intersection(final_cols)
-    left_cols = final_cols - right_cols
+    left_cols = final_cols - right_cols - {val_col}
 
     select_stmt = [left_table.c[x] for x in left_cols]
     select_stmt += [right_table.c[x] for x in right_cols]
+
+    tval_col = left_table.c[val_col]
+    if "factor" in right_table_columns:
+        tval_col *= right_table.c["factor"]
+    if not resampling_operation:
+        select_stmt.append(tval_col)
+    else:
+        groupby_stmt = select_stmt.copy()
+        match resampling_operation:
+            case AggregationType.SUM:
+                select_stmt.append(func.sum(tval_col).label(val_col))
+            case AggregationType.AVG:
+                select_stmt.append(func.avg(tval_col).label(val_col))
+            case AggregationType.MIN:
+                select_stmt.append(func.min(tval_col).label(val_col))
+            case AggregationType.MAX:
+                select_stmt.append(func.max(tval_col).label(val_col))
+            case _:
+                msg = f"Unsupported {resampling_operation=}"
+                raise ValueError(msg)
 
     keys = from_schema.time_config.list_time_columns()
     # check time_zone
@@ -195,8 +223,11 @@ def _apply_mapping(
 
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
+    if resampling_operation:
+        query = query.group_by(*groupby_stmt)
 
     if output_file is not None:
+        output_file = to_path(output_file)
         write_query_to_parquet(engine, str(query), output_file, overwrite=True)
         return
 
