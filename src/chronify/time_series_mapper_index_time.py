@@ -249,7 +249,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         mapped_schema.time_config.length = df[mapped_time_col].nunique()
 
         mapping_schema = MappingTableSchema(
-            name="mapping_table",
+            name="mapping_table_index_time",
             time_configs=[from_time_config, mapped_schema.time_config],
         )
         return df, mapping_schema, mapped_schema
@@ -314,7 +314,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         mapped_schema.time_config.length = df[mapped_time_col].nunique()
 
         mapping_schema = MappingTableSchema(
-            name="index_time_mapping_table_interpolate_fallback",
+            name="mapping_table_index_time_with_dst_adjustment",
             time_configs=[from_time_config, mapped_schema.time_config],
         )
         return df, mapping_schema, mapped_schema
