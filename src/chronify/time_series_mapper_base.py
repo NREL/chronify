@@ -2,7 +2,7 @@ import abc
 from functools import reduce
 from operator import and_
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from loguru import logger
@@ -187,12 +187,12 @@ def _apply_mapping(
     right_cols = set(right_table_columns).intersection(final_cols)
     left_cols = final_cols - right_cols - {val_col}
 
-    select_stmt = [left_table.c[x] for x in left_cols]
+    select_stmt: list[Any] = [left_table.c[x] for x in left_cols]
     select_stmt += [right_table.c[x] for x in right_cols]
 
     tval_col = left_table.c[val_col]
     if "factor" in right_table_columns:
-        tval_col *= right_table.c["factor"]
+        tval_col *= right_table.c["factor"]  # type: ignore
     if not resampling_operation:
         select_stmt.append(tval_col)
     else:
