@@ -20,17 +20,22 @@ from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
 from chronify.time_utils import get_standard_time_zone
 
 
-def output_dst_schema(interval_type: TimeIntervalType, standard_time: bool = False) -> TableSchema:
+def output_dst_schema(
+    interval_type: TimeIntervalType,
+    standard_time: bool = False,
+    interval_resolution: timedelta = timedelta(hours=1),
+) -> TableSchema:
     if standard_time:
         tz = "MST"
     else:
         tz = "US/Mountain"
+    nts = int(8760 * 60 * 60 / interval_resolution.seconds)
     return TableSchema(
         name="output_data",
         time_config=DatetimeRange(
-            start=pd.Timestamp("2018-01-01 01:00", tz=tz),
-            resolution=timedelta(hours=1),
-            length=8760,
+            start=pd.Timestamp("2018-01-01 00:00", tz=tz),
+            resolution=interval_resolution,
+            length=nts,
             interval_type=interval_type,
             time_column="timestamp",
         ),
@@ -43,24 +48,29 @@ def data_for_simple_mapping(
     tz_naive: bool = False,
     interval_shift: bool = False,
     standard_time: bool = False,
+    interval_resolution: timedelta = timedelta(hours=1),
 ) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
-    src_df = pd.DataFrame({"index_time": range(1, 8761), "value": range(1, 8761)})
+    start_timestamp = pd.Timestamp("2018-01-01 00:00")
+    end_timestamp = pd.Timestamp("2018-12-31 23:59")
+    timeseries = pd.date_range(start_timestamp, end_timestamp, freq=interval_resolution)
+    nts = len(timeseries)
+    src_df = pd.DataFrame({"index_time": range(1, nts + 1), "value": range(1, nts + 1)})
 
     if tz_naive:
         time_config = IndexTimeRangeNTZ(
             start=1,
-            length=8760,
-            start_timestamp=pd.Timestamp("2018-01-01 00:00"),
-            resolution=timedelta(hours=1),
+            length=nts,
+            start_timestamp=start_timestamp,
+            resolution=interval_resolution,
             interval_type=TimeIntervalType.PERIOD_BEGINNING,
             time_column="index_time",
         )
     else:
         time_config = IndexTimeRangeTZ(
             start=1,
-            length=8760,
-            start_timestamp=pd.Timestamp("2018-01-01 00:00", tz="US/Mountain"),
-            resolution=timedelta(hours=1),
+            length=nts,
+            start_timestamp=start_timestamp.tz_localize("US/Mountain"),
+            resolution=interval_resolution,
             interval_type=TimeIntervalType.PERIOD_BEGINNING,
             time_column="index_time",
         )
@@ -75,15 +85,18 @@ def data_for_simple_mapping(
     else:
         interval_type = TimeIntervalType.PERIOD_BEGINNING
 
-    dst_schema = output_dst_schema(interval_type, standard_time=standard_time)
+    dst_schema = output_dst_schema(
+        interval_type, standard_time=standard_time, interval_resolution=interval_resolution
+    )
     return src_df, src_schema, dst_schema
 
 
 def data_for_unaligned_time_mapping(
     interval_shift: bool = False,
     standard_time: bool = False,
+    interval_resolution: timedelta = timedelta(hours=1),
 ) -> tuple[pd.DataFrame, TableSchema, TableSchema]:
-    time_array_len = 8760
+    time_array_len = int(8760 * 60 * 60 / interval_resolution.seconds)
     src_df = pd.concat(
         [
             pd.DataFrame(
@@ -109,7 +122,7 @@ def data_for_unaligned_time_mapping(
         start=1,
         length=time_array_len,
         start_timestamp=pd.Timestamp("2018-01-01 00:00"),
-        resolution=timedelta(hours=1),
+        resolution=interval_resolution,
         interval_type=TimeIntervalType.PERIOD_BEGINNING,
         time_column="index_time",
         time_zone_column="time_zone",
@@ -124,7 +137,9 @@ def data_for_unaligned_time_mapping(
         interval_type = TimeIntervalType.PERIOD_ENDING
     else:
         interval_type = TimeIntervalType.PERIOD_BEGINNING
-    dst_schema = output_dst_schema(interval_type, standard_time=standard_time)
+    dst_schema = output_dst_schema(
+        interval_type, standard_time=standard_time, interval_resolution=interval_resolution
+    )
     dst_schema.time_array_id_columns = ["id"]
     return src_df, src_schema, dst_schema
 
@@ -253,7 +268,6 @@ def test_industrial_time_mapping(
         data_adjustment = TimeBasedDataAdjustment(
             daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
         )
-    wrap_time_allowed = True
     run_test(
         iter_engines,
         src_df,
@@ -261,7 +275,7 @@ def test_industrial_time_mapping(
         dst_schema,
         error,
         data_adjustment=data_adjustment,
-        wrap_time_allowed=wrap_time_allowed,
+        wrap_time_allowed=True,
     )
 
     dfo = get_output_table(iter_engines, dst_schema)
@@ -293,3 +307,49 @@ def test_industrial_time_mapping(
     else:
         assert dfo.loc[7367:7370]["value"].value_counts()[73700] == 2
         assert dfo.loc[7367 + 8760 : 7370 + 8760]["value"].value_counts()[7370] == 2
+
+
+@pytest.mark.parametrize("dst_std_time", [False, True])
+@pytest.mark.parametrize("interpolate_fallback", [False, True])
+def test_industrial_time_subhourly(
+    iter_engines: Engine,
+    dst_std_time: bool,
+    interpolate_fallback: bool,
+) -> None:
+    src_df, src_schema, dst_schema = data_for_unaligned_time_mapping(
+        standard_time=dst_std_time, interval_resolution=timedelta(minutes=30)
+    )
+    error = None
+    if interpolate_fallback:
+        data_adjustment = TimeBasedDataAdjustment(
+            daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_INTERPOLATE_FALLBACK
+        )
+    else:
+        data_adjustment = TimeBasedDataAdjustment(
+            daylight_saving_adjustment=DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
+        )
+    run_test(
+        iter_engines,
+        src_df,
+        src_schema,
+        dst_schema,
+        error,
+        data_adjustment=data_adjustment,
+        wrap_time_allowed=True,
+    )
+
+    dfo = get_output_table(iter_engines, dst_schema)
+    dfo = dfo.sort_values(by=["time_zone", "timestamp"]).reset_index(drop=True)
+    dfo.loc[dfo["timestamp"].dt.date.astype(str) == "2018-11-04"]
+
+    assert set([3317, 3318, 33170, 33180]).intersection(set(dfo["value"].values)) == set()
+
+    # Check value associated with fallback hour
+    if interpolate_fallback:
+        for val in [14740, 147400]:
+            cond = (dfo["value"] > val) & (dfo["value"] < val + 1)
+            dfoi = dfo.loc[cond, "value"].tolist()
+            assert dfoi == [val + x / (len(dfoi) + 1) for x in range(1, len(dfoi) + 1)]
+    else:
+        assert dfo.loc[32254:32303]["value"].value_counts()[[14739, 14740]].tolist() == [2, 2]
+        assert dfo.loc[14730:14760]["value"].value_counts()[[147390, 147400]].tolist() == [2, 2]

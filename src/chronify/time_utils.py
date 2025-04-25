@@ -153,7 +153,7 @@ def get_standard_time_zone(tz: zoneinfo.ZoneInfo) -> zoneinfo.ZoneInfo | timezon
         return None
     try:
         std_tz = zoneinfo.ZoneInfo(std_tz_name)
-    except zoneinfo._common.ZoneInfoNotFoundError:
+    except zoneinfo.ZoneInfoNotFoundError:
         utcoffset = ts.utcoffset()
         if not utcoffset:
             return None

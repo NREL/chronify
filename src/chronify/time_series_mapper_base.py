@@ -200,12 +200,12 @@ def _apply_mapping(
         match resampling_operation:
             case AggregationType.SUM:
                 select_stmt.append(func.sum(tval_col).label(val_col))
-            case AggregationType.AVG:
-                select_stmt.append(func.avg(tval_col).label(val_col))
-            case AggregationType.MIN:
-                select_stmt.append(func.min(tval_col).label(val_col))
-            case AggregationType.MAX:
-                select_stmt.append(func.max(tval_col).label(val_col))
+            # case AggregationType.AVG:
+            #     select_stmt.append(func.avg(tval_col).label(val_col))
+            # case AggregationType.MIN:
+            #     select_stmt.append(func.min(tval_col).label(val_col))
+            # case AggregationType.MAX:
+            #     select_stmt.append(func.max(tval_col).label(val_col))
             case _:
                 msg = f"Unsupported {resampling_operation=}"
                 raise ValueError(msg)
