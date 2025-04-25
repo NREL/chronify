@@ -2,7 +2,7 @@
 
 import logging
 import numpy as np
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 import zoneinfo
 import pandas as pd
 
@@ -146,17 +146,15 @@ def roll_time_interval(
     return ser
 
 
-def get_standard_time_zone(tz: zoneinfo.ZoneInfo) -> zoneinfo.ZoneInfo | timezone | None:
+def get_standard_time_zone(tz: tzinfo | None) -> tzinfo | None:
     ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
     std_tz_name = ts.tzname()
     if not std_tz_name:
         return None
     try:
-        std_tz = zoneinfo.ZoneInfo(std_tz_name)
-    except zoneinfo._common.ZoneInfoNotFoundError:
+        return zoneinfo.ZoneInfo(std_tz_name)
+    except zoneinfo.ZoneInfoNotFoundError:
         utcoffset = ts.utcoffset()
         if not utcoffset:
             return None
-        std_tz = timezone(utcoffset)
-    
-    return std_tz
+        return timezone(utcoffset)

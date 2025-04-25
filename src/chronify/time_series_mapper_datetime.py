@@ -211,7 +211,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             case (False, True):
                 ser = wrap_timestamps(ser_from, to_time_data)
             case (False, False):
-                ser = pd.Series(to_time_data)
+                ser = ser_from
 
         df = pd.DataFrame(
             {
