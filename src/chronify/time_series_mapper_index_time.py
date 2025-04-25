@@ -17,7 +17,7 @@ from chronify.time_configs import (
 )
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_mapper_datetime import MapperDatetimeToDatetime
-from chronify.time import TimeType, DaylightSavingAdjustmentType
+from chronify.time import TimeType, DaylightSavingAdjustmentType, ResamplingOperationType
 from chronify.sqlalchemy.functions import read_database
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,16 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         to_schema: TableSchema,
         data_adjustment: Optional[TimeBasedDataAdjustment] = None,
         wrap_time_allowed: bool = False,
+        resampling_operation: Optional[ResamplingOperationType] = None,
     ) -> None:
         super().__init__(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         )
         self._dst_adjustment = self._data_adjustment.daylight_saving_adjustment
         if not isinstance(self._from_schema.time_config, IndexTimeRangeBase):
@@ -62,7 +69,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _check_time_length(self) -> None:
         flen, tlen = self._from_time_config.length, self._to_time_config.length
         if flen != tlen and not self._wrap_time_allowed:
-            msg = f"Length must match between {self._from_schema.__class__} from_schema and {self._to_schema.__class__} to_schema. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
+            msg = f"Length must match between from_time_config and to_time_config. {flen} vs. {tlen} OR wrap_time_allowed must be set to True"
             raise ConflictingInputsError(msg)
 
     def map_time(
@@ -109,7 +116,9 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             self._engine,
             self._metadata,
             TimeBasedDataAdjustment(),
+            resampling_operation=None,
             scratch_dir=scratch_dir,
+            output_file=None,
             check_mapped_timestamps=False,
         )
 
@@ -121,6 +130,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             self._to_schema,
             self._data_adjustment,
             self._wrap_time_allowed,
+            resampling_operation=self._resampling_operation,
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,

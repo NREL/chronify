@@ -17,6 +17,7 @@ from chronify.time_configs import (
     TimeBasedDataAdjustment,
     ColumnRepresentativeBase,
 )
+from chronify.time import ResamplingOperationType
 
 
 def map_time(
@@ -26,6 +27,7 @@ def map_time(
     to_schema: TableSchema,
     data_adjustment: Optional[TimeBasedDataAdjustment] = None,
     wrap_time_allowed: bool = False,
+    resampling_operation: Optional[ResamplingOperationType] = None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -35,7 +37,13 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperRepresentativeTimeToDatetime(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
@@ -45,7 +53,13 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperDatetimeToDatetime(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
@@ -55,7 +69,13 @@ def map_time(
         to_schema.time_config, DatetimeRange
     ):
         MapperIndexTimeToDatetime(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,
@@ -67,7 +87,13 @@ def map_time(
         # No way to generate expected timestamps for YearMonthDayPeriodTimeNTZ
         # Is there a way to only check the output datetime timestamps?
         MapperColumnRepresentativeToDatetime(
-            engine, metadata, from_schema, to_schema, data_adjustment, wrap_time_allowed
+            engine,
+            metadata,
+            from_schema,
+            to_schema,
+            data_adjustment,
+            wrap_time_allowed,
+            resampling_operation,
         ).map_time(
             scratch_dir=scratch_dir,
             output_file=output_file,

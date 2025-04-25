@@ -2,7 +2,8 @@
 
 import logging
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, tzinfo
+import zoneinfo
 import pandas as pd
 
 from chronify.time import (
@@ -143,3 +144,17 @@ def roll_time_interval(
     ser = shift_time_interval(ser, from_interval_type, to_interval_type)
     ser = wrap_timestamps(ser, to_timestamps)
     return ser
+
+
+def get_standard_time_zone(tz: tzinfo | None) -> tzinfo | None:
+    ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    std_tz_name = ts.tzname()
+    if not std_tz_name:
+        return None
+    try:
+        return zoneinfo.ZoneInfo(std_tz_name)
+    except zoneinfo.ZoneInfoNotFoundError:
+        utcoffset = ts.utcoffset()
+        if not utcoffset:
+            return None
+        return timezone(utcoffset)
