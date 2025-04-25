@@ -139,7 +139,9 @@ class IndexTimeRangeNTZ(IndexTimeRangeBase):
 
 class IndexTimeRangeTZ(IndexTimeRangeBase):
     """Index time that represents tz-aware timestamps of a single time zone.
-    start_timestamp is tz-aware
+    start_timestamp is tz-aware.
+    Used for dataset where the timeseries for all geographies start at the same
+    absolute time.
     """
 
     time_type: Literal[TimeType.INDEX_TZ] = TimeType.INDEX_TZ
@@ -158,7 +160,9 @@ class IndexTimeRangeTZ(IndexTimeRangeBase):
 
 class IndexTimeRangeLocalTime(IndexTimeRangeBase):
     """Index time that reprsents local time relative to a time zone column.
-    start_timestamp is tz-naive
+    start_timestamp is tz-naive.
+    Used for dataset where the timeseries for all geographies start at the same
+    clock time.
     """
 
     time_type: Literal[TimeType.INDEX_LOCAL] = TimeType.INDEX_LOCAL

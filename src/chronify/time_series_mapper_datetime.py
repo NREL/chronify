@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
@@ -11,7 +10,7 @@ from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_utils import roll_time_interval, wrap_timestamps
+from chronify.time_utils import roll_time_interval, wrap_timestamps, get_standard_time_zone
 
 logger = logging.getLogger(__name__)
 
@@ -101,12 +100,14 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         match (fm_tz is None, to_tz is None):
             case (True, False):
                 # get standard time zone of to_tz
-                year = self._to_time_config.start.year
-                to_tz_std = datetime(year=year, month=1, day=1, tzinfo=to_tz).tzname()
+                to_tz_std = get_standard_time_zone(to_tz)
                 # tz-naive time does not have skips/dups, so always localize in std tz first
                 ser_from = ser_from.dt.tz_localize(to_tz_std).dt.tz_convert(to_tz)
             case (False, True):
-                ser_from = ser_from.dt.tz_localize(to_tz)
+                # get standard time zone of fm_tz
+                fm_tz_std = get_standard_time_zone(fm_tz)
+                # convert to standard time zone of fm_tz before making it tz-naive
+                ser_from = ser_from.dt.tz_convert(fm_tz_std).dt.tz_localize(to_tz)
         match (self._adjust_interval, self._wrap_time_allowed):
             case (True, _):
                 ser = roll_time_interval(
@@ -118,7 +119,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
             case (False, True):
                 ser = wrap_timestamps(ser_from, to_time_data)
             case (False, False):
-                ser = pd.Series(to_time_data)
+                ser = ser_from
 
         df = pd.DataFrame(
             {

@@ -1,7 +1,7 @@
 """Definitions related to time"""
 
 from enum import StrEnum
-from typing import NamedTuple
+from typing import NamedTuple, Union
 from zoneinfo import ZoneInfo
 
 from chronify.exceptions import InvalidParameter
@@ -112,6 +112,27 @@ class MeasurementType(StrEnum):
     # description="Data values represent the measured value at that reported time",
     TOTAL = "total"
     # description="Data values represent the sum of values in a time range",
+
+
+class AggregationType(StrEnum):
+    """Operation types for resampling / aggregation"""
+
+    SUM = "sum"
+    AVG = "avg"
+    MIN = "min"
+    MAX = "max"
+
+
+class DisaggregationType(StrEnum):
+    """Operation types for resampling / disaggregation"""
+
+    INTERPOLATE = "interpolate"
+    DUPLICATE_FFILL = "duplicate_ffill"
+    DUPLICATE_BFILL = "duplicate_bfill"
+    UNIFORM_DISAGGREGATE = "uniform_disaggregate"
+
+
+ResamplingOperationType = Union[AggregationType, DisaggregationType]
 
 
 class TimeZone(StrEnum):
