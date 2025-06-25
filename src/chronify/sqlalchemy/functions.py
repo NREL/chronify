@@ -50,6 +50,7 @@ def write_database(
     table_name: str,
     configs: Sequence[TimeBaseModel],
     if_table_exists: DbWriteMode = "append",
+    scratch_dir: Path | None = None,
 ) -> None:
     """Write a Pandas DataFrame to the database.
     configs allows sqlite formatting for more than one datetime columns.
@@ -64,7 +65,7 @@ def write_database(
         case "sqlite":
             _write_to_sqlite(df, conn, table_name, configs, if_table_exists)
         case "hive":
-            _write_to_hive(df, conn, table_name, configs, if_table_exists)
+            _write_to_hive(df, conn, table_name, configs, if_table_exists, scratch_dir)
         case _:
             df.to_sql(table_name, conn, if_exists=if_table_exists, index=False)
 
@@ -139,6 +140,7 @@ def _write_to_hive(
     table_name: str,
     configs: Sequence[TimeBaseModel],
     if_table_exists: DbWriteMode,
+    scratch_dir: Path | None,
 ) -> None:
     df2 = df.copy()
     for config in configs:
@@ -154,7 +156,7 @@ def _write_to_hive(
                 new_dtype = "datetime64[us]"
                 df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
 
-    with NamedTemporaryFile(suffix=".parquet") as f:
+    with NamedTemporaryFile(suffix=".parquet", dir=scratch_dir) as f:
         f.close()
         output = Path(f.name)
     df2.to_parquet(output)

@@ -109,6 +109,7 @@ def apply_mapping(
             mapping_schema.name,
             mapping_schema.time_configs,
             if_table_exists="fail",
+            scratch_dir=scratch_dir,
         )
     metadata.reflect(engine, views=True)
 
