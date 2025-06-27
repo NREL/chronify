@@ -87,7 +87,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
         elif isinstance(self._from_time_config, MonthDayHourTimeNTZ):
             df_mapping, mapping_schema = self._create_mdh_mapping()
         elif isinstance(self._from_time_config, YearMonthDayPeriodTimeNTZ):
-            int_mapping = self._intermediate_mapping_ymdp_to_ymdh()
+            int_mapping = self._intermediate_mapping_ymdp_to_ymdh(scratch_dir)
             from_schema = int_mapping
             drop_table = int_mapping.name
             df_mapping, mapping_schema = self._create_ymdh_mapping(
@@ -133,7 +133,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
             msg = "Year is required for mdh time range to be converter to DatetimeRange."
             raise InvalidParameter(msg)
 
-    def _intermediate_mapping_ymdp_to_ymdh(self) -> TableSchema:
+    def _intermediate_mapping_ymdp_to_ymdh(self, scratch_dir: Path | None) -> TableSchema:
         """Convert ymdp to ymdh for intermediate mapping."""
         mapping_table_name = "intermediate_ymdp_to_ymdh"
         period_col = self._from_time_config.hour_columns[0]
@@ -150,6 +150,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
                 mapping_table_name,
                 [self._from_time_config],
                 if_table_exists="replace",
+                scratch_dir=scratch_dir,
             )
 
         self._metadata.reflect(self._engine)
