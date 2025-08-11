@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chronify"
-version = "0.3.0"
+version = "0.3.1"
 description = "Time series store and mapping libray"
 readme = "README.md"
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.11, <3.14"
 license = "BSD-3-Clause"
 keywords = []
 authors = [
