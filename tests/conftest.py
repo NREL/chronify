@@ -45,6 +45,7 @@ def iter_stores_by_engine(request) -> Generator[Store, None, None]:
     engine = create_engine(engine["url"], *engine["connect_args"], **engine["kwargs"])
     store = Store(engine=engine)
     yield store
+    store.dispose()
 
 
 @pytest.fixture(params=ENGINES.keys())

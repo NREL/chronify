@@ -190,6 +190,10 @@ class Store:
             raise FileNotFoundError(msg)
         return Store(engine=create_engine(f"{engine_name}:///{path}", **connect_kwargs))
 
+    def dispose(self) -> None:
+        """Call self.engine.dispose() in order to dispose of the current connections."""
+        self._engine.dispose()
+
     def get_table(self, name: str) -> Table:
         """Return the sqlalchemy Table object."""
         if not self.has_table(name):
