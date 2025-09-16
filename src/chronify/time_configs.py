@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Union, Literal, Optional
 from pydantic import Field, field_validator
 from typing_extensions import Annotated
+from zoneinfo import ZoneInfo
 
 from chronify.base_models import ChronifyBaseModel
 from chronify.time import (
@@ -80,6 +81,18 @@ class DatetimeRange(TimeBaseModel):
 
     def get_time_zone_column(self) -> None:
         return None
+
+    def convert_time_zone(self, tz: ZoneInfo | None) -> "DatetimeRange":
+        """Return a copy of the DatetimeRange with the start timestamp converted to time zone."""
+        return self.model_copy(update={"start": self.start.astimezone(tz)})
+
+    def replace_time_zone(self, tz: ZoneInfo | None) -> "DatetimeRange":
+        """Return a copy of the DatetimeRange with the time zone replaced."""
+        return self.model_copy(update={"start": self.start.replace(tzinfo=tz)})
+
+
+# TODO:
+# class DatetimeRangeWithTZColumn(TimeBaseModel):
 
 
 class AnnualTimeRange(TimeBaseModel):

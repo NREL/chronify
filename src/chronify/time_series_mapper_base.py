@@ -113,6 +113,11 @@ def apply_mapping(
         )
     metadata.reflect(engine, views=True)
 
+    # with engine.connect() as conn:
+    #     import pandas as pd
+    #     dfm = pd.read_sql(f"select * from {mapping_schema.name}", conn)
+    #     df = pd.read_sql(f"select * from {from_schema.name}", conn)
+    #     breakpoint()
     created_tmp_view = False
     try:
         _apply_mapping(
@@ -211,18 +216,13 @@ def _apply_mapping(
                 msg = f"Unsupported {resampling_operation=}"
                 raise ValueError(msg)
 
-    keys = from_schema.time_config.list_time_columns()
-    # check time_zone
-    tz_col = from_schema.time_config.get_time_zone_column()
-    if tz_col is not None:
-        keys.append(tz_col)
-        assert tz_col in left_table_columns, f"{tz_col} not in table={from_schema.name}"
-        ftz_col = "from_" + tz_col
-        assert (
-            ftz_col in right_table_columns
-        ), f"{ftz_col} not in mapping table={mapping_table_name}"
-
+    from_keys = [x for x in right_table_columns if x.startswith("from_")]
+    keys = [x.removeprefix("from_") for x in from_keys]
+    assert set(keys).issubset(
+        set(left_table_columns)
+    ), f"Keys {keys} not in table={from_schema.name}"
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
+
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
     if resampling_operation:
         query = query.group_by(*groupby_stmt)
