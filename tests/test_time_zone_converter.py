@@ -32,7 +32,8 @@ def generate_dataframe_with_tz_col(schema: TableSchema) -> pd.DataFrame:
         ZoneInfo("US/Eastern"),
         ZoneInfo("US/Central"),
         ZoneInfo("US/Mountain"),
-    ]  # , None]
+        None,
+    ]
     time_zones = [tz.key if tz is not None else "None" for tz in time_zones]
     dfo = pd.merge(
         df, pd.DataFrame({"id": range(len(time_zones)), "time_zone": time_zones}), how="cross"
@@ -125,7 +126,8 @@ def run_conversion_by_geography(
 
     assert df["value"].equals(dfo["value"])
     for i in range(len(df)):
-        tz = ZoneInfo(df.loc[i, "time_zone"])
+        tzn = df.loc[i, "time_zone"]
+        tz = ZoneInfo(tzn) if tzn != "None" else None
         ts = df.loc[i, "timestamp"].tz_convert(tz).replace(tzinfo=None)
         assert dfo.loc[i, "timestamp"] == ts
 

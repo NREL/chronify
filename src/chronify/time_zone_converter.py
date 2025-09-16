@@ -95,7 +95,6 @@ class TimeZoneConverterByGeography(TimeZoneConverterBase):
         self, engine: Engine, metadata: MetaData, from_schema: TableSchema, time_zone_column: str
     ):
         super().__init__(engine, metadata, from_schema)
-        self._from_time_config: DatetimeRange = self._from_schema.time_config
         self.time_zone_column = time_zone_column
         self._to_schema = self.generate_to_schema()
 
@@ -132,9 +131,9 @@ class TimeZoneConverterByGeography(TimeZoneConverterBase):
 
     def _create_interm_map_with_time_zone(self) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe for converting datetime to geography-based time zone"""
-        mapped_time_col = self._from_time_config.time_column
+        mapped_time_col = self._from_schema.time_config.time_column
         from_time_col = "from_" + mapped_time_col
-        from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
+        from_time_data = make_time_range_generator(self._from_schema.time_config).list_timestamps()
 
         from_tz_col = "from_" + self.time_zone_column
 
@@ -145,14 +144,14 @@ class TimeZoneConverterByGeography(TimeZoneConverterBase):
                 .distinct()
                 .where(table.c[self.time_zone_column].is_not(None))
             )
-            time_zones = read_database(stmt, conn, self._from_time_config)[
+            time_zones = read_database(stmt, conn, self._from_schema.time_config)[
                 self.time_zone_column
             ].to_list()
 
-        # TODO may need to enforce tz is not None, clean up model_copy()
-
-        from_time_config = self._from_time_config.model_copy(update={"time_column": from_time_col})
-        to_time_config = self._from_time_config.replace_time_zone(None)
+        from_time_config = self._from_schema.time_config.model_copy(
+            update={"time_column": from_time_col}
+        )
+        to_time_config = self._from_schema.time_config.replace_time_zone(None)
 
         df_tz = []
         for time_zone in time_zones:

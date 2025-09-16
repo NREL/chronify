@@ -131,8 +131,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         assert (
             df[to_time_col].nunique() == self._to_time_config.length
         ), "to_time_col does not have the right number of timestamps"
-        from_time_config = self._from_time_config.model_copy()
-        from_time_config.time_column = from_time_col
+        from_time_config = self._from_time_config.model_copy(update={"time_column": from_time_col})
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[

@@ -190,8 +190,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_time_col = "from_" + self._from_time_config.time_column
         from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
 
-        from_time_config = self._from_time_config.model_copy()
-        from_time_config.time_column = from_time_col
+        from_time_config = self._from_time_config.model_copy(update={"time_column": from_time_col})
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[from_time_config, mapped_schema.time_config],
@@ -225,10 +224,10 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             stmt = select(table.c[tz_col]).distinct().where(table.c[tz_col].is_not(None))
             time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
-        from_time_config = self._from_time_config.model_copy()
+        from_time_config = self._from_time_config.model_copy(
+            update={"time_column": from_time_col, "time_zone_column": from_tz_col}
+        )
         assert isinstance(from_time_config, IndexTimeRangeLocalTime)
-        from_time_config.time_column = from_time_col
-        from_time_config.time_zone_column = from_tz_col
 
         df_tz = []
         to_tz = self._to_time_config.start.tzinfo
@@ -295,10 +294,10 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             stmt = select(table.c[tz_col]).distinct().where(table.c[tz_col].is_not(None))
             time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
-        from_time_config = self._from_time_config.model_copy()
+        from_time_config = self._from_time_config.model_copy(
+            update={"time_column": from_time_col, "time_zone_column": from_tz_col}
+        )
         assert isinstance(from_time_config, IndexTimeRangeLocalTime)
-        from_time_config.time_column = from_time_col
-        from_time_config.time_zone_column = from_tz_col
 
         df_tz = []
         for time_zone in time_zones:
