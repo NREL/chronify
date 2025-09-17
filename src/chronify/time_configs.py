@@ -201,7 +201,7 @@ class IndexTimeRangeTZ(IndexTimeRangeBase):
         return None
 
 
-class IndexTimeRangeLocalTime(IndexTimeRangeBase):
+class IndexTimeRangeWithTZColumn(IndexTimeRangeBase):
     """Index time that reprsents local time relative to a time zone column.
     start_timestamp is tz-naive.
     Used for dataset where the timeseries for all geographies start at the same
@@ -217,7 +217,7 @@ class IndexTimeRangeLocalTime(IndexTimeRangeBase):
     @classmethod
     def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
         if start_timestamp.tzinfo is not None:
-            msg = "start_timestamp must be tz-naive for IndexTimeRangeLocalTime"
+            msg = "start_timestamp must be tz-naive for IndexTimeRangeWithTZColumn"
             raise ValueError(msg)
         return start_timestamp
 
@@ -228,7 +228,7 @@ class IndexTimeRangeLocalTime(IndexTimeRangeBase):
 IndexTimeRanges = Union[
     IndexTimeRangeNTZ,
     IndexTimeRangeTZ,
-    IndexTimeRangeLocalTime,
+    IndexTimeRangeWithTZColumn,
 ]
 
 
@@ -396,7 +396,7 @@ TimeConfig = Annotated[
         DatetimeRangeWithTZColumn,
         IndexTimeRangeNTZ,
         IndexTimeRangeTZ,
-        IndexTimeRangeLocalTime,
+        IndexTimeRangeWithTZColumn,
         RepresentativePeriodTimeNTZ,
         RepresentativePeriodTimeTZ,
         YearMonthDayPeriodTimeNTZ,

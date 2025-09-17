@@ -14,7 +14,7 @@ from chronify.time_configs import (
     DatetimeRange,
     IndexTimeRanges,
     IndexTimeRangeBase,
-    IndexTimeRangeLocalTime,
+    IndexTimeRangeWithTZColumn,
     TimeBasedDataAdjustment,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -227,7 +227,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_time_config = self._from_time_config.model_copy(
             update={"time_column": from_time_col, "time_zone_column": from_tz_col}
         )
-        assert isinstance(from_time_config, IndexTimeRangeLocalTime)
+        assert isinstance(from_time_config, IndexTimeRangeWithTZColumn)
 
         df_tz = []
         to_tz = self._to_time_config.start.tzinfo
@@ -297,7 +297,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_time_config = self._from_time_config.model_copy(
             update={"time_column": from_time_col, "time_zone_column": from_tz_col}
         )
-        assert isinstance(from_time_config, IndexTimeRangeLocalTime)
+        assert isinstance(from_time_config, IndexTimeRangeWithTZColumn)
 
         df_tz = []
         for time_zone in time_zones:

@@ -34,7 +34,11 @@ from chronify.exceptions import (
 from chronify.models import ColumnDType, CsvTableSchema, PivotedTableSchema, TableSchema
 from chronify.store import Store
 from chronify.time import TimeIntervalType, DaylightSavingAdjustmentType
-from chronify.time_configs import DatetimeRange, IndexTimeRangeLocalTime, TimeBasedDataAdjustment
+from chronify.time_configs import (
+    DatetimeRange,
+    IndexTimeRangeWithTZColumn,
+    TimeBasedDataAdjustment,
+)
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.time_series_checker import check_timestamp_lists
 from chronify.utils.sql import make_temp_view_name
@@ -516,7 +520,7 @@ def test_map_index_time_to_datetime(
         name="generators_index",
         time_array_id_columns=["generator", "time_zone"],
         value_column="value",
-        time_config=IndexTimeRangeLocalTime(
+        time_config=IndexTimeRangeWithTZColumn(
             start=0,
             length=time_array_len,
             start_timestamp=pd.Timestamp(f"{year}-01-01 00:00"),
