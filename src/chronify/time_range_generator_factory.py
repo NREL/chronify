@@ -2,7 +2,7 @@ from typing import Optional
 
 from chronify.time_configs import (
     AnnualTimeRange,
-    DatetimeRange,
+    DatetimeRangeBase,
     IndexTimeRangeBase,
     RepresentativePeriodTimeBase,
     TimeBaseModel,
@@ -22,7 +22,7 @@ def make_time_range_generator(
     leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
 ) -> TimeRangeGeneratorBase:
     match model:
-        case DatetimeRange():
+        case DatetimeRangeBase():
             return DatetimeRangeGenerator(model, leap_day_adjustment=leap_day_adjustment)
         case AnnualTimeRange():
             return AnnualTimeRangeGenerator(model)

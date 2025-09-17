@@ -21,6 +21,7 @@ from chronify.time import RepresentativePeriodFormat
 from chronify.time_configs import (
     AnnualTimeRange,
     DatetimeRange,
+    DatetimeRangeWithTZColumn,
     IndexTimeRangeNTZ,
     IndexTimeRangeTZ,
     IndexTimeRangeLocalTime,
@@ -37,6 +38,7 @@ __all__ = (
     "ConflictingInputsError",
     "CsvTableSchema",
     "DatetimeRange",
+    "DatetimeRangeWithTZColumn",
     "IndexTimeRangeLocalTime",
     "IndexTimeRangeNTZ",
     "IndexTimeRangeTZ",

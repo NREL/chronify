@@ -1,6 +1,7 @@
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
 import numpy as np
+import pytest
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
@@ -116,20 +117,29 @@ def run_conversion_by_geography(
     engine: Engine,
     df: pd.DataFrame,
     from_schema: TableSchema,
+    wrap_time_allowed: bool,
 ) -> None:
     metadata = MetaData()
     ingest_data(engine, metadata, df, from_schema)
-    TZC = TimeZoneConverterByGeography(engine, metadata, from_schema, "time_zone")
+    TZC = TimeZoneConverterByGeography(
+        engine, metadata, from_schema, "time_zone", wrap_time_allowed=wrap_time_allowed
+    )
     TZC.convert_time_zone()
     dfo = get_mapped_dataframe(engine, TZC._to_schema.name, TZC._to_schema.time_config)
     dfo = dfo[df.columns].sort_values(by="index").reset_index(drop=True)
+    dfo["timestamp"] = pd.to_datetime(dfo["timestamp"])  # needed for engine 2, not sure why
 
     assert df["value"].equals(dfo["value"])
-    for i in range(len(df)):
-        tzn = df.loc[i, "time_zone"]
-        tz = ZoneInfo(tzn) if tzn != "None" else None
-        ts = df.loc[i, "timestamp"].tz_convert(tz).replace(tzinfo=None)
-        assert dfo.loc[i, "timestamp"] == ts
+    if wrap_time_allowed:
+        assert set(dfo["timestamp"].value_counts()) == {4}
+        expected = [x.replace(tzinfo=None) for x in sorted(set(df["timestamp"]))]
+        assert set(dfo["timestamp"]) == set(expected)
+    else:
+        for i in range(len(df)):
+            tzn = df.loc[i, "time_zone"]
+            tz = ZoneInfo(tzn) if tzn != "None" else None
+            ts = df.loc[i, "timestamp"].tz_convert(tz).replace(tzinfo=None)
+            assert dfo.loc[i, "timestamp"] == ts
 
 
 def test_time_conversion(iter_engines: Engine) -> None:
@@ -141,7 +151,8 @@ def test_time_conversion(iter_engines: Engine) -> None:
     run_conversion(iter_engines, df, from_schema, to_time_zone)
 
 
-def test_time_conversion_by_geography(iter_engines: Engine) -> None:
+@pytest.mark.parametrize("wrap_time_allowed", [False, True])
+def test_time_conversion_by_geography(iter_engines: Engine, wrap_time_allowed: bool) -> None:
     from_schema = get_datetime_schema(
         2018,
         ZoneInfo("US/Mountain"),
@@ -150,4 +161,4 @@ def test_time_conversion_by_geography(iter_engines: Engine) -> None:
         has_tz_col=True,
     )
     df = generate_dataframe_with_tz_col(from_schema)
-    run_conversion_by_geography(iter_engines, df, from_schema)
+    run_conversion_by_geography(iter_engines, df, from_schema, wrap_time_allowed)

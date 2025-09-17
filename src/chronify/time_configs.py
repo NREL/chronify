@@ -60,15 +60,10 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
         """Return the column in the table that contains time zone or offset information."""
 
 
-class DatetimeRange(TimeBaseModel):
-    """Defines a time range that uses Python datetime instances."""
+class DatetimeRangeBase(TimeBaseModel):
+    """Defines a time range base class that uses Python datetime instances."""
 
     time_column: str = Field(description="Column in the table that represents time.")
-    time_type: Literal[TimeType.DATETIME] = TimeType.DATETIME
-    start: datetime = Field(
-        description="Start time of the range. If it includes a time zone, the timestamps in "
-        "the data must be time zone-aware."
-    )
     length: int
     resolution: timedelta
 
@@ -78,6 +73,16 @@ class DatetimeRange(TimeBaseModel):
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
+
+
+class DatetimeRange(DatetimeRangeBase):
+    """Defines a time range with a single time zone."""
+
+    time_type: Literal[TimeType.DATETIME] = TimeType.DATETIME
+    start: datetime = Field(
+        description="Start time of the range. If it includes a time zone, the timestamps in "
+        "the data must be time zone-aware."
+    )
 
     def get_time_zone_column(self) -> None:
         return None
@@ -91,8 +96,33 @@ class DatetimeRange(TimeBaseModel):
         return self.model_copy(update={"start": self.start.replace(tzinfo=tz)})
 
 
-# TODO:
-# class DatetimeRangeWithTZColumn(TimeBaseModel):
+class DatetimeRangeWithTZColumn(DatetimeRangeBase):
+    """Defines a time range that uses an external time zone column to interpret timestamps."""
+
+    time_type: Literal[TimeType.DATETIME_TZ_COL] = TimeType.DATETIME_TZ_COL
+    start: datetime = Field(
+        description="Start time of the range. The timestamps in the data must be tz-naive."
+    )
+    time_zone_column: str = Field(
+        description="Column in the table that has time zone or offset information."
+    )
+
+    @field_validator("start")
+    @classmethod
+    def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
+        if start_timestamp.tzinfo is not None:
+            msg = "start_timestamp must be tz-naive for DATETIME_TZ_COL"
+            raise ValueError(msg)
+        return start_timestamp
+
+    def get_time_zone_column(self) -> str:
+        return self.time_zone_column
+
+
+DateTimeRanges = Union[
+    DatetimeRange,
+    DatetimeRangeWithTZColumn,
+]
 
 
 class AnnualTimeRange(TimeBaseModel):
@@ -363,6 +393,7 @@ TimeConfig = Annotated[
     Union[
         AnnualTimeRange,
         DatetimeRange,
+        DatetimeRangeWithTZColumn,
         IndexTimeRangeNTZ,
         IndexTimeRangeTZ,
         IndexTimeRangeLocalTime,
