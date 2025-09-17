@@ -15,7 +15,7 @@ class TimeType(StrEnum):
     ANNUAL = "annual"
     INDEX_NTZ = "index_ntz"
     INDEX_TZ = "index_tz"
-    INDEX_LOCAL = "index_local"
+    INDEX_TZ_COL = "INDEX_TZ_COL"
     REPRESENTATIVE_PERIOD_NTZ = "representative_period_ntz"
     REPRESENTATIVE_PERIOD_TZ = "representative_period_tz"
     YEAR_MONTH_DAY_HOUR_NTZ = "year_month_day_hour"

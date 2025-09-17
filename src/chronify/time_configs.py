@@ -67,10 +67,6 @@ class DatetimeRangeBase(TimeBaseModel):
     length: int
     resolution: timedelta
 
-    def start_time_is_tz_naive(self) -> bool:
-        """Return True if the timestamps in the range do not have time zones."""
-        return self.start.tzinfo is None
-
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
 
@@ -83,6 +79,10 @@ class DatetimeRange(DatetimeRangeBase):
         description="Start time of the range. If it includes a time zone, the timestamps in "
         "the data must be time zone-aware."
     )
+
+    def start_time_is_tz_naive(self) -> bool:
+        """Return True if the timestamps in the range do not have time zones."""
+        return self.start.tzinfo is None
 
     def get_time_zone_column(self) -> None:
         return None
@@ -114,6 +114,9 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
             msg = "start_timestamp must be tz-naive for DATETIME_TZ_COL"
             raise ValueError(msg)
         return start_timestamp
+
+    def start_time_is_tz_naive(self) -> bool:
+        return True
 
     def get_time_zone_column(self) -> str:
         return self.time_zone_column
@@ -208,7 +211,7 @@ class IndexTimeRangeWithTZColumn(IndexTimeRangeBase):
     clock time.
     """
 
-    time_type: Literal[TimeType.INDEX_LOCAL] = TimeType.INDEX_LOCAL
+    time_type: Literal[TimeType.INDEX_TZ_COL] = TimeType.INDEX_TZ_COL
     time_zone_column: str = Field(
         description="Column in the table that has time zone or offset information."
     )

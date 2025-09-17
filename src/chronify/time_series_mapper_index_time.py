@@ -77,7 +77,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self.check_schema_consistency()
 
         # Convert from index time to its represented datetime
-        if self._from_time_config.time_type == TimeType.INDEX_LOCAL:
+        if self._from_time_config.time_type == TimeType.INDEX_TZ_COL:
             if (
                 self._dst_adjustment
                 == DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
@@ -207,7 +207,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _create_interm_map_with_time_zone(
         self,
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
-        """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
+        """Create mapping dataframe for converting INDEX_TZ_COL time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
         assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
@@ -216,7 +216,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
 
         tz_col = self._from_time_config.get_time_zone_column()
-        assert tz_col is not None, "Expecting a time zone column for INDEX_LOCAL"
+        assert tz_col is not None, "Expecting a time zone column for INDEX_TZ_COL"
         from_tz_col = "from_" + tz_col
 
         with self._engine.connect() as conn:
@@ -262,7 +262,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self,
         interpolate_fallback: bool = False,
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
-        """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime
+        """Create mapping dataframe for converting INDEX_TZ_COL time to its represented datetime
         with time-based daylight_saving adjustment that
         drops the spring-forward hour and, per user input,
         interpolates or duplicates the fall-back hour
@@ -286,7 +286,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         df_ntz["clock_time"] = df_ntz["clock_time"].astype(str)
 
         tz_col = self._from_time_config.get_time_zone_column()
-        assert tz_col is not None, "Expecting a time zone column for INDEX_LOCAL"
+        assert tz_col is not None, "Expecting a time zone column for INDEX_TZ_COL"
         from_tz_col = "from_" + tz_col
 
         with self._engine.connect() as conn:
