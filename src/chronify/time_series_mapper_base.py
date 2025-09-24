@@ -112,12 +112,6 @@ def apply_mapping(
             scratch_dir=scratch_dir,
         )
     metadata.reflect(engine, views=True)
-
-    # with engine.connect() as conn:
-    #     import pandas as pd
-    #     dfm = pd.read_sql(f"select * from {mapping_schema.name}", conn)
-    #     df = pd.read_sql(f"select * from {from_schema.name}", conn)
-    #     breakpoint()
     created_tmp_view = False
     try:
         _apply_mapping(

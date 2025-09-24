@@ -110,7 +110,9 @@ def run_conversion(
     TZC.convert_time_zone(check_mapped_timestamps=True)
     dfo = get_mapped_dataframe(engine, TZC._to_schema.name, TZC._to_schema.time_config)
 
-    assert (df["timestamp"] == dfo["timestamp"]).prod() == 1  # TODO: these will always be equal
+    assert df["value"].equals(dfo["value"])
+    expected = df["timestamp"].dt.tz_convert(to_time_zone).dt.tz_localize(None)
+    assert (dfo["timestamp"] == expected).prod() == 1
 
 
 def run_conversion_by_geography(
@@ -142,12 +144,15 @@ def run_conversion_by_geography(
             assert dfo.loc[i, "timestamp"] == ts
 
 
-def test_time_conversion(iter_engines: Engine) -> None:
+@pytest.mark.parametrize(
+    "to_time_zone", [ZoneInfo("US/Central"), ZoneInfo("UTC"), ZoneInfo("America/Los_Angeles")]
+)
+def test_time_conversion(iter_engines: Engine, to_time_zone: ZoneInfo) -> None:
     from_schema = get_datetime_schema(
         2018, ZoneInfo("US/Mountain"), TimeIntervalType.PERIOD_BEGINNING, "base_table"
     )
     df = generate_datetime_dataframe(from_schema)
-    to_time_zone = ZoneInfo("US/Central")
+    to_time_zone = ZoneInfo("US/Central")  # TODO
     run_conversion(iter_engines, df, from_schema, to_time_zone)
 
 

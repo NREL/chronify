@@ -66,7 +66,10 @@ class DatetimeRangeGenerator(TimeRangeGeneratorBase):
                         yield pd.Timestamp(cur)
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
-        return sorted(df[self._model.time_column].unique())
+        result = sorted(df[self._model.time_column].unique())
+        if not isinstance(result[0], datetime):
+            result = [pd.Timestamp(x) for x in result]
+        return result
 
     def list_time_columns(self) -> list[str]:
         return self._model.list_time_columns()
