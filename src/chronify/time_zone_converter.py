@@ -20,6 +20,27 @@ from chronify.time import TimeType
 from chronify.time_utils import wrap_timestamps
 
 
+def convert_to_single_time_zone(
+    engine: Engine,
+    metadata: MetaData,
+    from_schema: TableSchema,
+    to_time_zone: ZoneInfo | None,
+) -> None:
+    TimeZoneConverter(engine, metadata, from_schema, to_time_zone)
+
+
+def convert_to_multiple_time_zones(
+    engine: Engine,
+    metadata: MetaData,
+    from_schema: TableSchema,
+    time_zone_column: str,
+    wrap_time_allowed: Optional[bool] = False,
+) -> None:
+    TimeZoneConverterByGeography(
+        engine, metadata, from_schema, time_zone_column, wrap_time_allowed
+    )
+
+
 class TimeZoneConverterBase(abc.ABC):
     """Base class for time zone conversion of time series data."""
 
@@ -76,7 +97,6 @@ class TimeZoneConverter(TimeZoneConverterBase):
             self._to_time_zone
         ).replace_time_zone(None)
         time_kwargs = to_time_config.model_dump()
-        # time_kwargs = self._from_schema.time_config.model_dump()
         time_kwargs = dict(
             filter(
                 lambda k_v: k_v[0] in DatetimeRangeWithTZColumn.model_fields,
@@ -84,7 +104,6 @@ class TimeZoneConverter(TimeZoneConverterBase):
             )
         )
         time_kwargs["time_type"] = TimeType.DATETIME_TZ_COL
-        # time_kwargs["start"] = self._from_schema.time_config.start.astimezone(self._to_time_zone).replace(tzinfo=None)
         time_kwargs["time_zone_column"] = "time_zone"
         return DatetimeRangeWithTZColumn(**time_kwargs)
 
