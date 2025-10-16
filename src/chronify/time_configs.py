@@ -101,25 +101,26 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
 
     time_type: Literal[TimeType.DATETIME_TZ_COL] = TimeType.DATETIME_TZ_COL
     start: datetime = Field(
-        description="Start time of the range. The timestamps in the data must be tz-naive."
+        description=(
+            "Start time of the range. If tz-naive, timestamps of different time zones ",
+            "are expected to align in clock time. If tz-aware, timestamps of different ",
+            "time zones are expected to align in real time.",
+        )
     )
     time_zone_column: str = Field(
         description="Column in the table that has time zone or offset information."
     )
-
-    @field_validator("start")
-    @classmethod
-    def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
-        if start_timestamp.tzinfo is not None:
-            msg = "start_timestamp must be tz-naive for DATETIME_TZ_COL"
-            raise ValueError(msg)
-        return start_timestamp
+    time_zones: Optional[list[ZoneInfo | None]] = Field(
+        description="Unique time zones from the table."
+    )
 
     def start_time_is_tz_naive(self) -> bool:
-        return True
+        return self.start.tzinfo is None
 
     def get_time_zone_column(self) -> str:
         return self.time_zone_column
+
+    # Lixi TODO: ensure table schema has time_zone col?
 
 
 DateTimeRanges = Union[

@@ -195,7 +195,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
 
     def _iter_datetime(self) -> Generator[datetime, None, None]:
         datetime_generator = DatetimeRangeGenerator(self._to_time_config)
-        yield from datetime_generator.iter_timestamps()
+        yield from datetime_generator._iter_timestamps()
 
     def _create_ymdh_mapping(
         self, col_names: list[str] = ["year", "month", "day", "hour"]

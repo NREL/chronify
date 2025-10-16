@@ -2,20 +2,27 @@ from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
 import numpy as np
 import pytest
+from typing import Any
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData
 
 from chronify.sqlalchemy.functions import read_database, write_database
-from chronify.time_zone_converter import TimeZoneConverter, TimeZoneConverterByGeography
+from chronify.time_zone_converter import (
+    TimeZoneConverter,
+    TimeZoneConverterByColumn,
+    convert_time_zone,
+    convert_time_zone_by_column,
+)
 from chronify.time_configs import DatetimeRange
 from chronify.models import TableSchema
 from chronify.time import TimeIntervalType
 from chronify.datetime_range_generator import DatetimeRangeGenerator
+from chronify.exceptions import InvalidParameter
 
 
 def generate_datetime_data(time_config: DatetimeRange) -> pd.Series:  # type: ignore
-    return pd.to_datetime(list(DatetimeRangeGenerator(time_config).iter_timestamps()))
+    return pd.to_datetime(list(DatetimeRangeGenerator(time_config)._iter_timestamps()))
 
 
 def generate_datetime_dataframe(schema: TableSchema) -> pd.DataFrame:
@@ -35,7 +42,7 @@ def generate_dataframe_with_tz_col(schema: TableSchema) -> pd.DataFrame:
         ZoneInfo("US/Mountain"),
         None,
     ]
-    time_zones = [tz.key if tz is not None else "None" for tz in time_zones]
+    time_zones = [tz.key if tz else "None" for tz in time_zones]
     dfo = pd.merge(
         df, pd.DataFrame({"id": range(len(time_zones)), "time_zone": time_zones}), how="cross"
     )
@@ -106,16 +113,19 @@ def run_conversion(
 ) -> None:
     metadata = MetaData()
     ingest_data(engine, metadata, df, from_schema)
-    TZC = TimeZoneConverter(engine, metadata, from_schema, to_time_zone)
-    TZC.convert_time_zone(check_mapped_timestamps=True)
-    dfo = get_mapped_dataframe(engine, TZC._to_schema.name, TZC._to_schema.time_config)
-
+    to_schema = convert_time_zone(
+        engine, metadata, from_schema, to_time_zone, check_mapped_timestamps=True
+    )
+    dfo = get_mapped_dataframe(engine, to_schema.name, to_schema.time_config)
     assert df["value"].equals(dfo["value"])
-    expected = df["timestamp"].dt.tz_convert(to_time_zone).dt.tz_localize(None)
+    if to_time_zone is None:
+        expected = df["timestamp"].dt.tz_localize(None)
+    else:
+        expected = df["timestamp"].dt.tz_convert(to_time_zone).dt.tz_localize(None)
     assert (dfo["timestamp"] == expected).prod() == 1
 
 
-def run_conversion_by_geography(
+def run_conversion_to_column_time_zones(
     engine: Engine,
     df: pd.DataFrame,
     from_schema: TableSchema,
@@ -123,11 +133,15 @@ def run_conversion_by_geography(
 ) -> None:
     metadata = MetaData()
     ingest_data(engine, metadata, df, from_schema)
-    TZC = TimeZoneConverterByGeography(
-        engine, metadata, from_schema, "time_zone", wrap_time_allowed=wrap_time_allowed
+    to_schema = convert_time_zone_by_column(
+        engine,
+        metadata,
+        from_schema,
+        "time_zone",
+        wrap_time_allowed=wrap_time_allowed,
+        check_mapped_timestamps=True,
     )
-    TZC.convert_time_zone()
-    dfo = get_mapped_dataframe(engine, TZC._to_schema.name, TZC._to_schema.time_config)
+    dfo = get_mapped_dataframe(engine, to_schema.name, to_schema.time_config)
     dfo = dfo[df.columns].sort_values(by="index").reset_index(drop=True)
     dfo["timestamp"] = pd.to_datetime(dfo["timestamp"])  # needed for engine 2, not sure why
 
@@ -139,25 +153,57 @@ def run_conversion_by_geography(
     else:
         for i in range(len(df)):
             tzn = df.loc[i, "time_zone"]
-            tz = ZoneInfo(tzn) if tzn != "None" else None
-            ts = df.loc[i, "timestamp"].tz_convert(tz).replace(tzinfo=None)
+            if tzn == "None":
+                ts = df.loc[i, "timestamp"].replace(tzinfo=None)
+            else:
+                ts = df.loc[i, "timestamp"].tz_convert(ZoneInfo(tzn)).replace(tzinfo=None)
             assert dfo.loc[i, "timestamp"] == ts
 
 
+def run_conversion_with_error(
+    engine: Engine,
+    df: pd.DataFrame,
+    from_schema: TableSchema,
+    use_tz_col: bool,
+    error: tuple[Any, str],
+) -> None:
+    metadata = MetaData()
+    ingest_data(engine, metadata, df, from_schema)
+    with pytest.raises(error[0], match=error[1]):
+        if use_tz_col:
+            TZC = TimeZoneConverterByColumn(
+                engine, metadata, from_schema, "time_zone", wrap_time_allowed=False
+            )
+            TZC.convert_time_zone(check_mapped_timestamps=True)
+        else:
+            TZC2 = TimeZoneConverter(engine, metadata, from_schema, None)
+            TZC2.convert_time_zone(check_mapped_timestamps=True)
+
+
+def test_src_table_no_time_zone(iter_engines: Engine) -> None:
+    from_schema = get_datetime_schema(2018, None, TimeIntervalType.PERIOD_BEGINNING, "base_table")
+    df = generate_datetime_dataframe(from_schema)
+    error = (InvalidParameter, "Source schema start_time must be timezone-aware")
+    run_conversion_with_error(
+        iter_engines, df, from_schema, False, error
+    )  # TODO, support tz-naive to tz-aware conversion
+
+
 @pytest.mark.parametrize(
-    "to_time_zone", [ZoneInfo("US/Central"), ZoneInfo("UTC"), ZoneInfo("America/Los_Angeles")]
+    "to_time_zone", [None, ZoneInfo("US/Central"), ZoneInfo("America/Los_Angeles")]
 )
 def test_time_conversion(iter_engines: Engine, to_time_zone: ZoneInfo) -> None:
     from_schema = get_datetime_schema(
         2018, ZoneInfo("US/Mountain"), TimeIntervalType.PERIOD_BEGINNING, "base_table"
     )
     df = generate_datetime_dataframe(from_schema)
-    to_time_zone = ZoneInfo("US/Central")  # TODO
     run_conversion(iter_engines, df, from_schema, to_time_zone)
 
 
 @pytest.mark.parametrize("wrap_time_allowed", [False, True])
-def test_time_conversion_by_geography(iter_engines: Engine, wrap_time_allowed: bool) -> None:
+def test_time_conversion_to_column_time_zones(
+    iter_engines: Engine, wrap_time_allowed: bool
+) -> None:
     from_schema = get_datetime_schema(
         2018,
         ZoneInfo("US/Mountain"),
@@ -166,4 +212,4 @@ def test_time_conversion_by_geography(iter_engines: Engine, wrap_time_allowed: b
         has_tz_col=True,
     )
     df = generate_dataframe_with_tz_col(from_schema)
-    run_conversion_by_geography(iter_engines, df, from_schema, wrap_time_allowed)
+    run_conversion_to_column_time_zones(iter_engines, df, from_schema, wrap_time_allowed)

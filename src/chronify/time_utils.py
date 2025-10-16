@@ -146,6 +146,24 @@ def roll_time_interval(
     return ser
 
 
+def is_prevailing_time_zone(tz: tzinfo | None) -> bool:
+    if not tz:
+        return False
+    ts1 = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    ts2 = datetime(year=2020, month=6, day=1, tzinfo=tz)
+
+    return ts1.utcoffset() != ts2.utcoffset()
+
+
+def is_standard_time_zone(tz: tzinfo | None) -> bool:
+    if not tz:
+        return False
+    ts1 = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    ts2 = datetime(year=2020, month=6, day=1, tzinfo=tz)
+
+    return ts1.utcoffset() == ts2.utcoffset()
+
+
 def get_standard_time_zone(tz: tzinfo | None) -> tzinfo | None:
     ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
     std_tz_name = ts.tzname()

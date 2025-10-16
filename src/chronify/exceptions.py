@@ -14,6 +14,10 @@ class InvalidOperation(ChronifyExceptionBase):
     """Raised when an invalid operation is requested."""
 
 
+class InvalidModel(ChronifyExceptionBase):
+    """Raised when an invalid model is passed."""
+
+
 class InvalidParameter(ChronifyExceptionBase):
     """Raised when an invalid parameter is passed."""
 
