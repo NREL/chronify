@@ -1,75 +1,74 @@
-"""
-Test the stateless auto-detect CSV approach.
-No global state - just method parameters and environment variables.
-"""
+"""Test auto-detect CSV functionality."""
 
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
+
+import pytest
 
 from chronify import Store
 from chronify.csv_utils import _should_use_auto_detect
 
 
-def test_stateless_auto_detect_csv():
-    """Test that auto-detection features work without global state."""
-    
-    # Create a test CSV
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+@pytest.fixture
+def csv_file() -> Generator[str, None, None]:
+    """Create temporary CSV file for testing."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
         f.write("timestamp,device,value\n")
         f.write("2020-01-01 00:00,A,100\n")
         f.write("2020-01-01 01:00,A,200\n")
         csv_path = f.name
-    
-    try:
-        store = Store()
-        
-        # Test 1: Default behavior (no auto-detection)
-        result = store.inspect_csv(csv_path)
-        assert 'error' not in result
-        print("✓ Default inspect_csv works")
-        
-        # Test 2: Explicitly enable auto-detection via parameter
-        result = store.inspect_csv(csv_path, auto_detect=True)
-        assert 'error' not in result
-        print("✓ Auto-detect via parameter works")
-        
-        # Test 3: Environment variable (no persistence needed)
-        os.environ["CHRONIFY_AUTO_DETECT_CSV"] = "true"
-        result = store.inspect_csv(csv_path)  # Should detect from env
-        assert 'error' not in result
-        print("✓ Auto-detect via environment variable works")
-        
-        # Test 4: Parameter overrides environment
-        result = store.inspect_csv(csv_path, auto_detect=False)  # Explicitly disabled
-        assert 'error' not in result
-        print("✓ Parameter override works")
-        
-        # Test 5: Utility function works correctly
-        assert _should_use_auto_detect(None) == True  # From env
-        assert _should_use_auto_detect(True) == True  # Explicit
-        assert _should_use_auto_detect(False) == False  # Explicit override
-        print("✓ Auto-detect detection works correctly")
-        
-        # Clean up environment
+
+    yield csv_path
+
+    Path(csv_path).unlink(missing_ok=True)
+
+
+@pytest.fixture
+def clean_env() -> Generator[None, None, None]:
+    """Ensure clean environment variable state."""
+    yield
+    if "CHRONIFY_AUTO_DETECT_CSV" in os.environ:
         del os.environ["CHRONIFY_AUTO_DETECT_CSV"]
-        
-        # Test 6: No environment, default to False
-        assert _should_use_auto_detect(None) == False
-        print("✓ Default fallback works")
-        
-        print("\n🎉 All stateless auto-detect CSV tests passed!")
-        print("✅ No global state required")
-        print("✅ Clean method parameters")
-        print("✅ Environment variable support")
-        print("✅ Parameter priority over environment")
-        
-    finally:
-        # Cleanup
-        Path(csv_path).unlink(missing_ok=True)
-        if "CHRONIFY_AUTO_DETECT_CSV" in os.environ:
-            del os.environ["CHRONIFY_AUTO_DETECT_CSV"]
 
 
-if __name__ == "__main__":
-    test_stateless_auto_detect_csv()
+def test_inspect_csv_default(csv_file: str) -> None:
+    """Test CSV inspection without auto-detect."""
+    store = Store()
+    result = store.inspect_csv(csv_file)
+    assert "error" not in result
+
+
+def test_inspect_csv_with_parameter(csv_file: str) -> None:
+    """Test CSV inspection with auto-detect parameter."""
+    store = Store()
+    result = store.inspect_csv(csv_file, auto_detect=True)
+    assert "error" not in result
+
+
+def test_inspect_csv_with_env_variable(csv_file: str, clean_env: None) -> None:
+    """Test CSV inspection with environment variable."""
+    os.environ["CHRONIFY_AUTO_DETECT_CSV"] = "true"
+    store = Store()
+    result = store.inspect_csv(csv_file)
+    assert "error" not in result
+
+
+def test_parameter_overrides_env(csv_file: str, clean_env: None) -> None:
+    """Test parameter override of environment variable."""
+    os.environ["CHRONIFY_AUTO_DETECT_CSV"] = "true"
+    store = Store()
+    result = store.inspect_csv(csv_file, auto_detect=False)
+    assert "error" not in result
+
+
+def test_should_use_auto_detect(clean_env: None) -> None:
+    """Test auto-detect priority logic."""
+    assert _should_use_auto_detect(None) is False
+    assert _should_use_auto_detect(True) is True
+    assert _should_use_auto_detect(False) is False
+
+    os.environ["CHRONIFY_AUTO_DETECT_CSV"] = "true"
+    assert _should_use_auto_detect(None) is True
+    assert _should_use_auto_detect(False) is False
