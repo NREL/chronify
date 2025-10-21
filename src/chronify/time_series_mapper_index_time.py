@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 import numpy as np
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pandas as pd
 from sqlalchemy import Engine, MetaData, Table, select
@@ -165,7 +165,12 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             filter(lambda k_v: k_v[0] in DatetimeRange.model_fields, time_kwargs.items())
         )
         time_kwargs["time_type"] = TimeType.DATETIME
-        time_kwargs["start"] = self._from_time_config.start_timestamp
+        if isinstance(self._from_time_config.start_timestamp, datetime):
+            # TODO: this is a hack. datetime is correct but only is present when Hive is used.
+            # The code requires pandas Timestamps.
+            time_kwargs["start"] = pd.Timestamp(self._from_time_config.start_timestamp)
+        else:
+            time_kwargs["start"] = self._from_time_config.start_timestamp
         time_kwargs["time_column"] = "represented_time"
         time_config = DatetimeRange(**time_kwargs)
         assert (
