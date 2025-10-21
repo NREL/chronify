@@ -39,8 +39,8 @@ dependencies = [
     # Required by pyhive
     "future",
     "python-dateutil",
-
 ]
+
 [project.optional-dependencies]
 spark = [
     "thrift",
