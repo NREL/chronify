@@ -36,10 +36,13 @@ dependencies = [
     "rich",
     "sqlalchemy == 2.0.37",
     "tzdata",
+    # Required by pyhive
+    "future",
+    "python-dateutil",
+
 ]
 [project.optional-dependencies]
 spark = [
-    "pyhive", # @ git+https://github.com/apache/kyuubi.git#egg=pyhive&subdirectory=python",
     "thrift",
     "thrift_sasl",
 ]
@@ -60,6 +63,11 @@ dev = [
     "sphinx-tabs~=3.4",
 ]
 
+[project.entry-points."sqlalchemy.dialects"]
+hive = "pyhive.sqlalchemy_hive:HiveDialect"
+"hive.http" = "pyhive.sqlalchemy_hive:HiveHTTPDialect"
+"hive.https" = "pyhive.sqlalchemy_hive:HiveHTTPSDialect"
+
 [project.urls]
 Documentation = "https://github.com/NREL/chronify#readme"
 Issues = "https://github.com/NREL/chronify/issues"
@@ -68,6 +76,9 @@ Source = "https://github.com/NREL/chronify"
 [tool.mypy]
 files = [
   "src",
+]
+exclude = [
+    "src/chronify/_vendor/*",
 ]
 strict = true
 
@@ -88,6 +99,7 @@ exclude = [
     "dist",
     "env",
     "venv",
+    "src/chronify/_vendor/*",
 ]
 
 line-length = 99
