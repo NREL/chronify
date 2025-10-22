@@ -11,13 +11,19 @@ modeling packages. It supports validation and mapping across different time conf
 🚧
 
 ## Installation
+To use DuckDB or SQLite as the backend:
 ```
 $ pip install chronify
 ```
 
+To use Apache Spark via Apache Thrift Server as the backend:
+```
+$ pip install chronify --group=pyhive
+```
+
 ## Developer installation
 ```
-$ pip install -e ".[dev]"
+$ pip install -e ".[dev]" --group=pyhive
 ```
 
 Please install `pre-commit` so that your code is checked before making commits.

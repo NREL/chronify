@@ -30,8 +30,17 @@ Whenever you are done using chronify, you can deactivate the environment by runn
 
 3. Install the Python package `chronify`.
 
+To use DuckDB or SQLite as the backend:
 ```{eval-rst}
 .. code-block:: console
 
     $ pip install chronify
+```
+
+To use Apache Spark via Apache Thrift Server as the backend, you must install pyhive.
+
+```{eval-rst}
+.. code-block:: console
+
+    $ pip install chronify --group=pyhive
 ```
