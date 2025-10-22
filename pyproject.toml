@@ -38,11 +38,6 @@ dependencies = [
     "tzdata",
 ]
 [project.optional-dependencies]
-spark = [
-    "pyhive", # @ git+https://github.com/apache/kyuubi.git#egg=pyhive&subdirectory=python",
-    "thrift",
-    "thrift_sasl",
-]
 
 dev = [
     "mypy >= 1.15, < 2",
@@ -58,6 +53,13 @@ dev = [
     "autodoc_pydantic~=2.0",
     "sphinx-copybutton",
     "sphinx-tabs~=3.4",
+]
+
+[dependency-groups]
+pyhive = [
+    "pyhive @ git+https://github.com/apache/kyuubi.git@3b205a3924e0e3a75c425de1396089729cf22ee5#subdirectory=python",
+    "thrift",
+    "thrift_sasl",
 ]
 
 [project.urls]

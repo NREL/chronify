@@ -4,14 +4,14 @@ scripts for UNIX operating systems (not Windows).
 
 ## Install chronify with Spark support
 ```
-$ pip install chronify[spark]
+$ pip install chronify --group=pyhive
 ```
 
 ## Installation on a development computer
 Installation can be as simple as
 ```
-$ tar -xzf spark-3.5.4-bin-hadoop3.tgz
-$ export SPARK_HOME=$(pwd)/spark-3.5.4-bin-hadoop3
+$ tar -xzf spark-4.0.1-bin-hadoop3.tgz
+$ export SPARK_HOME=$(pwd)/spark-4.0.1-bin-hadoop3
 ```
 
 Start a Thrift server. This allows JDBC clients to send SQL queries to an in-process Spark cluster
