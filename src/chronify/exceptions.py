@@ -26,6 +26,10 @@ class InvalidValue(ChronifyExceptionBase):
     """Raised when an invalid value is passed."""
 
 
+class MissingValue(ChronifyExceptionBase):
+    """Raised when an expecting value is missing."""
+
+
 class MissingParameter(ChronifyExceptionBase):
     """Raised when a parameter is not found or missing."""
 

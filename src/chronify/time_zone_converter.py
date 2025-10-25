@@ -12,7 +12,7 @@ from chronify.time_configs import (
     DatetimeRangeWithTZColumn,
     TimeBasedDataAdjustment,
 )
-from chronify.exceptions import InvalidParameter
+from chronify.exceptions import InvalidParameter, MissingValue
 from chronify.time_series_mapper_base import apply_mapping
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.sqlalchemy.functions import read_database
@@ -266,6 +266,9 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
         time_zone_column: str,
         wrap_time_allowed: Optional[bool] = False,
     ):
+        if time_zone_column not in from_schema.time_array_id_columns:
+            msg = f"{time_zone_column=} is missing from {from_schema.time_array_id_columns=}"
+            raise MissingValue(msg)
         super().__init__(engine, metadata, from_schema)
         self.time_zone_column = time_zone_column
         self._wrap_time_allowed = wrap_time_allowed

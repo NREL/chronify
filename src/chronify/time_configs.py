@@ -1,7 +1,7 @@
 import abc
 import logging
 from datetime import datetime, timedelta
-from typing import Union, Literal, Optional
+from typing import Union, Literal, Optional, Any
 from pydantic import Field, field_validator
 from typing_extensions import Annotated
 from zoneinfo import ZoneInfo
@@ -16,7 +16,7 @@ from chronify.time import (
     RepresentativePeriodFormat,
     list_representative_time_columns,
 )
-
+from chronify.exceptions import InvalidValue, InvalidParameter
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +66,22 @@ class DatetimeRangeBase(TimeBaseModel):
     time_column: str = Field(description="Column in the table that represents time.")
     length: int
     resolution: timedelta
+    start: datetime
 
     def list_time_columns(self) -> list[str]:
         return [self.time_column]
+
+    def start_time_is_tz_naive(self) -> bool:
+        """Return True if the timestamps in the range do not have time zones."""
+        return self.start.tzinfo is None
+
+    def convert_time_zone(self, tz: ZoneInfo | None) -> Any:  # "DatetimeRanges"
+        """Return a copy of the DatetimeRange with the start timestamp converted to time zone."""
+        return self.model_copy(update={"start": self.start.astimezone(tz)})
+
+    def replace_time_zone(self, tz: ZoneInfo | None) -> Any:  # "DatetimeRanges"
+        """Return a copy of the DatetimeRange with the time zone replaced."""
+        return self.model_copy(update={"start": self.start.replace(tzinfo=tz)})
 
 
 class DatetimeRange(DatetimeRangeBase):
@@ -80,20 +93,11 @@ class DatetimeRange(DatetimeRangeBase):
         "the data must be time zone-aware."
     )
 
-    def start_time_is_tz_naive(self) -> bool:
-        """Return True if the timestamps in the range do not have time zones."""
-        return self.start.tzinfo is None
-
     def get_time_zone_column(self) -> None:
         return None
 
-    def convert_time_zone(self, tz: ZoneInfo | None) -> "DatetimeRange":
-        """Return a copy of the DatetimeRange with the start timestamp converted to time zone."""
-        return self.model_copy(update={"start": self.start.astimezone(tz)})
-
-    def replace_time_zone(self, tz: ZoneInfo | None) -> "DatetimeRange":
-        """Return a copy of the DatetimeRange with the time zone replaced."""
-        return self.model_copy(update={"start": self.start.replace(tzinfo=tz)})
+    def get_time_zones(self) -> list[ZoneInfo | None]:
+        return []
 
 
 class DatetimeRangeWithTZColumn(DatetimeRangeBase):
@@ -102,28 +106,36 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
     time_type: Literal[TimeType.DATETIME_TZ_COL] = TimeType.DATETIME_TZ_COL
     start: datetime = Field(
         description=(
-            "Start time of the range. If tz-naive, timestamps of different time zones ",
-            "are expected to align in clock time. If tz-aware, timestamps of different ",
-            "time zones are expected to align in real time.",
+            "Start time of the range. If tz-naive, timestamps of different time zones "
+            "are expected to align in clock time. If tz-aware, timestamps of different "
+            "time zones are expected to align in real time."
         )
     )
     time_zone_column: str = Field(
         description="Column in the table that has time zone or offset information."
     )
-    time_zones: Optional[list[ZoneInfo | None]] = Field(
-        description="Unique time zones from the table."
-    )
-
-    def start_time_is_tz_naive(self) -> bool:
-        return self.start.tzinfo is None
+    time_zones: list[ZoneInfo | None] = Field(description="Unique time zones from the table.")
 
     def get_time_zone_column(self) -> str:
         return self.time_zone_column
 
+    def get_time_zones(self) -> list[ZoneInfo | None]:
+        return self.time_zones
+
+    @field_validator("time_zones")
+    @classmethod
+    def check_duplicated_time_zones(
+        cls, time_zones: list[ZoneInfo | None]
+    ) -> list[ZoneInfo | None]:
+        if len(set(time_zones)) < len(time_zones):
+            msg = ("DatetimeRangeWithTZColumn.time_zones has duplicates: ", time_zones)
+            raise InvalidValue(msg)
+        return time_zones
+
     # Lixi TODO: ensure table schema has time_zone col?
 
 
-DateTimeRanges = Union[
+DatetimeRanges = Union[
     DatetimeRange,
     DatetimeRangeWithTZColumn,
 ]
@@ -177,7 +189,7 @@ class IndexTimeRangeNTZ(IndexTimeRangeBase):
     def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
         if start_timestamp.tzinfo is not None:
             msg = "start_timestamp must be tz-naive for IndexTimeRangeNTZ"
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return start_timestamp
 
     def get_time_zone_column(self) -> None:
@@ -198,7 +210,7 @@ class IndexTimeRangeTZ(IndexTimeRangeBase):
     def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
         if start_timestamp.tzinfo is None:
             msg = "start_timestamp must be tz-aware for IndexTimeRangeTZ"
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return start_timestamp
 
     def get_time_zone_column(self) -> None:
@@ -222,7 +234,7 @@ class IndexTimeRangeWithTZColumn(IndexTimeRangeBase):
     def check_start_timestamp(cls, start_timestamp: datetime) -> datetime:
         if start_timestamp.tzinfo is not None:
             msg = "start_timestamp must be tz-naive for IndexTimeRangeWithTZColumn"
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return start_timestamp
 
     def get_time_zone_column(self) -> str:
@@ -308,7 +320,7 @@ class YearMonthDayPeriodTimeNTZ(ColumnRepresentativeBase):
     def one_hour_column(cls, value: list[str]) -> list[str]:
         if len(value) != 1:
             msg = "YearMonthDayPeriodTimeNTZ requires exactly one hour column."
-            raise ValueError(msg)
+            raise InvalidParameter(msg)
         return value
 
     def list_time_columns(self) -> list[str]:

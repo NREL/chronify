@@ -7,7 +7,7 @@ import pandas as pd
 from chronify.time import (
     LeapDayAdjustmentType,
 )
-from chronify.time_configs import DatetimeRange, DatetimeRangeWithTZColumn
+from chronify.time_configs import DatetimeRanges, DatetimeRange, DatetimeRangeWithTZColumn
 from chronify.time_utils import adjust_timestamp_by_dst_offset
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 from chronify.exceptions import InvalidValue
@@ -18,7 +18,7 @@ class DatetimeRangeGeneratorBase(TimeRangeGeneratorBase):
 
     def __init__(
         self,
-        model: DatetimeRange,
+        model: DatetimeRanges,
         leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
     ) -> None:
         self._model = model
@@ -89,6 +89,7 @@ class DatetimeRangeGenerator(DatetimeRangeGeneratorBase):
         leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
     ) -> None:
         super().__init__(model, leap_day_adjustment=leap_day_adjustment)
+        assert isinstance(self._model, DatetimeRange)
 
     def list_timestamps(self) -> list[datetime]:
         return list(self._iter_timestamps())
@@ -107,20 +108,16 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
         leap_day_adjustment: Optional[LeapDayAdjustmentType] = None,
     ) -> None:
         super().__init__(model, leap_day_adjustment=leap_day_adjustment)
-        if not self._model.time_zones:
+        assert isinstance(self._model, DatetimeRangeWithTZColumn)
+        if self._model.get_time_zones() == []:
             msg = (
                 "DatetimeRangeWithTZColumn.time_zones needs to be instantiated for ",
                 f"DatetimeRangeGeneratorExternalTimeZone: {self._model}",
             )
             raise InvalidValue(msg)
 
-        if len(set(self._model.time_zones)) < len(self._model.time_zones):
-            msg = f"DatetimeRangeWithTZColumn.time_zones has duplicates: {self._model.time_zones}"
-            raise InvalidValue(msg)
-
-    def _list_timestamps(self, time_zone: ZoneInfo) -> list[datetime]:
+    def _list_timestamps(self, time_zone: Optional[ZoneInfo]) -> list[datetime]:
         """always return tz-naive timestamps relative to input time_zone"""
-        # assert self._model.start.tzinfo is None
         if self._model.start_time_is_tz_naive():
             if time_zone:
                 start = self._model.start.replace(tzinfo=time_zone)
@@ -137,7 +134,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
     def list_timestamps(self) -> list[datetime]:
         """return only unique values, this means no duplicates for prevailing time"""
         ts_set = set()
-        for tz in self._model.time_zones:
+        for tz in self._model.get_time_zones():
             ts_set.update(set(self._list_timestamps(tz)))
         timestamps = sorted(ts_set)
         return timestamps
@@ -145,7 +142,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
     def list_timestamps_by_time_zone(self, distinct: bool = False) -> dict[str, list[datetime]]:
         """for each time zone, returns full timestamp iteration with duplicates allowed"""
         dct: dict[str, datetime] = {}
-        for tz in self._model.time_zones:
+        for tz in self._model.get_time_zones():
             timestamps = self._list_timestamps(tz)
             if distinct:
                 timestamps = sorted(set(timestamps))

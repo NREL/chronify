@@ -15,7 +15,7 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import ConflictingInputsError
+from chronify.exceptions import ConflictingInputsError, InvalidOperation
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType, ResamplingOperationType, AggregationType
@@ -208,7 +208,7 @@ def _apply_mapping(
             #     select_stmt.append(func.max(tval_col).label(val_col))
             case _:
                 msg = f"Unsupported {resampling_operation=}"
-                raise ValueError(msg)
+                raise InvalidOperation(msg)
 
     from_keys = [x for x in right_table_columns if x.startswith("from_")]
     keys = [x.removeprefix("from_") for x in from_keys]
