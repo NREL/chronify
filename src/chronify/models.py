@@ -9,7 +9,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, Double, Float, Integer, Sm
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
-from chronify.exceptions import InvalidParameter
+from chronify.exceptions import InvalidParameter, InvalidValue
 from chronify.time_configs import TimeConfig
 
 
@@ -67,7 +67,7 @@ class TableSchema(TableSchemaBase):
         _check_name(name)
         if name.lower() == "table":
             msg = f"Table schema cannot use {name=}."
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return name
 
     @field_validator("value_column")
@@ -102,7 +102,7 @@ class PivotedTableSchema(TableSchemaBase):
     def check_time_array_id_columns(cls, value: list[str]) -> list[str]:
         if value:
             msg = f"PivotedTableSchema doesn't yet support time_array_id_columns: {value}"
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return value
 
     def list_columns(self) -> list[str]:
@@ -124,7 +124,7 @@ class MappingTableSchema(ChronifyBaseModel):
         _check_name(name)
         if name.lower() == "table":
             msg = f"Table schema cannot use {name=}."
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return name
 
     @field_validator("time_configs")
@@ -239,11 +239,11 @@ class ColumnDType(ChronifyBaseModel):
             if val is None:
                 options = sorted(_COLUMN_TYPES.keys()) + list(_DB_TYPES)
                 msg = f"{dtype=} must be one of {options}"
-                raise ValueError(msg)
+                raise InvalidValue(msg)
             data["dtype"] = val()
         else:
             msg = f"dtype is an unsupported type: {type(dtype)}. It must be a str or type."
-            raise ValueError(msg)
+            raise InvalidValue(msg)
         return data
 
 
@@ -287,4 +287,4 @@ class CsvTableSchemaSingleTimeArrayPivotedByComponent(CsvTableSchema):
 def _check_name(name: str) -> None:
     if not REGEX_NAME_REQUIREMENT.search(name):
         msg = f"A name can only have alphanumeric characters: {name=}"
-        raise ValueError(msg)
+        raise InvalidValue(msg)

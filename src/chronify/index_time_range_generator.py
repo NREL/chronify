@@ -13,8 +13,11 @@ class IndexTimeRangeGenerator(TimeRangeGeneratorBase):
         super().__init__()
         self._model = model
 
-    def iter_timestamps(self) -> Generator[int, None, None]:
+    def _iter_timestamps(self) -> Generator[int, None, None]:
         yield from range(self._model.start, self._model.length + self._model.start)
+
+    def list_timestamps(self) -> list[int]:
+        return list(self._iter_timestamps())
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
         return sorted(df[self._model.time_column].unique())

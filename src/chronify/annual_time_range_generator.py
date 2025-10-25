@@ -11,9 +11,12 @@ class AnnualTimeRangeGenerator(TimeRangeGeneratorBase):
         super().__init__()
         self._model = model
 
-    def iter_timestamps(self) -> Generator[int, None, None]:
+    def _iter_timestamps(self) -> Generator[int, None, None]:
         for i in range(1, self._model.length + 1):
             yield i
+
+    def list_timestamps(self) -> list[int]:
+        return list(self._iter_timestamps())
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
         raise NotImplementedError

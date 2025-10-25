@@ -15,7 +15,7 @@ from chronify.sqlalchemy.functions import (
     write_query_to_parquet,
 )
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import ConflictingInputsError
+from chronify.exceptions import ConflictingInputsError, InvalidOperation
 from chronify.utils.sqlalchemy_table import create_table
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType, ResamplingOperationType, AggregationType
@@ -112,7 +112,6 @@ def apply_mapping(
             scratch_dir=scratch_dir,
         )
     metadata.reflect(engine, views=True)
-
     created_tmp_view = False
     try:
         _apply_mapping(
@@ -209,20 +208,15 @@ def _apply_mapping(
             #     select_stmt.append(func.max(tval_col).label(val_col))
             case _:
                 msg = f"Unsupported {resampling_operation=}"
-                raise ValueError(msg)
+                raise InvalidOperation(msg)
 
-    keys = from_schema.time_config.list_time_columns()
-    # check time_zone
-    tz_col = from_schema.time_config.get_time_zone_column()
-    if tz_col is not None:
-        keys.append(tz_col)
-        assert tz_col in left_table_columns, f"{tz_col} not in table={from_schema.name}"
-        ftz_col = "from_" + tz_col
-        assert (
-            ftz_col in right_table_columns
-        ), f"{ftz_col} not in mapping table={mapping_table_name}"
-
+    from_keys = [x for x in right_table_columns if x.startswith("from_")]
+    keys = [x.removeprefix("from_") for x in from_keys]
+    assert set(keys).issubset(
+        set(left_table_columns)
+    ), f"Keys {keys} not in table={from_schema.name}"
     on_stmt = reduce(and_, (left_table.c[x] == right_table.c["from_" + x] for x in keys))
+
     query = select(*select_stmt).select_from(left_table).join(right_table, on_stmt)
     if resampling_operation:
         query = query.group_by(*groupby_stmt)

@@ -28,8 +28,11 @@ class RepresentativePeriodTimeGenerator(TimeRangeGeneratorBase):
             case RepresentativePeriodFormat.ONE_WEEKDAY_DAY_AND_ONE_WEEKEND_DAY_PER_MONTH_BY_HOUR:
                 self._handler = OneWeekdayDayAndWeekendDayPerMonthByHourHandler()
 
-    def iter_timestamps(self) -> Generator[NamedTuple, None, None]:
-        return self._handler.iter_timestamps()
+    def _iter_timestamps(self) -> Generator[NamedTuple, None, None]:
+        return self._handler._iter_timestamps()
+
+    def list_timestamps(self) -> list[NamedTuple]:
+        return list(self._iter_timestamps())
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
         columns = self._model.list_time_columns()
@@ -77,7 +80,7 @@ class RepresentativeTimeFormatHandlerBase(abc.ABC):
         """Return the time type name representing the data."""
 
     @abc.abstractmethod
-    def iter_timestamps(self) -> Generator[Any, None, None]:
+    def _iter_timestamps(self) -> Generator[Any, None, None]:
         """Return an iterator over all time indexes in the table.
         Type of the time is dependent on the class.
         """
@@ -97,7 +100,7 @@ class OneWeekPerMonthByHourHandler(RepresentativeTimeFormatHandlerBase):
     def get_time_type() -> str:
         return OneWeekPerMonthByHour.__name__
 
-    def iter_timestamps(self) -> Generator[OneWeekPerMonthByHour, None, None]:
+    def _iter_timestamps(self) -> Generator[OneWeekPerMonthByHour, None, None]:
         for month in range(1, 13):
             for dow in range(7):
                 for hour in range(24):
@@ -123,7 +126,7 @@ class OneWeekdayDayAndWeekendDayPerMonthByHourHandler(RepresentativeTimeFormatHa
     def get_time_type() -> str:
         return OneWeekdayDayOneWeekendDayPerMonthByHour.__name__
 
-    def iter_timestamps(self) -> Generator[OneWeekdayDayOneWeekendDayPerMonthByHour, None, None]:
+    def _iter_timestamps(self) -> Generator[OneWeekdayDayOneWeekendDayPerMonthByHour, None, None]:
         for month in range(1, 13):
             for is_weekday in [False, True]:
                 for hour in range(24):

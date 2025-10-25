@@ -14,7 +14,7 @@ from chronify.time_configs import (
     DatetimeRange,
     IndexTimeRanges,
     IndexTimeRangeBase,
-    IndexTimeRangeLocalTime,
+    IndexTimeRangeWithTZColumn,
     TimeBasedDataAdjustment,
 )
 from chronify.time_range_generator_factory import make_time_range_generator
@@ -77,7 +77,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self.check_schema_consistency()
 
         # Convert from index time to its represented datetime
-        if self._from_time_config.time_type == TimeType.INDEX_LOCAL:
+        if self._from_time_config.time_type == TimeType.INDEX_TZ_COL:
             if (
                 self._dst_adjustment
                 == DaylightSavingAdjustmentType.DROP_SPRING_FORWARD_DUPLICATE_FALLBACK
@@ -190,8 +190,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_time_col = "from_" + self._from_time_config.time_column
         from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
 
-        from_time_config = self._from_time_config.model_copy()
-        from_time_config.time_column = from_time_col
+        from_time_config = self._from_time_config.model_copy(update={"time_column": from_time_col})
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[from_time_config, mapped_schema.time_config],
@@ -208,7 +207,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
     def _create_interm_map_with_time_zone(
         self,
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
-        """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime"""
+        """Create mapping dataframe for converting INDEX_TZ_COL time to its represented datetime"""
         mapped_schema = self._create_intermediate_schema()
         assert isinstance(mapped_schema.time_config, DatetimeRange)
         mapped_time_col = mapped_schema.time_config.time_column
@@ -217,7 +216,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         from_time_data = make_time_range_generator(self._from_time_config).list_timestamps()
 
         tz_col = self._from_time_config.get_time_zone_column()
-        assert tz_col is not None, "Expecting a time zone column for INDEX_LOCAL"
+        assert tz_col is not None, "Expecting a time zone column for INDEX_TZ_COL"
         from_tz_col = "from_" + tz_col
 
         with self._engine.connect() as conn:
@@ -225,10 +224,10 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             stmt = select(table.c[tz_col]).distinct().where(table.c[tz_col].is_not(None))
             time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
-        from_time_config = self._from_time_config.model_copy()
-        assert isinstance(from_time_config, IndexTimeRangeLocalTime)
-        from_time_config.time_column = from_time_col
-        from_time_config.time_zone_column = from_tz_col
+        from_time_config = self._from_time_config.model_copy(
+            update={"time_column": from_time_col, "time_zone_column": from_tz_col}
+        )
+        assert isinstance(from_time_config, IndexTimeRangeWithTZColumn)
 
         df_tz = []
         to_tz = self._to_time_config.start.tzinfo
@@ -263,7 +262,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         self,
         interpolate_fallback: bool = False,
     ) -> tuple[pd.DataFrame, MappingTableSchema, TableSchema]:
-        """Create mapping dataframe for converting INDEX_LOCAL time to its represented datetime
+        """Create mapping dataframe for converting INDEX_TZ_COL time to its represented datetime
         with time-based daylight_saving adjustment that
         drops the spring-forward hour and, per user input,
         interpolates or duplicates the fall-back hour
@@ -287,7 +286,7 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
         df_ntz["clock_time"] = df_ntz["clock_time"].astype(str)
 
         tz_col = self._from_time_config.get_time_zone_column()
-        assert tz_col is not None, "Expecting a time zone column for INDEX_LOCAL"
+        assert tz_col is not None, "Expecting a time zone column for INDEX_TZ_COL"
         from_tz_col = "from_" + tz_col
 
         with self._engine.connect() as conn:
@@ -295,10 +294,10 @@ class MapperIndexTimeToDatetime(TimeSeriesMapperBase):
             stmt = select(table.c[tz_col]).distinct().where(table.c[tz_col].is_not(None))
             time_zones = read_database(stmt, conn, self._from_time_config)[tz_col].to_list()
 
-        from_time_config = self._from_time_config.model_copy()
-        assert isinstance(from_time_config, IndexTimeRangeLocalTime)
-        from_time_config.time_column = from_time_col
-        from_time_config.time_zone_column = from_tz_col
+        from_time_config = self._from_time_config.model_copy(
+            update={"time_column": from_time_col, "time_zone_column": from_tz_col}
+        )
+        assert isinstance(from_time_config, IndexTimeRangeWithTZColumn)
 
         df_tz = []
         for time_zone in time_zones:
