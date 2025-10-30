@@ -232,7 +232,7 @@ def mdh_from_datetime(timestamp: datetime) -> tuple[int, int, int]:
     return timestamp.month, timestamp.day, timestamp.hour + 1
 
 
-def generate_period_mapping(periods: pd.Series) -> pd.DataFrame:
+def generate_period_mapping(periods: "pd.Series[str]") -> pd.DataFrame:
     unique_periods = periods.unique()
     mappings = []
     for period_str in unique_periods:

@@ -1,11 +1,12 @@
 from sqlalchemy import Connection, Table, select, text
 from typing import Optional
-from zoneinfo import ZoneInfo
+from datetime import datetime, tzinfo
 
 import pandas as pd
 
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
+from chronify.time_configs import DatetimeRangeWithTZColumn
 from chronify.sqlalchemy.functions import read_database
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.datetime_range_generator import DatetimeRangeGeneratorExternalTimeZone
@@ -57,7 +58,7 @@ class TimeSeriesChecker:
         )
 
     @staticmethod
-    def _has_prevailing_time_zone(lst: list[ZoneInfo]) -> bool:
+    def _has_prevailing_time_zone(lst: list[tzinfo | None]) -> bool:
         for tz in lst:
             if is_prevailing_time_zone(tz):
                 return True
@@ -75,8 +76,10 @@ class TimeSeriesChecker:
         return len(expected)
 
     def _check_expected_timestamps_with_external_time_zone(self) -> int:
+        assert isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone)
         expected_dct = self._time_generator.list_timestamps_by_time_zone()
         time_columns = self._time_generator.list_time_columns()
+        assert isinstance(self._schema.time_config, DatetimeRangeWithTZColumn)
         time_columns.append(self._schema.time_config.get_time_zone_column())
         stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
         for col in time_columns:
@@ -209,7 +212,9 @@ class TimeSeriesChecker:
 
 
 def check_timestamp_lists(
-    actual: list[pd.Timestamp], expected: list[pd.Timestamp], msg_prefix: str = ""
+    actual: list[pd.Timestamp] | list[datetime],
+    expected: list[pd.Timestamp] | list[datetime],
+    msg_prefix: str = "",
 ) -> None:
     match = actual == expected
     msg = msg_prefix

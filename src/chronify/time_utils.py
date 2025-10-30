@@ -3,7 +3,7 @@
 import logging
 import numpy as np
 from datetime import datetime, timedelta, timezone, tzinfo
-import zoneinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import pandas as pd
 
 from chronify.time import (
@@ -147,6 +147,7 @@ def roll_time_interval(
 
 
 def is_prevailing_time_zone(tz: tzinfo | None) -> bool:
+    """Check that tz is a prevailing time zone"""
     if not tz:
         return False
     ts1 = datetime(year=2020, month=1, day=1, tzinfo=tz)
@@ -156,6 +157,7 @@ def is_prevailing_time_zone(tz: tzinfo | None) -> bool:
 
 
 def is_standard_time_zone(tz: tzinfo | None) -> bool:
+    """Check that tz is a standard time zone"""
     if not tz:
         return False
     ts1 = datetime(year=2020, month=1, day=1, tzinfo=tz)
@@ -165,14 +167,25 @@ def is_standard_time_zone(tz: tzinfo | None) -> bool:
 
 
 def get_standard_time_zone(tz: tzinfo | None) -> tzinfo | None:
+    """Get the standard time zone counterpart of tz"""
     ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
     std_tz_name = ts.tzname()
     if not std_tz_name:
         return None
     try:
-        return zoneinfo.ZoneInfo(std_tz_name)
-    except zoneinfo.ZoneInfoNotFoundError:
+        return ZoneInfo(std_tz_name)
+    except ZoneInfoNotFoundError:
         utcoffset = ts.utcoffset()
         if not utcoffset:
             return None
         return timezone(utcoffset)
+
+
+def get_tzname(tz: tzinfo | None) -> str:
+    """Get the time zone name of tz"""
+    if not tz:
+        return "None"
+    if isinstance(tz, ZoneInfo):
+        return tz.key
+    ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    return tz.tzname(ts)  # type: ignore  # LIXI TODO

@@ -8,7 +8,7 @@ from chronify.time import (
     LeapDayAdjustmentType,
 )
 from chronify.time_configs import DatetimeRanges, DatetimeRange, DatetimeRangeWithTZColumn
-from chronify.time_utils import adjust_timestamp_by_dst_offset
+from chronify.time_utils import adjust_timestamp_by_dst_offset, get_tzname
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 from chronify.exceptions import InvalidValue
 
@@ -146,13 +146,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
             timestamps = self._list_timestamps(tz)
             if distinct:
                 timestamps = sorted(set(timestamps))
-            if not tz:
-                tz_name = "None"
-            elif isinstance(tz, ZoneInfo):
-                tz_name = tz.key
-            else:
-                tz_name = tz.tzname(datetime(2020, 1, 1, tzinfo=tz))  # type: ignore
-
+            tz_name = get_tzname(tz)
             dct[tz_name] = timestamps
 
         return dct

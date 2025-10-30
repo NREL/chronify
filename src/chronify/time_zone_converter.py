@@ -1,6 +1,6 @@
 import abc
 from zoneinfo import ZoneInfo
-from datetime import tzinfo
+from datetime import datetime, tzinfo
 from sqlalchemy import Engine, MetaData, Table, select
 from typing import Optional
 from pathlib import Path
@@ -13,12 +13,15 @@ from chronify.time_configs import (
     DatetimeRangeWithTZColumn,
     TimeBasedDataAdjustment,
 )
+from chronify.datetime_range_generator import (
+    DatetimeRangeGeneratorExternalTimeZone,
+)
 from chronify.exceptions import InvalidParameter, MissingValue
 from chronify.time_series_mapper_base import apply_mapping
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.sqlalchemy.functions import read_database
 from chronify.time import TimeType
-from chronify.time_utils import wrap_timestamps
+from chronify.time_utils import wrap_timestamps, get_tzname
 
 
 def convert_time_zone(
@@ -131,13 +134,17 @@ class TimeZoneConverterBase(abc.ABC):
     ):
         self._engine = engine
         self._metadata = metadata
+        self._check_from_schema(from_schema)
         self._from_schema = from_schema
 
-    def check_from_schema(self) -> None:
+    def _check_from_schema(self, from_schema: TableSchema) -> None:
         msg = ""
-        if not isinstance(self._from_schema.time_config, DatetimeRange):
+        if not isinstance(from_schema.time_config, DatetimeRange):
             msg += "Source schema does not have DatetimeRange time config. "
-        if self._from_schema.time_config.start_time_is_tz_naive():
+        if (
+            isinstance(from_schema.time_config, DatetimeRange)
+            and from_schema.time_config.start_time_is_tz_naive()
+        ):
             msg += "Source schema start_time must be timezone-aware. "
             msg += "To convert from timezone-naive to timezone-aware, use the TimeSeriesMapperDatetime.map_time() method instead. "
         if msg != "":
@@ -172,12 +179,14 @@ class TimeZoneConverter(TimeZoneConverterBase):
         self._to_schema = self.generate_to_schema()
 
     def generate_to_time_config(self) -> DatetimeRangeWithTZColumn:
+        assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
+        to_time_config = self._from_schema.time_config.model_copy()
         if self._to_time_zone:
-            to_time_config: DatetimeRange = self._from_schema.time_config.convert_time_zone(
-                self._to_time_zone
-            ).replace_time_zone(None)
+            to_time_config.start = to_time_config.start.astimezone(self._to_time_zone).replace(
+                tzinfo=None
+            )
         else:
-            to_time_config = self._from_schema.time_config.replace_time_zone(None)
+            to_time_config.start = to_time_config.start.replace(tzinfo=None)
         time_kwargs = to_time_config.model_dump()
         time_kwargs = dict(
             filter(
@@ -209,7 +218,6 @@ class TimeZoneConverter(TimeZoneConverterBase):
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
     ) -> None:
-        self.check_from_schema()
         df, mapping_schema = self._create_mapping()
 
         apply_mapping(
@@ -227,19 +235,21 @@ class TimeZoneConverter(TimeZoneConverterBase):
 
     def _create_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe for converting datetime to geography-based time zone"""
+        assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
         time_col = self._from_schema.time_config.time_column
         from_time_col = "from_" + time_col
         from_time_data = make_time_range_generator(self._from_schema.time_config).list_timestamps()
-        to_time_data_dct = make_time_range_generator(
-            self._to_schema.time_config
-        ).list_timestamps_by_time_zone()
+        to_time_generator = make_time_range_generator(self._to_schema.time_config)
+        assert isinstance(to_time_generator, DatetimeRangeGeneratorExternalTimeZone)  # mypy
+        to_time_data_dct = to_time_generator.list_timestamps_by_time_zone()
 
         from_time_config = self._from_schema.time_config.model_copy(
             update={"time_column": from_time_col}
         )
         to_time_config = self._to_schema.time_config
+        assert isinstance(to_time_config, DatetimeRangeWithTZColumn)  # mypy
         tz_col = to_time_config.time_zone_column
-        tz_name = self._to_time_zone.key if self._to_time_zone else "None"
+        tz_name = get_tzname(self._to_time_zone)
         to_time_data = to_time_data_dct[tz_name]
         df = pd.DataFrame(
             {
@@ -276,10 +286,10 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
         self._to_schema = self.generate_to_schema()
 
     def generate_to_time_config(self) -> DatetimeRangeBase:
+        assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
+        to_time_config = self._from_schema.time_config.model_copy()
         if self._wrap_time_allowed:
-            to_time_config = self._from_schema.time_config.replace_time_zone(None)
-        else:
-            to_time_config = self._from_schema.time_config
+            to_time_config.start = to_time_config.start.replace(tzinfo=None)
         time_kwargs = to_time_config.model_dump()
         time_kwargs = dict(
             filter(
@@ -311,7 +321,6 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
     ) -> None:
-        self.check_from_schema()
         df, mapping_schema = self._create_mapping()
 
         apply_mapping(
@@ -344,12 +353,13 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
 
     def _create_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe for converting datetime to column time zones"""
+        assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
         time_col = self._from_schema.time_config.time_column
         from_time_col = "from_" + time_col
         from_time_data = make_time_range_generator(self._from_schema.time_config).list_timestamps()
-        to_time_data_dct = make_time_range_generator(
-            self._to_schema.time_config
-        ).list_timestamps_by_time_zone()
+        to_time_generator = make_time_range_generator(self._to_schema.time_config)
+        assert isinstance(to_time_generator, DatetimeRangeGeneratorExternalTimeZone)  # mypy
+        to_time_data_dct = to_time_generator.list_timestamps_by_time_zone()
 
         from_tz_col = "from_" + self.time_zone_column
         from_time_config = self._from_schema.time_config.model_copy(
@@ -359,10 +369,13 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
 
         df_tz = []
         for tz_name, time_data in to_time_data_dct.items():
+            to_time_data: list[datetime] | list[pd.Timestamp]
             if self._wrap_time_allowed:
                 # assume it is being wrapped based on the tz-naive version of the original time data
                 final_time_data = [x.replace(tzinfo=None) for x in from_time_data]
-                to_time_data = wrap_timestamps(pd.Series(time_data), pd.Series(final_time_data))
+                to_time_data = wrap_timestamps(
+                    pd.Series(time_data), pd.Series(final_time_data)
+                ).tolist()
             else:
                 to_time_data = time_data
             df_tz.append(

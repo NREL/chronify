@@ -1,7 +1,7 @@
 import abc
 import logging
 from datetime import datetime, timedelta, tzinfo
-from typing import Union, Literal, Optional, Any
+from typing import Union, Literal, Optional
 from pydantic import Field, field_validator
 from typing_extensions import Annotated
 
@@ -77,14 +77,6 @@ class DatetimeRangeBase(TimeBaseModel):
     def start_time_is_tz_naive(self) -> bool:
         """Return True if the timestamps in the range do not have time zones."""
         return self.start.tzinfo is None
-
-    def convert_time_zone(self, tz: tzinfo | None) -> Any:  # "DatetimeRanges"
-        """Return a copy of the DatetimeRange with the start timestamp converted to time zone."""
-        return self.model_copy(update={"start": self.start.astimezone(tz)})
-
-    def replace_time_zone(self, tz: tzinfo | None) -> Any:  # "DatetimeRanges"
-        """Return a copy of the DatetimeRange with the time zone replaced."""
-        return self.model_copy(update={"start": self.start.replace(tzinfo=tz)})
 
 
 class DatetimeRange(DatetimeRangeBase):
