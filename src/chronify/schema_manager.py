@@ -68,6 +68,7 @@ class SchemaManager:
     def add_schema(self, conn: Connection, schema: TableSchema) -> Table:
         """Add the schema to the store."""
         table = self._get_schema_table()
+        breakpoint()
         stmt = insert(table).values(name=schema.name, schema=schema.model_dump_json())
         conn.execute(stmt)
         # If there is a rollback after this addition to cached, things _should_ still be OK.

@@ -1,5 +1,6 @@
 import abc
 from zoneinfo import ZoneInfo
+from datetime import tzinfo
 from sqlalchemy import Engine, MetaData, Table, select
 from typing import Optional
 from pathlib import Path
@@ -24,7 +25,7 @@ def convert_time_zone(
     engine: Engine,
     metadata: MetaData,
     src_schema: TableSchema,
-    to_time_zone: ZoneInfo | None,
+    to_time_zone: tzinfo | None,
     scratch_dir: Optional[Path] = None,
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
@@ -164,15 +165,15 @@ class TimeZoneConverter(TimeZoneConverterBase):
         engine: Engine,
         metadata: MetaData,
         from_schema: TableSchema,
-        to_time_zone: ZoneInfo | None,
+        to_time_zone: tzinfo | None,
     ):
         super().__init__(engine, metadata, from_schema)
         self._to_time_zone = to_time_zone
         self._to_schema = self.generate_to_schema()
 
-    def generate_to_time_config(self) -> DatetimeRangeBase:
+    def generate_to_time_config(self) -> DatetimeRangeWithTZColumn:
         if self._to_time_zone:
-            to_time_config = self._from_schema.time_config.convert_time_zone(
+            to_time_config: DatetimeRange = self._from_schema.time_config.convert_time_zone(
                 self._to_time_zone
             ).replace_time_zone(None)
         else:
@@ -326,7 +327,7 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
             check_mapped_timestamps=check_mapped_timestamps,
         )
 
-    def _get_time_zones(self) -> list[ZoneInfo | None]:
+    def _get_time_zones(self) -> list[tzinfo | None]:
         with self._engine.connect() as conn:
             table = Table(self._from_schema.name, self._metadata)
             stmt = (

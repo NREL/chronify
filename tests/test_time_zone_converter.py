@@ -1,5 +1,5 @@
 from zoneinfo import ZoneInfo
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 import numpy as np
 import pytest
 from typing import Any
@@ -56,7 +56,7 @@ def generate_dataframe_with_tz_col(schema: TableSchema) -> pd.DataFrame:
 
 def get_datetime_schema(
     year: int,
-    tzinfo: ZoneInfo | None,
+    tzinfo: tzinfo | None,
     interval_type: TimeIntervalType,
     name: str,
     has_tz_col: bool = False,
@@ -109,7 +109,7 @@ def run_conversion(
     engine: Engine,
     df: pd.DataFrame,
     from_schema: TableSchema,
-    to_time_zone: ZoneInfo | None,
+    to_time_zone: tzinfo | None,
 ) -> None:
     metadata = MetaData()
     ingest_data(engine, metadata, df, from_schema)

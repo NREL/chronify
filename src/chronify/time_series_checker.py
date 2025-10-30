@@ -46,7 +46,7 @@ class TimeSeriesChecker:
         preserve_duplicates = False
         if isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone):
             count = self._check_expected_timestamps_with_external_time_zone()
-            if self._has_prevailing_time_zone(self._schema.time_config.time_zones):
+            if self._has_prevailing_time_zone(self._schema.time_config.get_time_zones()):
                 preserve_duplicates = True
         else:
             count = self._check_expected_timestamps()

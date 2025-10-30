@@ -1,7 +1,7 @@
 import fileinput
 import gc
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from itertools import chain
@@ -788,7 +788,7 @@ def test_check_timestamps(iter_stores_by_engine: Store, one_week_per_month_by_ho
 
 @pytest.mark.parametrize("to_time_zone", [ZoneInfo("US/Eastern"), ZoneInfo("US/Mountain"), None])
 def test_convert_time_zone(
-    tmp_path, iter_stores_by_engine_no_data_ingestion: Store, to_time_zone: ZoneInfo | None
+    tmp_path, iter_stores_by_engine_no_data_ingestion: Store, to_time_zone: tzinfo | None
 ):
     store = iter_stores_by_engine_no_data_ingestion
     time_array_len = 8784

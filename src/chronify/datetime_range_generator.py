@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from typing import Generator, Optional
 from zoneinfo import ZoneInfo
 
@@ -116,7 +116,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
             )
             raise InvalidValue(msg)
 
-    def _list_timestamps(self, time_zone: Optional[ZoneInfo]) -> list[datetime]:
+    def _list_timestamps(self, time_zone: Optional[tzinfo]) -> list[datetime]:
         """always return tz-naive timestamps relative to input time_zone"""
         if self._model.start_time_is_tz_naive():
             if time_zone:
@@ -141,12 +141,18 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
 
     def list_timestamps_by_time_zone(self, distinct: bool = False) -> dict[str, list[datetime]]:
         """for each time zone, returns full timestamp iteration with duplicates allowed"""
-        dct: dict[str, datetime] = {}
+        dct = {}
         for tz in self._model.get_time_zones():
             timestamps = self._list_timestamps(tz)
             if distinct:
                 timestamps = sorted(set(timestamps))
-            tz_name = tz.key if tz else "None"
+            if not tz:
+                tz_name = "None"
+            elif isinstance(tz, ZoneInfo):
+                tz_name = tz.key
+            else:
+                tz_name = tz.tzname(datetime(2020, 1, 1, tzinfo=tz))  # type: ignore
+
             dct[tz_name] = timestamps
 
         return dct
@@ -154,11 +160,11 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
     def list_distinct_timestamps_by_time_zone_from_dataframe(
         self, df: pd.DataFrame
     ) -> dict[str, list[datetime]]:
-        tz_col = self._model.time_zone_column
+        tz_col = self._model.get_time_zone_column()
         t_col = self._model.time_column
         df[t_col] = pd.to_datetime(df[t_col])
         df2 = df[[tz_col, t_col]].drop_duplicates()
-        dct: dict[str, list[datetime]] = {}
+        dct = {}
         for tz_name in sorted(df2[tz_col].unique()):
             dct[tz_name] = sorted(df2.loc[df2[tz_col] == tz_name, t_col].tolist())
         return dct
