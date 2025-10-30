@@ -103,12 +103,12 @@ def _convert_database_input_for_datetime(
 def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> None:
     if config.time_column in df.columns:
         if not config.start_time_is_tz_naive():
-            if isinstance(df[config.time_column].dtype, ObjectDType):  # type: ignore
+            if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=True)
             else:
                 df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")
         else:
-            if isinstance(df[config.time_column].dtype, ObjectDType):  # type: ignore
+            if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=False)
 
 
@@ -152,7 +152,7 @@ def _write_to_hive(
                     "datetime64[ns", "datetime64[us"
                 )
                 df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
-            elif isinstance(df2[config.time_column].dtype, DateTime64DType):  # type: ignore
+            elif isinstance(df2[config.time_column].dtype, DateTime64DType):
                 new_dtype = "datetime64[us]"
                 df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
 

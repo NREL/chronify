@@ -71,6 +71,7 @@ Source = "https://github.com/NREL/chronify"
 files = [
   "src",
 ]
+disable_error_code = ["no-untyped-call"]
 strict = true
 
 [tool.pytest.ini_options]
