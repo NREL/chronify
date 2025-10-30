@@ -18,8 +18,8 @@ def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -
     """Reduce the timestamps within the daylight saving range by 1 hour.
     Used to ensure that a time series at daily (or lower) resolution returns each day at the
     same timestamp in prevailing time, an expected behavior in most standard libraries.
-    (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00...
-    instead of 2018-03-11 00:00, 2018-03-12 01:00...)
+    (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00, 2018-03-13 00:00...
+    instead of 2018-03-11 00:00, 2018-03-12 01:00, 2018-03-13 01:00...)
     """
     if resolution < timedelta(hours=24):
         return timestamp
@@ -182,7 +182,10 @@ def get_standard_time_zone(tz: tzinfo | None) -> tzinfo | None:
 
 
 def get_tzname(tz: tzinfo | None) -> str:
-    """Get the time zone name of tz"""
+    """Get the time zone name of tz
+    Note: except for the tzname extracted from ZoneInfo,
+    tzname may not be reinstantiated into a tzinfo object
+    """
     if not tz:
         return "None"
     if isinstance(tz, ZoneInfo):
