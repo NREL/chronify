@@ -89,7 +89,7 @@ class TimeSeriesChecker:
 
         if sorted(expected_dct.keys()) != sorted(actual_dct.keys()):
             msg = "Time zone records do not match between expected and actual from table "
-            msg += f"\nexpected: {sorted(expected_dct.keys())} vs. \neactual: {sorted(actual_dct.keys())}"
+            msg += f"\nexpected: {sorted(expected_dct.keys())} vs. \nactual: {sorted(actual_dct.keys())}"
             raise InvalidTable(msg)
 
         for tz_name in expected_dct.keys():

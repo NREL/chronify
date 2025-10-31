@@ -124,7 +124,7 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
     @classmethod
     def check_duplicated_time_zones(cls, time_zones: list[tzinfo | None]) -> list[tzinfo | None]:
         if len(set(time_zones)) < len(time_zones):
-            msg = ("DatetimeRangeWithTZColumn.time_zones has duplicates: ", time_zones)
+            msg = f"DatetimeRangeWithTZColumn.time_zones has duplicates: {time_zones}"
             raise InvalidValue(msg)
         return time_zones
 
