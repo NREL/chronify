@@ -373,9 +373,7 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
             if self._wrap_time_allowed:
                 # assume it is being wrapped based on the tz-naive version of the original time data
                 final_time_data = [x.replace(tzinfo=None) for x in from_time_data]
-                to_time_data = wrap_timestamps(
-                    pd.Series(time_data), pd.Series(final_time_data)
-                ).tolist()
+                to_time_data = wrap_timestamps(time_data, final_time_data)
             else:
                 to_time_data = time_data
             df_tz.append(

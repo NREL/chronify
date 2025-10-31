@@ -94,7 +94,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             # Mapping works backward for representative time by shifting interval type of
             # to_time_config to match from_time_config before extracting time info
             dft[time_col] = shift_time_interval(
-                dft[to_time_col],
+                dft[to_time_col].tolist(),
                 self._to_time_config.interval_type,
                 self._from_time_config.interval_type,
             )

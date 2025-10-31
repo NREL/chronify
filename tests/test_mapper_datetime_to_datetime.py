@@ -135,18 +135,18 @@ def test_roll_time_using_shift_and_wrap() -> None:
     data = generate_datetime_data(to_schema.time_config)
 
     df["rolled"] = roll_time_interval(
-        df[from_schema.time_config.time_column],
+        df[from_schema.time_config.time_column].tolist(),
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
         data,
     )
     df["rolled2"] = shift_time_interval(
-        df[from_schema.time_config.time_column],
+        df[from_schema.time_config.time_column].tolist(),
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
     )
     df["rolled2"] = wrap_timestamps(
-        df["rolled2"],
+        df["rolled2"].tolist(),
         data,
     )
     assert df["rolled"].equals(df["rolled2"])

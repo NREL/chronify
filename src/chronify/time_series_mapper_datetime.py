@@ -110,14 +110,19 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 ser_from = ser_from.dt.tz_convert(fm_tz_std).dt.tz_localize(to_tz)
         match (self._adjust_interval, self._wrap_time_allowed):
             case (True, _):
-                ser = roll_time_interval(
-                    ser_from,
-                    self._from_time_config.interval_type,
-                    self._to_time_config.interval_type,
-                    to_time_data,
+                ser = pd.Series(
+                    roll_time_interval(
+                        ser_from.tolist(),
+                        self._from_time_config.interval_type,
+                        self._to_time_config.interval_type,
+                        to_time_data,
+                    ),
+                    index=ser_from.index,
                 )
             case (False, True):
-                ser = wrap_timestamps(ser_from, to_time_data)
+                ser = pd.Series(
+                    wrap_timestamps(ser_from.tolist(), to_time_data), index=ser_from.index
+                )
             case (False, False):
                 ser = ser_from
 
