@@ -200,13 +200,14 @@ class TimeZoneConverter(TimeZoneConverterBase):
         return DatetimeRangeWithTZColumn(**time_kwargs)
 
     def generate_to_schema(self) -> TableSchema:
+        to_time_config = self.generate_to_time_config()
         id_cols = self._from_schema.time_array_id_columns
-        if "time_zone" not in id_cols:
-            id_cols.append("time_zone")
+        if to_time_config.time_zone_column not in id_cols:
+            id_cols.append(to_time_config.time_zone_column)
         to_schema: TableSchema = self._from_schema.model_copy(
             update={
                 "name": f"{self._from_schema.name}_tz_converted",
-                "time_config": self.generate_to_time_config(),
+                "time_config": to_time_config,
                 "time_array_id_columns": id_cols,
             }
         )

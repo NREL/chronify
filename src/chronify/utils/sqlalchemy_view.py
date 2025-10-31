@@ -20,7 +20,7 @@ class DropView(DDLElement):
         self.name = name
 
 
-@compiler.compiles(CreateView)  # type: ignore
+@compiler.compiles(CreateView)
 def _create_view(element: Any, compiler: Any, **kw: Any) -> str:
     return "CREATE VIEW %s AS %s" % (
         element.name,
@@ -28,7 +28,7 @@ def _create_view(element: Any, compiler: Any, **kw: Any) -> str:
     )
 
 
-@compiler.compiles(DropView)  # type: ignore
+@compiler.compiles(DropView)
 def _drop_view(element: Any, compiler: Any, **kw: Any) -> str:
     return "DROP VIEW %s" % (element.name)
 
@@ -53,9 +53,17 @@ def create_view(
     sa.event.listen(
         metadata,
         "after_create",
-        CreateView(name, selectable).execute_if(callable_=_view_doesnt_exist),  # type: ignore
+        CreateView(name, selectable).execute_if(
+            callable_=_view_doesnt_exist  # type: ignore
+        ),
     )
-    sa.event.listen(metadata, "before_drop", DropView(name).execute_if(callable_=_view_exists))  # type: ignore
+    sa.event.listen(
+        metadata,
+        "before_drop",
+        DropView(name).execute_if(
+            callable_=_view_exists  # type: ignore
+        ),
+    )
     metadata.create_all(engine)
     metadata.reflect(engine, views=True)
     return view
