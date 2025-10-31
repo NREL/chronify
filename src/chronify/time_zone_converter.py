@@ -86,12 +86,12 @@ def convert_time_zone_by_column(
             sqlalchemy engine
         metadata
             sqlalchemy metadata
-        srd_schema
+        src_schema
             Defines the source table in the database.
         time_zone_column
             Column name in the source table that contains the time zone information.
         wrap_time_allowed
-            If False, the converted timestamps will aligned with the original timestamps in real time scale
+            If False, the converted timestamps will be aligned with the original timestamps in real time scale
                 E.g. 2018-01-01 00:00 ~ 2018-12-31 23:00 in US/Eastern becomes
                     2017-12-31 23:00 ~ 2018-12-31 22:00 in US/Central
             If True, the converted timestamps will fit into the time range of the src_schema in tz-naive clock time
@@ -304,8 +304,8 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
 
     def generate_to_schema(self) -> TableSchema:
         id_cols = self._from_schema.time_array_id_columns
-        if "time_zone" not in id_cols:
-            id_cols.append("time_zone")
+        if self.time_zone_column not in id_cols:
+            id_cols.append(self.time_zone_column)
         to_schema: TableSchema = self._from_schema.model_copy(
             update={
                 "name": f"{self._from_schema.name}_tz_converted",

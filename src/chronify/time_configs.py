@@ -2,7 +2,7 @@ import abc
 import logging
 from datetime import datetime, timedelta, tzinfo
 from typing import Union, Literal, Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, field_serializer
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
@@ -16,6 +16,7 @@ from chronify.time import (
     list_representative_time_columns,
 )
 from chronify.exceptions import InvalidValue, InvalidParameter
+from chronify.time_utils import get_tzname
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +122,18 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
     @classmethod
     def check_duplicated_time_zones(cls, time_zones: list[tzinfo | None]) -> list[tzinfo | None]:
         if len(set(time_zones)) < len(time_zones):
-            msg = ("DatetimeRangeWithTZColumn.time_zones has duplicates: ", time_zones)
+            msg = f"DatetimeRangeWithTZColumn.time_zones has duplicates: {time_zones}"
             raise InvalidValue(msg)
         return time_zones
 
-    # Lixi TODO: ensure table schema has time_zone col?
+    @field_serializer("time_zones")
+    def serialize_time_zones(self, time_zones: list[tzinfo | None]) -> list[str]:
+        """Serialize tzinfo objects to their string names for Pydantic serialization."""
+        return [get_tzname(tz) for tz in time_zones]
+
+    # Note: Validation that the table schema contains the time_zone_column
+    # is deferred to runtime when the table is accessed, as schema validation
+    # occurs separately in the table schema validation logic.
 
 
 DatetimeRanges = Union[
@@ -243,7 +251,10 @@ class IndexTimeRangeWithTZColumn(IndexTimeRangeBase):
         return self.time_zone_column
 
     def get_time_zones(self) -> list[tzinfo | None]:
-        return []  # LIXI TODO
+        # Time zones are determined by values in the time_zone_column for each row.
+        # The actual time zones are not available at the configuration level and must
+        # be retrieved from the data itself. Returns an empty list to indicate this.
+        return []
 
 
 IndexTimeRanges = Union[
@@ -286,7 +297,10 @@ class RepresentativePeriodTimeTZ(RepresentativePeriodTimeBase):
         return self.time_zone_column
 
     def get_time_zones(self) -> list[tzinfo | None]:
-        return []  # LIXI TODO
+        # Time zones are determined by values in the time_zone_column for each row.
+        # The actual time zones are not available at the configuration level and must
+        # be retrieved from the data itself. Returns an empty list to indicate this.
+        return []
 
 
 class ColumnRepresentativeBase(TimeBaseModel):
