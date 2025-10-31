@@ -180,4 +180,4 @@ def get_tzname(tz: tzinfo | None) -> str:
     if isinstance(tz, ZoneInfo):
         return tz.key
     ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
-    return tz.tzname(ts)  # type: ignore  # LIXI TODO
+    return tz.tzname(ts)  # type: ignore

@@ -1,5 +1,6 @@
 import abc
 import logging
+from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, tzinfo
 from typing import Union, Literal, Optional
 from pydantic import Field, field_validator
@@ -109,7 +110,9 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
     time_zone_column: str = Field(
         description="Column in the table that has time zone or offset information."
     )
-    time_zones: list[tzinfo | None] = Field(description="Unique time zones from the table.")
+    time_zones: list[tzinfo | ZoneInfo | None] = Field(
+        description="Unique time zones from the table."
+    )
 
     def get_time_zone_column(self) -> str:
         return self.time_zone_column
@@ -124,8 +127,6 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
             msg = ("DatetimeRangeWithTZColumn.time_zones has duplicates: ", time_zones)
             raise InvalidValue(msg)
         return time_zones
-
-    # Lixi TODO: ensure table schema has time_zone col?
 
 
 DatetimeRanges = Union[
@@ -243,7 +244,7 @@ class IndexTimeRangeWithTZColumn(IndexTimeRangeBase):
         return self.time_zone_column
 
     def get_time_zones(self) -> list[tzinfo | None]:
-        return []  # LIXI TODO
+        return []  # Issue 57
 
 
 IndexTimeRanges = Union[
@@ -286,7 +287,7 @@ class RepresentativePeriodTimeTZ(RepresentativePeriodTimeBase):
         return self.time_zone_column
 
     def get_time_zones(self) -> list[tzinfo | None]:
-        return []  # LIXI TODO
+        return []  # Issue 57
 
 
 class ColumnRepresentativeBase(TimeBaseModel):
