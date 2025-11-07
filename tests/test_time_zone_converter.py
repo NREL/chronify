@@ -192,7 +192,7 @@ def test_src_table_no_time_zone(iter_engines: Engine) -> None:
 @pytest.mark.parametrize(
     "to_time_zone", [None, ZoneInfo("US/Central"), ZoneInfo("America/Los_Angeles")]
 )
-def test_time_conversion(iter_engines: Engine, to_time_zone: ZoneInfo) -> None:
+def test_time_conversion(iter_engines: Engine, to_time_zone: tzinfo | None) -> None:
     from_schema = get_datetime_schema(
         2018, ZoneInfo("US/Mountain"), TimeIntervalType.PERIOD_BEGINNING, "base_table"
     )

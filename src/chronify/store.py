@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 from typing import Any, Optional
 from chronify.utils.sql import make_temp_view_name
-from zoneinfo import ZoneInfo
+from datetime import tzinfo
 
 import duckdb
 import pandas as pd
@@ -947,7 +947,7 @@ class Store:
     def convert_time_zone(
         self,
         src_name: str,
-        time_zone: ZoneInfo,
+        time_zone: tzinfo | None,
         scratch_dir: Optional[Path] = None,
         output_file: Optional[Path] = None,
         check_mapped_timestamps: bool = False,
