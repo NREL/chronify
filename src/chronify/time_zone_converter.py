@@ -34,29 +34,31 @@ def convert_time_zone(
     check_mapped_timestamps: bool = False,
 ) -> TableSchema:
     """Convert time zone of a table to a specified time zone.
-    Output timestamp is tz-naive with a new time_zone column added.
-    Parameters
-        ----------
-        engine
-            sqlalchemy engine
-        metadata
-            sqlalchemy metadata
-        src_schema
-            Defines the source table in the database.
-        to_time_zone
-            time zone to convert to. If None, convert to tz-naive.
-        scratch_dir
-            Directory to use for temporary writes. Default to the system's tmp filesystem.
-        output_file
-            If set, write the mapped table to this Parquet file.
-        check_mapped_timestamps
-            Perform time checks on the result of the mapping operation. This can be slow and
-            is not required.
 
-        Returns
-        -------
-        dst_schema
-            schema of output table with converted timestamps
+    Output timestamp is tz-naive with a new time_zone column added.
+
+    Parameters
+    ----------
+    engine : sqlalchemy.Engine
+        SQLAlchemy engine.
+    metadata : sqlalchemy.MetaData
+        SQLAlchemy metadata.
+    src_schema : TableSchema
+        Defines the source table in the database.
+    to_time_zone : tzinfo or None
+        Time zone to convert to. If None, convert to tz-naive.
+    scratch_dir : pathlib.Path, optional
+        Directory to use for temporary writes. Defaults to the system's tmp filesystem.
+    output_file : pathlib.Path, optional
+        If set, write the mapped table to this Parquet file.
+    check_mapped_timestamps : bool, optional
+        Perform time checks on the result of the mapping operation. This can be slow and
+        is not required.
+
+    Returns
+    -------
+    TableSchema
+        Schema of output table with converted timestamps.
     """
     TZC = TimeZoneConverter(engine, metadata, src_schema, to_time_zone)
     TZC.convert_time_zone(
@@ -80,37 +82,38 @@ def convert_time_zone_by_column(
 ) -> TableSchema:
     """Convert time zone of a table to multiple time zones specified by a column.
     Output timestamp is tz-naive, reflecting the local time relative to the time_zone_column.
-    Parameters
-        ----------
-        engine
-            sqlalchemy engine
-        metadata
-            sqlalchemy metadata
-        src_schema
-            Defines the source table in the database.
-        time_zone_column
-            Column name in the source table that contains the time zone information.
-        wrap_time_allowed
-            If False, the converted timestamps will be aligned with the original timestamps in real time scale
-                E.g. 2018-01-01 00:00 ~ 2018-12-31 23:00 in US/Eastern becomes
-                    2017-12-31 23:00 ~ 2018-12-31 22:00 in US/Central
-            If True, the converted timestamps will fit into the time range of the src_schema in tz-naive clock time
-                E.g. 2018-01-01 00:00 ~ 2018-12-31 23:00 in US/Eastern becomes
-                    2017-12-31 23:00 ~ 2018-12-31 22:00 in US/Central, which is then wrapped such that
-                    no clock time timestamps are in 2017. The final timestamps are:
-                    2018-12-31 23:00, 2018-01-01 00:00 ~ 2018-12-31 22:00 in US/Central
-        scratch_dir
-            Directory to use for temporary writes. Default to the system's tmp filesystem.
-        output_file
-            If set, write the mapped table to this Parquet file.
-        check_mapped_timestamps
-            Perform time checks on the result of the mapping operation. This can be slow and
-            is not required.
 
-        Returns
-        -------
-        dst_schema
-            schema of output table with converted timestamps
+    Parameters
+    ----------
+    engine : sqlalchemy.Engine
+        sqlalchemy engine
+    metadata : sqlalchemy.MetaData
+        sqlalchemy metadata
+    src_schema : TableSchema
+        Defines the source table in the database.
+    time_zone_column : str
+        Column name in the source table that contains the time zone information.
+    wrap_time_allowed : bool
+        If False, the converted timestamps will be aligned with the original timestamps in real time scale
+        E.g. 2018-01-01 00:00 ~ 2018-12-31 23:00 in US/Eastern becomes
+        2017-12-31 23:00 ~ 2018-12-31 22:00 in US/Central
+        If True, the converted timestamps will fit into the time range of the src_schema in tz-naive clock time
+        E.g. 2018-01-01 00:00 ~ 2018-12-31 23:00 in US/Eastern becomes
+        2017-12-31 23:00 ~ 2018-12-31 22:00 in US/Central, which is then wrapped such that
+        no clock time timestamps are in 2017. The final timestamps are:
+        2018-12-31 23:00, 2018-01-01 00:00 ~ 2018-12-31 22:00 in US/Central
+    scratch_dir : pathlib.Path, optional
+        Directory to use for temporary writes. Default to the system's tmp filesystem.
+    output_file : pathlib.Path, optional
+        If set, write the mapped table to this Parquet file.
+    check_mapped_timestamps : bool, optional
+        Perform time checks on the result of the mapping operation. This can be slow and
+        is not required.
+
+    Returns
+    -------
+    dst_schema : TableSchema
+        schema of output table with converted timestamps
     """
     TZC = TimeZoneConverterByColumn(
         engine, metadata, src_schema, time_zone_column, wrap_time_allowed

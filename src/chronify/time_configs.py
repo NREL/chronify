@@ -221,7 +221,7 @@ class IndexTimeRangeTZ(IndexTimeRangeBase):
 
 
 class IndexTimeRangeWithTZColumn(IndexTimeRangeBase):
-    """Index time that reprsents local time relative to a time zone column.
+    """Index time that represents local time relative to a time zone column.
     start_timestamp is tz-naive.
     Used for dataset where the timeseries for all geographies start at the same
     clock time.

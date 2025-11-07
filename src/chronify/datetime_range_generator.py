@@ -111,8 +111,8 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
         assert isinstance(self._model, DatetimeRangeWithTZColumn)
         if self._model.get_time_zones() == []:
             msg = (
-                "DatetimeRangeWithTZColumn.time_zones needs to be instantiated for ",
-                f"DatetimeRangeGeneratorExternalTimeZone: {self._model}",
+                f"DatetimeRangeWithTZColumn.time_zones needs to be instantiated for "
+                f"DatetimeRangeGeneratorExternalTimeZone: {self._model}"
             )
             raise InvalidValue(msg)
 

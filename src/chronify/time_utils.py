@@ -50,7 +50,7 @@ def shift_time_interval(
     ), f"from_ and to_interval_type are the same: {from_interval_type}"
     arr: NDArray[np.datetime64] = np.sort(ts_list)  # type: ignore
     freqs = set((np.roll(arr, -1) - arr)[:-1])
-    assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
+    assert len(freqs) == 1, f"Timeseries must have exactly one frequency, found: {freqs}"
     freq: np.timedelta64 = next(iter(freqs))
 
     match (from_interval_type, to_interval_type):
@@ -85,7 +85,7 @@ def wrap_timestamps(
     """
     to_arr = np.sort(np.array(to_timestamps))
     freqs = set((np.roll(to_arr, -1) - to_arr)[:-1])
-    assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
+    assert len(freqs) == 1, f"Timeseries must have exactly one frequency, found: {freqs}"
     freq = next(iter(freqs))
     tmin, tmax = to_arr[0], to_arr[-1]
     tdelta = tmax - tmin + freq

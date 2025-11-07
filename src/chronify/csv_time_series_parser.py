@@ -174,7 +174,7 @@ class CsvTimeSeriesParser:
         """
         Given a file of csv time series data, convert the time format to datetime
         timestamps
-            and ingest into database
+        and ingest into database
         """
         self._check_input_format(data_file)
         df = self._read_data_file(data_file)

@@ -191,7 +191,7 @@ class TimeSeriesChecker:
                     f"{x}={y}" for x, y in zip(self._schema.time_array_id_columns, id_vals)
                 )
                 msg = (
-                    f"The count of time values in each time array must be {count}"
+                    f"The count of time values in each time array must be {count}."
                     f"Time array identifiers: {values}. "
                     f"count = {count_by_ta}"
                 )
@@ -220,7 +220,7 @@ def check_timestamp_lists(
     msg = msg_prefix
     if not match:
         if len(actual) != len(expected):
-            msg = f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}\n"
+            msg += f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}\n"
         missing = set(expected).difference(set(actual))
         extra = set(actual).difference(set(expected))
         msg += "Actual timestamps do not match expected timestamps. \n"
