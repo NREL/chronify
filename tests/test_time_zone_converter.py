@@ -171,13 +171,13 @@ def run_conversion_with_error(
     ingest_data(engine, metadata, df, from_schema)
     with pytest.raises(error[0], match=error[1]):
         if use_tz_col:
-            TZC = TimeZoneConverterByColumn(
+            tzc = TimeZoneConverterByColumn(
                 engine, metadata, from_schema, "time_zone", wrap_time_allowed=False
             )
-            TZC.convert_time_zone(check_mapped_timestamps=True)
+            tzc.convert_time_zone(check_mapped_timestamps=True)
         else:
-            TZC2 = TimeZoneConverter(engine, metadata, from_schema, None)
-            TZC2.convert_time_zone(check_mapped_timestamps=True)
+            tzc2 = TimeZoneConverter(engine, metadata, from_schema, None)
+            tzc2.convert_time_zone(check_mapped_timestamps=True)
 
 
 def test_src_table_no_time_zone(iter_engines: Engine) -> None:

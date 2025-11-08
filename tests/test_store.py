@@ -854,6 +854,7 @@ def test_convert_time_zone(
     assert dst_schema.time_config.start == expected_start
     assert pd.Timestamp(actual[0]) == dst_schema.time_config.start
     expected = make_time_range_generator(dst_schema.time_config).list_timestamps()
+    expected = sorted(set(expected))
     check_timestamp_lists(actual, expected)
 
 

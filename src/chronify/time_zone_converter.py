@@ -60,14 +60,14 @@ def convert_time_zone(
     TableSchema
         Schema of output table with converted timestamps.
     """
-    TZC = TimeZoneConverter(engine, metadata, src_schema, to_time_zone)
-    TZC.convert_time_zone(
+    tzc = TimeZoneConverter(engine, metadata, src_schema, to_time_zone)
+    tzc.convert_time_zone(
         scratch_dir=scratch_dir,
         output_file=output_file,
         check_mapped_timestamps=check_mapped_timestamps,
     )
 
-    return TZC._to_schema
+    return tzc._to_schema
 
 
 def convert_time_zone_by_column(
@@ -115,15 +115,15 @@ def convert_time_zone_by_column(
     dst_schema : TableSchema
         schema of output table with converted timestamps
     """
-    TZC = TimeZoneConverterByColumn(
+    tzc = TimeZoneConverterByColumn(
         engine, metadata, src_schema, time_zone_column, wrap_time_allowed
     )
-    TZC.convert_time_zone(
+    tzc.convert_time_zone(
         scratch_dir=scratch_dir,
         output_file=output_file,
         check_mapped_timestamps=check_mapped_timestamps,
     )
-    return TZC._to_schema
+    return tzc._to_schema
 
 
 class TimeZoneConverterBase(abc.ABC):
@@ -148,8 +148,11 @@ class TimeZoneConverterBase(abc.ABC):
             isinstance(from_schema.time_config, DatetimeRange)
             and from_schema.time_config.start_time_is_tz_naive()
         ):
-            msg += "Source schema start_time must be timezone-aware. "
-            msg += "To convert from timezone-naive to timezone-aware, use the TimeSeriesMapperDatetime.map_time() method instead. "
+            msg += (
+                "Source schema start_time must be timezone-aware. "
+                "To convert from timezone-naive to timezone-aware, "
+                "use the TimeSeriesMapperDatetime.map_time() method instead. "
+            )
         if msg != "":
             raise InvalidParameter(msg)
 

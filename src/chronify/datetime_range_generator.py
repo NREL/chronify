@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, tzinfo
 from typing import Generator, Optional
 from zoneinfo import ZoneInfo
+from itertools import chain
 
 import pandas as pd
 
@@ -47,7 +48,7 @@ class DatetimeRangeGeneratorBase(TimeRangeGeneratorBase):
                 )
 
             is_leap_year = (
-                pd.Timestamp(f"{cur.year}-01-01") + timedelta(days=365)
+                pd.Timestamp(f"{cur.year}-01-01") + pd.Timedelta(days=365)
             ).year == cur.year
             if not is_leap_year:
                 yield pd.Timestamp(cur)
@@ -73,7 +74,7 @@ class DatetimeRangeGeneratorBase(TimeRangeGeneratorBase):
     def list_time_columns(self) -> list[str]:
         return self._model.list_time_columns()
 
-    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:  # TODO
+    def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[datetime]:
         result = sorted(df[self._model.time_column].unique())
         if not isinstance(result[0], datetime):
             result = [pd.Timestamp(x) for x in result]
@@ -132,22 +133,16 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
         return [x.replace(tzinfo=None) for x in timestamps]
 
     def list_timestamps(self) -> list[datetime]:
-        """return only unique values, this means no duplicates for prevailing time"""
-        ts_set = set()
-        for tz in self._model.get_time_zones():
-            ts_set.update(set(self._list_timestamps(tz)))
-        timestamps = sorted(ts_set)
-        return timestamps
+        """return ordered timestamps across all time zones in the order of the time zones."""
+        dct = self.list_timestamps_by_time_zone()
+        return list(chain(*dct.values()))
 
-    def list_timestamps_by_time_zone(self, distinct: bool = False) -> dict[str, list[datetime]]:
-        """for each time zone, returns full timestamp iteration with duplicates allowed"""
+    def list_timestamps_by_time_zone(self) -> dict[str, list[datetime]]:
+        """for each time zone, returns full timestamp iteration (duplicates allowed)"""
         dct = {}
         for tz in self._model.get_time_zones():
-            timestamps = self._list_timestamps(tz)
-            if distinct:
-                timestamps = sorted(set(timestamps))
             tz_name = get_tzname(tz)
-            dct[tz_name] = timestamps
+            dct[tz_name] = self._list_timestamps(tz)
 
         return dct
 

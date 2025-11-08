@@ -44,18 +44,9 @@ class TimeSeriesChecker:
         )
 
     def check_timestamps(self) -> None:
-        preserve_duplicates = False
-        if isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone):
-            count = self._check_expected_timestamps_with_external_time_zone()
-            if self._has_prevailing_time_zone(self._schema.time_config.get_time_zones()):
-                preserve_duplicates = True
-        else:
-            count = self._check_expected_timestamps()
-
+        count = self._check_expected_timestamps()
         self._check_null_consistency()
-        self._check_expected_timestamps_by_time_array(
-            count, preserve_duplicates=preserve_duplicates
-        )
+        self._check_expected_timestamps_by_time_array(count)
 
     @staticmethod
     def _has_prevailing_time_zone(lst: list[tzinfo | None]) -> bool:
@@ -65,6 +56,13 @@ class TimeSeriesChecker:
         return False
 
     def _check_expected_timestamps(self) -> int:
+        """Check that the timestamps in the table match the expected timestamps."""
+        if isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone):
+            return self._check_expected_timestamps_with_external_time_zone()
+        return self._check_expected_timestamps_datetime()
+
+    def _check_expected_timestamps_datetime(self) -> int:
+        """For tz-naive or tz-aware time without external time zone column"""
         expected = self._time_generator.list_timestamps()
         time_columns = self._time_generator.list_time_columns()
         stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
@@ -72,14 +70,16 @@ class TimeSeriesChecker:
             stmt = stmt.where(self._table.c[col].is_not(None))
         df = read_database(stmt, self._conn, self._schema.time_config)
         actual = self._time_generator.list_distinct_timestamps_from_dataframe(df)
+        expected = sorted(set(expected))  # drop duplicates for tz-naive prevailing time
         check_timestamp_lists(actual, expected)
         return len(expected)
 
     def _check_expected_timestamps_with_external_time_zone(self) -> int:
-        assert isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone)
+        """For tz-naive time with external time zone column"""
+        assert isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone)  # for mypy
         expected_dct = self._time_generator.list_timestamps_by_time_zone()
         time_columns = self._time_generator.list_time_columns()
-        assert isinstance(self._schema.time_config, DatetimeRangeWithTZColumn)
+        assert isinstance(self._schema.time_config, DatetimeRangeWithTZColumn)  # for mypy
         time_columns.append(self._schema.time_config.get_time_zone_column())
         stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
         for col in time_columns:
@@ -88,12 +88,14 @@ class TimeSeriesChecker:
         actual_dct = self._time_generator.list_distinct_timestamps_by_time_zone_from_dataframe(df)
 
         if sorted(expected_dct.keys()) != sorted(actual_dct.keys()):
-            msg = "Time zone records do not match between expected and actual from table "
-            msg += f"\nexpected: {sorted(expected_dct.keys())} vs. \nactual: {sorted(actual_dct.keys())}"
+            msg = (
+                "Time zone records do not match between expected and actual from table "
+                f"\nexpected: {sorted(expected_dct.keys())} vs. \nactual: {sorted(actual_dct.keys())}"
+            )
             raise InvalidTable(msg)
 
         for tz_name in expected_dct.keys():
-            # this drops duplicates in tz-naive prevailing time
+            # drops duplicates for tz-naive prevailing time
             expected = sorted(set(expected_dct[tz_name]))
             actual = actual_dct[tz_name]
             check_timestamp_lists(actual, expected, msg_prefix=f"For {tz_name}\n")
@@ -123,9 +125,15 @@ class TimeSeriesChecker:
             )
             raise InvalidTable(msg)
 
-    def _check_expected_timestamps_by_time_array(
-        self, count: int, preserve_duplicates: bool = False
-    ) -> None:
+    def _check_expected_timestamps_by_time_array(self, count: int) -> None:
+        if isinstance(
+            self._time_generator, DatetimeRangeGeneratorExternalTimeZone
+        ) and self._has_prevailing_time_zone(self._schema.time_config.get_time_zones()):
+            # cannot check counts by timestamps when tz-naive prevailing time zones are present
+            has_tz_naive_prevailing = True
+        else:
+            has_tz_naive_prevailing = False
+
         id_cols = ",".join(self._schema.time_array_id_columns)
         time_cols = ",".join(self._schema.time_config.list_time_columns())
         # NULL consistency was checked above.
@@ -185,7 +193,7 @@ class TimeSeriesChecker:
             distinct_count_by_ta = result[0]
             count_by_ta = result[1]
 
-            if preserve_duplicates and not count_by_ta == count:
+            if has_tz_naive_prevailing and not count_by_ta == count:
                 id_vals = result[2:]
                 values = ", ".join(
                     f"{x}={y}" for x, y in zip(self._schema.time_array_id_columns, id_vals)
@@ -197,7 +205,7 @@ class TimeSeriesChecker:
                 )
                 raise InvalidTable(msg)
 
-            if not preserve_duplicates and not count_by_ta == count == distinct_count_by_ta:
+            if not has_tz_naive_prevailing and not count_by_ta == count == distinct_count_by_ta:
                 id_vals = result[2:]
                 values = ", ".join(
                     f"{x}={y}" for x, y in zip(self._schema.time_array_id_columns, id_vals)

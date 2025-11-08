@@ -12,7 +12,7 @@ class TimeRangeGeneratorBase(abc.ABC):
         """Return a list of timestamps for a time range.
         Type of the timestamps depends on the class.
         Note: For DatetimeRangeGeneratorExternalTimeZone class with more than one time zone,
-        this shows distinct timestamps only
+        this shows all timestamps across all time zones in the order of the time zones.
 
         Returns
         -------

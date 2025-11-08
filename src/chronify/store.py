@@ -1011,14 +1011,14 @@ class Store:
         """
 
         src_schema = self._schema_mgr.get_schema(src_name)
-        TZC = TimeZoneConverter(self._engine, self._metadata, src_schema, time_zone)
+        tzc = TimeZoneConverter(self._engine, self._metadata, src_schema, time_zone)
 
-        dst_schema = TZC.generate_to_schema()
+        dst_schema = tzc.generate_to_schema()
         if self.has_table(dst_schema.name):
             msg = dst_schema.name
             raise TableAlreadyExists(msg)
 
-        TZC.convert_time_zone(
+        tzc.convert_time_zone(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
@@ -1104,16 +1104,16 @@ class Store:
         """
 
         src_schema = self._schema_mgr.get_schema(src_name)
-        TZC = TimeZoneConverterByColumn(
+        tzc = TimeZoneConverterByColumn(
             self._engine, self._metadata, src_schema, time_zone_column, wrap_time_allowed
         )
 
-        dst_schema = TZC.generate_to_schema()
+        dst_schema = tzc.generate_to_schema()
         if self.has_table(dst_schema.name):
             msg = dst_schema.name
             raise TableAlreadyExists(msg)
 
-        TZC.convert_time_zone(
+        tzc.convert_time_zone(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
