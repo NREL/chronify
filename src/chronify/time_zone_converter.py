@@ -21,7 +21,7 @@ from chronify.time_series_mapper_base import apply_mapping
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.sqlalchemy.functions import read_database
 from chronify.time import TimeType
-from chronify.time_utils import wrap_timestamps, get_tzname
+from chronify.time_utils import wrapped_time_timestamps, get_tzname
 
 
 def convert_time_zone(
@@ -380,7 +380,7 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
             if self._wrap_time_allowed:
                 # assume it is being wrapped based on the tz-naive version of the original time data
                 final_time_data = [x.replace(tzinfo=None) for x in from_time_data]
-                to_time_data = wrap_timestamps(time_data, final_time_data)
+                to_time_data = wrapped_time_timestamps(time_data, final_time_data)
             else:
                 to_time_data = time_data
             df_tz.append(

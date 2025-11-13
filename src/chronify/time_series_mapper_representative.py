@@ -19,7 +19,7 @@ from chronify.time_configs import (
     RepresentativePeriodTimeBase,
     TimeBasedDataAdjustment,
 )
-from chronify.time_utils import shift_time_interval
+from chronify.time_utils import shifted_interval_timestamps
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class MapperRepresentativeTimeToDatetime(TimeSeriesMapperBase):
             time_col = "to_" + to_time_col
             # Mapping works backward for representative time by shifting interval type of
             # to_time_config to match from_time_config before extracting time info
-            dft[time_col] = shift_time_interval(
+            dft[time_col] = shifted_interval_timestamps(
                 dft[to_time_col].tolist(),
                 self._to_time_config.interval_type,
                 self._from_time_config.interval_type,

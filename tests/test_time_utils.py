@@ -6,9 +6,9 @@ from zoneinfo import ZoneInfo
 
 from chronify.time_utils import (
     adjust_timestamp_by_dst_offset,
-    shift_time_interval,
-    wrap_timestamps,
-    roll_time_interval,
+    shifted_interval_timestamps,
+    wrapped_time_timestamps,
+    rolled_interval_timestamps,
     is_prevailing_time_zone,
     is_standard_time_zone,
     get_standard_time_zone,
@@ -27,9 +27,9 @@ def test_adjust_timestamp_by_dst_offset() -> None:
         assert res.hour == hour
 
 
-def test_shift_time_interval_period_beginning_to_ending() -> None:
+def test_shifted_interval_timestamps_period_beginning_to_ending() -> None:
     ser = pd.date_range("2018-12-31 22:00", periods=4, freq="h").tolist()
-    shifted = shift_time_interval(
+    shifted = shifted_interval_timestamps(
         ser,
         TimeIntervalType.PERIOD_BEGINNING,
         TimeIntervalType.PERIOD_ENDING,
@@ -37,9 +37,9 @@ def test_shift_time_interval_period_beginning_to_ending() -> None:
     assert all(np.array(shifted) == np.array(ser) + pd.Timedelta(hours=1))
 
 
-def test_shift_time_interval_period_ending_to_beginning() -> None:
+def test_shifted_interval_timestamps_period_ending_to_beginning() -> None:
     ser = pd.date_range("2018-12-31 22:00", periods=4, freq="h").tolist()
-    shifted = shift_time_interval(
+    shifted = shifted_interval_timestamps(
         ser,
         TimeIntervalType.PERIOD_ENDING,
         TimeIntervalType.PERIOD_BEGINNING,
@@ -47,27 +47,27 @@ def test_shift_time_interval_period_ending_to_beginning() -> None:
     assert all(np.array(shifted) == np.array(ser) - pd.Timedelta(hours=1))
 
 
-def test_shift_time_interval_invalid() -> None:
+def test_shifted_interval_timestamps_invalid() -> None:
     ser = pd.date_range("2018-12-31 22:00", periods=4, freq="h").tolist()
     with pytest.raises(Exception):
-        shift_time_interval(
+        shifted_interval_timestamps(
             ser,
             TimeIntervalType.PERIOD_BEGINNING,
             TimeIntervalType.PERIOD_BEGINNING,
         )
 
 
-def test_wrap_timestamps() -> None:
+def test_wrapped_time_timestamps() -> None:
     ser = pd.date_range("2018-12-31 22:00", periods=4, freq="h").tolist()
     to_timestamps = pd.date_range("2019-01-01 00:00", periods=4, freq="h").tolist()
-    wrapped = wrap_timestamps(ser, to_timestamps)
+    wrapped = wrapped_time_timestamps(ser, to_timestamps)
     assert set(wrapped) <= set(to_timestamps)
 
 
-def test_roll_time_interval() -> None:
+def test_rolled_interval_timestamps() -> None:
     ser = pd.date_range("2018-12-31 22:00", periods=4, freq="h").tolist()
     to_timestamps = pd.date_range("2019-01-01 00:00", periods=4, freq="h").tolist()
-    rolled = roll_time_interval(
+    rolled = rolled_interval_timestamps(
         ser,
         TimeIntervalType.PERIOD_BEGINNING,
         TimeIntervalType.PERIOD_ENDING,

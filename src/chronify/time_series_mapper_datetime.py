@@ -10,7 +10,11 @@ from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_utils import roll_time_interval, wrap_timestamps, get_standard_time_zone
+from chronify.time_utils import (
+    rolled_interval_timestamps,
+    wrapped_time_timestamps,
+    get_standard_time_zone,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +115,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         match (self._adjust_interval, self._wrap_time_allowed):
             case (True, _):
                 ser = pd.Series(
-                    roll_time_interval(
+                    rolled_interval_timestamps(
                         ser_from.tolist(),
                         self._from_time_config.interval_type,
                         self._to_time_config.interval_type,
@@ -121,7 +125,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 )
             case (False, True):
                 ser = pd.Series(
-                    wrap_timestamps(ser_from.tolist(), to_time_data), index=ser_from.index
+                    wrapped_time_timestamps(ser_from.tolist(), to_time_data), index=ser_from.index
                 )
             case (False, False):
                 ser = ser_from

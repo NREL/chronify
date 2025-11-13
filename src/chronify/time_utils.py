@@ -29,7 +29,7 @@ def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -
     return timestamp - offset
 
 
-def shift_time_interval(
+def shifted_interval_timestamps(
     ts_list: list[datetime],
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
@@ -40,12 +40,12 @@ def shift_time_interval(
     >>> ts_list = pd.date_range("2018-12-31 23:00", periods=3, freq="h").tolist()
     [Timestamp('2018-12-31 23:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
 
-    >>> ts_list2 = shift_time_interval(
+    >>> ts_list2 = shifted_interval_timestamps(
     ...     ts_list, TimeIntervalType.PERIOD_BEGINNING, TimeIntervalType.PERIOD_ENDING
     ... )
     [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00')]
 
-    >>> ts_list2 = shift_time_interval(
+    >>> ts_list2 = shifted_interval_timestamps(
     ...     ts_list, TimeIntervalType.PERIOD_ENDING, TimeIntervalType.PERIOD_BEGINNING
     ... )
     [Timestamp('2018-12-31 22:00:00'), Timestamp('2018-12-31 23:00:00'), Timestamp('2019-01-01 00:00:00')]
@@ -72,7 +72,7 @@ def shift_time_interval(
     return ts_list2  # type: ignore
 
 
-def wrap_timestamps(
+def wrapped_time_timestamps(
     ts_list: list[datetime],
     to_timestamps: list[datetime],
 ) -> list[datetime]:
@@ -85,7 +85,7 @@ def wrap_timestamps(
     >>> to_timestamps = pd.date_range("2019-01-01 00:00", periods=3, freq="h").tolist()
     [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00')]
 
-    >>> ts_list2 = wrap_timestamps(ts_list, to_timestamps)
+    >>> ts_list2 = wrapped_time_timestamps(ts_list, to_timestamps)
     [Timestamp('2019-01-01 02:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
     """
     to_arr = np.sort(np.array(to_timestamps))
@@ -107,7 +107,7 @@ def wrap_timestamps(
     return ts_list2  # type: ignore
 
 
-def roll_time_interval(
+def rolled_interval_timestamps(
     ts_list: list[datetime],
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
@@ -125,7 +125,7 @@ def roll_time_interval(
     ... ).tolist()  # period-beginning
     [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00')]
 
-    >>> ts_list2 = roll_time_interval(
+    >>> ts_list2 = rolled_interval_timestamps(
     ...     ts_list,
     ...     TimeIntervalType.PERIOD_ENDING,
     ...     TimeIntervalType.PERIOD_BEGINNING,
@@ -133,8 +133,8 @@ def roll_time_interval(
     ... )
     [Timestamp('2019-01-01 02:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
     """
-    ts_list2 = shift_time_interval(ts_list, from_interval_type, to_interval_type)
-    ts_list3 = wrap_timestamps(ts_list2, to_timestamps)
+    ts_list2 = shifted_interval_timestamps(ts_list, from_interval_type, to_interval_type)
+    ts_list3 = wrapped_time_timestamps(ts_list2, to_timestamps)
     return ts_list3
 
 

@@ -94,13 +94,17 @@ class TimeSeriesChecker:
             )
             raise InvalidTable(msg)
 
+        assert len(expected_dct) > 0  # for mypy
+        count = set()
         for tz_name in expected_dct.keys():
+            count.add(len(expected_dct[tz_name]))
             # drops duplicates for tz-naive prevailing time
             expected = sorted(set(expected_dct[tz_name]))
             actual = actual_dct[tz_name]
             check_timestamp_lists(actual, expected, msg_prefix=f"For {tz_name}\n")
         # return len by preserving duplicates for tz-naive prevailing time
-        return len(expected_dct[tz_name])
+        assert len(count) == 1, "Mismatch in counts among time zones"
+        return count.pop()
 
     def _check_null_consistency(self) -> None:
         # If any time column has a NULL, all time columns must have a NULL.

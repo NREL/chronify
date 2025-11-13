@@ -15,7 +15,11 @@ from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, MeasurementType
 from chronify.exceptions import ConflictingInputsError, InvalidParameter
 from chronify.datetime_range_generator import DatetimeRangeGenerator
-from chronify.time_utils import shift_time_interval, roll_time_interval, wrap_timestamps
+from chronify.time_utils import (
+    shifted_interval_timestamps,
+    rolled_interval_timestamps,
+    wrapped_time_timestamps,
+)
 
 
 def generate_datetime_data(time_config: DatetimeRange) -> pd.Series:  # type: ignore
@@ -134,18 +138,18 @@ def test_roll_time_using_shift_and_wrap() -> None:
     to_schema = get_datetime_schema(2024, None, TimeIntervalType.PERIOD_BEGINNING, "to_table")
     data = generate_datetime_data(to_schema.time_config)
 
-    df["rolled"] = roll_time_interval(
+    df["rolled"] = rolled_interval_timestamps(
         df[from_schema.time_config.time_column].tolist(),
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
         data,
     )
-    df["rolled2"] = shift_time_interval(
+    df["rolled2"] = shifted_interval_timestamps(
         df[from_schema.time_config.time_column].tolist(),
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
     )
-    df["rolled2"] = wrap_timestamps(
+    df["rolled2"] = wrapped_time_timestamps(
         df["rolled2"].tolist(),
         data,
     )
