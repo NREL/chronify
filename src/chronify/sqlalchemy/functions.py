@@ -155,10 +155,16 @@ def _write_to_hive(
             elif isinstance(df2[config.time_column].dtype, DateTime64DType):
                 new_dtype = "datetime64[us]"
                 df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
+            else:
+                new_dtype = "datetime64[us]"
+                df2[config.time_column] = pd.to_datetime(
+                    df2[config.time_column], errors="raise"
+                ).astype(new_dtype)  # type: ignore
 
     with NamedTemporaryFile(suffix=".parquet", dir=scratch_dir) as f:
         f.close()
         output = Path(f.name)
+
     df2.to_parquet(output)
     atexit.register(lambda: delete_if_exists(output))
     select_stmt = f"SELECT * FROM parquet.`{output}`"
