@@ -189,6 +189,7 @@ def _read_from_hive(
     query: Selectable | str, conn: Connection, config: TimeBaseModel, params: Any = None
 ) -> pd.DataFrame:
     df = pd.read_sql_query(query, conn, params=params)
+    assert config.time_column in df.columns, f"No {config.time_column} found, instead {df.columns}"
     if isinstance(config, DatetimeRange) and not config.start_time_is_tz_naive():
         # This is tied to the fact that we set the Spark session to UTC.
         # Otherwise, there is confusion with the computer's local time zone.
