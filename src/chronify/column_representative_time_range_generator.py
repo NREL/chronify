@@ -37,8 +37,11 @@ class ColumnRepresentativeTimeGenerator(TimeRangeGeneratorBase):
             msg = f"No time generator for ColumnRepresentative time with time_config {type(self._model)}"
             raise exceptions.InvalidOperation(msg)
 
-    def iter_timestamps(self) -> Generator[tuple[int, ...], None, None]:
+    def _iter_timestamps(self) -> Generator[tuple[int, ...], None, None]:
         yield from self._handler._iter_timestamps()
+
+    def list_timestamps(self) -> list[tuple[int, ...]]:
+        return list(self._iter_timestamps())
 
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[tuple[int, ...]]:
         return self._handler.list_distinct_timestamps_from_dataframe(df)

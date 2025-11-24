@@ -195,7 +195,7 @@ class MapperColumnRepresentativeToDatetime(TimeSeriesMapperBase):
 
     def _iter_datetime(self) -> Generator[datetime, None, None]:
         datetime_generator = DatetimeRangeGenerator(self._to_time_config)
-        yield from datetime_generator.iter_timestamps()
+        yield from datetime_generator._iter_timestamps()
 
     def _create_ymdh_mapping(
         self, col_names: list[str] = ["year", "month", "day", "hour"]
@@ -232,7 +232,7 @@ def mdh_from_datetime(timestamp: datetime) -> tuple[int, int, int]:
     return timestamp.month, timestamp.day, timestamp.hour + 1
 
 
-def generate_period_mapping(periods: pd.Series) -> pd.DataFrame:
+def generate_period_mapping(periods: "pd.Series[str]") -> pd.DataFrame:
     unique_periods = periods.unique()
     mappings = []
     for period_str in unique_periods:

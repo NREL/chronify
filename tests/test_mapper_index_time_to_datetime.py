@@ -11,7 +11,7 @@ from chronify.time_configs import (
     DatetimeRange,
     IndexTimeRangeNTZ,
     IndexTimeRangeTZ,
-    IndexTimeRangeLocalTime,
+    IndexTimeRangeWithTZColumn,
     TimeBasedDataAdjustment,
 )
 from chronify.exceptions import ConflictingInputsError
@@ -118,7 +118,7 @@ def data_for_unaligned_time_mapping(
         ]
     )
 
-    time_config = IndexTimeRangeLocalTime(
+    time_config = IndexTimeRangeWithTZColumn(
         start=1,
         length=time_array_len,
         start_timestamp=pd.Timestamp("2018-01-01 00:00"),

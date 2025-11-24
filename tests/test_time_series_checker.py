@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -17,42 +17,42 @@ from chronify.time_configs import DatetimeRange
 from chronify.time_series_checker import check_timestamps
 
 
-def test_valid_datetimes_with_tz(iter_engines: Engine):
+def test_valid_datetimes_with_tz(iter_engines: Engine) -> None:
     """Valid timestamps with time zones."""
     _run_test(iter_engines, *_get_inputs_for_valid_datetimes_with_tz())
 
 
-def test_valid_datetimes_without_tz(iter_engines: Engine):
+def test_valid_datetimes_without_tz(iter_engines: Engine) -> None:
     """Valid timestamps without time zones."""
     _run_test(iter_engines, *_get_inputs_for_valid_datetimes_without_tz())
 
 
-def test_invalid_datetimes(iter_engines: Engine):
+def test_invalid_datetimes(iter_engines: Engine) -> None:
     """Timestamps do not match the schema."""
     _run_test(iter_engines, *_get_inputs_for_incorrect_datetimes())
 
 
-def test_invalid_datetime_length(iter_engines: Engine):
+def test_invalid_datetime_length(iter_engines: Engine) -> None:
     """Timestamps do not match the schema."""
     _run_test(iter_engines, *_get_inputs_for_incorrect_datetime_length())
 
 
-def test_mismatched_time_array_lengths(iter_engines: Engine):
+def test_mismatched_time_array_lengths(iter_engines: Engine) -> None:
     """Some time arrays have different lengths."""
     _run_test(iter_engines, *_get_inputs_for_mismatched_time_array_lengths())
 
 
-def test_incorrect_lengths(iter_engines: Engine):
+def test_incorrect_lengths(iter_engines: Engine) -> None:
     """All time arrays are consistent but have the wrong length."""
     _run_test(iter_engines, *_get_inputs_for_incorrect_lengths())
 
 
-def test_incorrect_time_arrays(iter_engines: Engine):
+def test_incorrect_time_arrays(iter_engines: Engine) -> None:
     """The time arrays form a complete set but are individually incorrect."""
     _run_test(iter_engines, *_get_inputs_for_incorrect_time_arrays())
 
 
-def test_incorrect_time_arrays_with_duplicates(iter_engines: Engine):
+def test_incorrect_time_arrays_with_duplicates(iter_engines: Engine) -> None:
     """The time arrays form a complete set but are individually incorrect."""
     _run_test(iter_engines, *_get_inputs_for_incorrect_time_arrays_with_duplicates())
 
@@ -60,7 +60,7 @@ def test_incorrect_time_arrays_with_duplicates(iter_engines: Engine):
 def _run_test(
     engine: Engine,
     df: pd.DataFrame,
-    tzinfo: Optional[ZoneInfo],
+    tzinfo: Optional[tzinfo],
     length: int,
     message: Optional[str],
 ) -> None:

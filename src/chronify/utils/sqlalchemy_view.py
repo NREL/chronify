@@ -53,9 +53,17 @@ def create_view(
     sa.event.listen(
         metadata,
         "after_create",
-        CreateView(name, selectable).execute_if(callable_=_view_doesnt_exist),  # type: ignore
+        CreateView(name, selectable).execute_if(
+            callable_=_view_doesnt_exist  # type: ignore
+        ),
     )
-    sa.event.listen(metadata, "before_drop", DropView(name).execute_if(callable_=_view_exists))  # type: ignore
+    sa.event.listen(
+        metadata,
+        "before_drop",
+        DropView(name).execute_if(
+            callable_=_view_exists  # type: ignore
+        ),
+    )
     metadata.create_all(engine)
     metadata.reflect(engine, views=True)
     return view
