@@ -16,7 +16,7 @@ from pandas import DatetimeTZDtype
 from sqlalchemy import Connection, Engine, Selectable, text
 
 from chronify.exceptions import InvalidOperation, InvalidParameter
-from chronify.time_configs import DatetimeRange, TimeBaseModel
+from chronify.time_configs import DatetimeRangeBase, DatetimeRange, TimeBaseModel
 from chronify.utils.path_utils import check_overwrite, delete_if_exists, to_path
 
 # Copied from Pandas/Polars
@@ -72,7 +72,7 @@ def write_database(
 
 def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> None:
     time_col_count = Counter(
-        [config.time_column for config in configs if isinstance(config, DatetimeRange)]
+        [config.time_column for config in configs if isinstance(config, DatetimeRangeBase)]
     )
     time_col_dup = {k: v for k, v in time_col_count.items() if v > 1}
     if len(time_col_dup) > 0:
@@ -144,7 +144,7 @@ def _write_to_hive(
 ) -> None:
     df2 = df.copy()
     for config in configs:
-        if isinstance(config, DatetimeRange):
+        if isinstance(config, DatetimeRangeBase):
             if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
                 # Spark doesn't like ns. That might change in the future.
                 # Pandas might offer a better way to change from ns to us in the future.
@@ -155,10 +155,16 @@ def _write_to_hive(
             elif isinstance(df2[config.time_column].dtype, DateTime64DType):
                 new_dtype = "datetime64[us]"
                 df2[config.time_column] = df2[config.time_column].astype(new_dtype)  # type: ignore
+            else:
+                new_dtype = "datetime64[us]"
+                df2[config.time_column] = pd.to_datetime(
+                    df2[config.time_column], utc=False, errors="raise"
+                ).astype(new_dtype)  # type: ignore
 
     with NamedTemporaryFile(suffix=".parquet", dir=scratch_dir) as f:
         f.close()
         output = Path(f.name)
+
     df2.to_parquet(output)
     atexit.register(lambda: delete_if_exists(output))
     select_stmt = f"SELECT * FROM parquet.`{output}`"
@@ -183,7 +189,11 @@ def _read_from_hive(
     query: Selectable | str, conn: Connection, config: TimeBaseModel, params: Any = None
 ) -> pd.DataFrame:
     df = pd.read_sql_query(query, conn, params=params)
-    if isinstance(config, DatetimeRange) and not config.start_time_is_tz_naive():
+    if (
+        isinstance(config, DatetimeRange)
+        and config.time_column in df.columns
+        and not config.start_time_is_tz_naive()
+    ):
         # This is tied to the fact that we set the Spark session to UTC.
         # Otherwise, there is confusion with the computer's local time zone.
         df[config.time_column] = df[config.time_column].dt.tz_localize("UTC")

@@ -10,7 +10,11 @@ from chronify.exceptions import InvalidParameter, ConflictingInputsError
 from chronify.time_series_mapper_base import TimeSeriesMapperBase, apply_mapping
 from chronify.time_configs import DatetimeRange, TimeBasedDataAdjustment
 from chronify.time_range_generator_factory import make_time_range_generator
-from chronify.time_utils import roll_time_interval, wrap_timestamps, get_standard_time_zone
+from chronify.time_utils import (
+    rolled_interval_timestamps,
+    wrapped_time_timestamps,
+    get_standard_time_zone,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,14 +114,19 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
                 ser_from = ser_from.dt.tz_convert(fm_tz_std).dt.tz_localize(to_tz)
         match (self._adjust_interval, self._wrap_time_allowed):
             case (True, _):
-                ser = roll_time_interval(
-                    ser_from,
-                    self._from_time_config.interval_type,
-                    self._to_time_config.interval_type,
-                    to_time_data,
+                ser = pd.Series(
+                    rolled_interval_timestamps(
+                        ser_from.tolist(),
+                        self._from_time_config.interval_type,
+                        self._to_time_config.interval_type,
+                        to_time_data,
+                    ),
+                    index=ser_from.index,
                 )
             case (False, True):
-                ser = wrap_timestamps(ser_from, to_time_data)
+                ser = pd.Series(
+                    wrapped_time_timestamps(ser_from.tolist(), to_time_data), index=ser_from.index
+                )
             case (False, False):
                 ser = ser_from
 
@@ -131,8 +140,7 @@ class MapperDatetimeToDatetime(TimeSeriesMapperBase):
         assert (
             df[to_time_col].nunique() == self._to_time_config.length
         ), "to_time_col does not have the right number of timestamps"
-        from_time_config = self._from_time_config.model_copy()
-        from_time_config.time_column = from_time_col
+        from_time_config = self._from_time_config.model_copy(update={"time_column": from_time_col})
         mapping_schema = MappingTableSchema(
             name="mapping_table",
             time_configs=[

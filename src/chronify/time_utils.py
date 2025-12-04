@@ -1,9 +1,10 @@
 """Functions related to time"""
 
 import logging
+from numpy.typing import NDArray
 import numpy as np
 from datetime import datetime, timedelta, timezone, tzinfo
-import zoneinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import pandas as pd
 
 from chronify.time import (
@@ -18,8 +19,8 @@ def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -
     """Reduce the timestamps within the daylight saving range by 1 hour.
     Used to ensure that a time series at daily (or lower) resolution returns each day at the
     same timestamp in prevailing time, an expected behavior in most standard libraries.
-    (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00...
-    instead of 2018-03-11 00:00, 2018-03-12 01:00...)
+    (e.g., ensure a time series can return 2018-03-11 00:00, 2018-03-12 00:00, 2018-03-13 00:00...
+    instead of 2018-03-11 00:00, 2018-03-12 01:00, 2018-03-13 01:00...)
     """
     if resolution < timedelta(hours=24):
         return timestamp
@@ -28,36 +29,33 @@ def adjust_timestamp_by_dst_offset(timestamp: datetime, resolution: timedelta) -
     return timestamp - offset
 
 
-def shift_time_interval(
-    ser: "pd.Series[pd.Timestamp]",
+def shifted_interval_timestamps(
+    ts_list: list[datetime],
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
-) -> "pd.Series[pd.Timestamp]":
-    """Shift pandas timeseries by ONE time interval based on interval type.
+) -> list[datetime]:
+    """Shift ts_list by ONE time interval based on interval type.
 
     Example:
-    >>> ser = pd.Series(pd.date_range("2018-12-31 22:00", periods=4, freq="h"))
-    0   2018-12-31 22:00:00
-    1   2018-12-31 23:00:00
-    2   2019-01-01 00:00:00
-    3   2019-01-01 01:00:00
-    dtype: datetime64[ns]
+    >>> ts_list = pd.date_range("2018-12-31 23:00", periods=3, freq="h").tolist()
+    [Timestamp('2018-12-31 23:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
 
-    >>> ser2 = shift_time_interval(
-    ...     ser, TimeIntervalType.PERIOD_BEGINNING, TimeIntervalType.PERIOD_ENDING
+    >>> ts_list2 = shifted_interval_timestamps(
+    ...     ts_list, TimeIntervalType.PERIOD_BEGINNING, TimeIntervalType.PERIOD_ENDING
     ... )
-    0   2018-12-31 23:00:00
-    1   2019-01-01 00:00:00
-    2   2019-01-01 01:00:00
-    3   2019-01-01 02:00:00
-    dtype: datetime64[ns]
+    [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00')]
+
+    >>> ts_list2 = shifted_interval_timestamps(
+    ...     ts_list, TimeIntervalType.PERIOD_ENDING, TimeIntervalType.PERIOD_BEGINNING
+    ... )
+    [Timestamp('2018-12-31 22:00:00'), Timestamp('2018-12-31 23:00:00'), Timestamp('2019-01-01 00:00:00')]
     """
     assert (
         from_interval_type != to_interval_type
     ), f"from_ and to_interval_type are the same: {from_interval_type}"
-    arr = np.sort(ser)
+    arr: NDArray[np.datetime64] = np.sort(ts_list)  # type: ignore
     freqs = set((np.roll(arr, -1) - arr)[:-1])
-    assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
+    assert len(freqs) == 1, f"Timeseries must have exactly one frequency, found: {freqs}"
     freq: np.timedelta64 = next(iter(freqs))
 
     match (from_interval_type, to_interval_type):
@@ -70,91 +68,119 @@ def shift_time_interval(
         case _:
             msg = f"Cannot handle from {from_interval_type} to {to_interval_type}"
             raise InvalidParameter(msg)
-    return ser + freq * mult
+    ts_list2 = (arr + freq * mult).tolist()
+    return ts_list2  # type: ignore
 
 
-def wrap_timestamps(
-    ser: "pd.Series[pd.Timestamp]", to_timestamps: list[pd.Timestamp]
-) -> "pd.Series[pd.Timestamp]":
-    """Wrap pandas timeseries so it stays within a list of timestamps.
+def wrapped_time_timestamps(
+    ts_list: list[datetime],
+    to_timestamps: list[datetime],
+) -> list[datetime]:
+    """Returns the replacement timestamps in order to wrap the ts_list into the to_timestamps range.
 
     Example:
-    >>> ser = pd.Series(pd.date_range("2018-12-31 22:00", periods=4, freq="h"))
-    0   2018-12-31 22:00:00
-    1   2018-12-31 23:00:00
-    2   2019-01-01 00:00:00
-    3   2019-01-01 01:00:00
-    dtype: datetime64[ns]
+    >>> ts_list = pd.date_range("2018-12-31 23:00", periods=3, freq="h").tolist()
+    [Timestamp('2018-12-31 23:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
 
-    >>> to_timestamps = pd.date_range("2019-01-01 00:00", periods=4, freq="h").tolist()
-    [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00'), Timestamp('2019-01-01 03:00:00')]
+    >>> to_timestamps = pd.date_range("2019-01-01 00:00", periods=3, freq="h").tolist()
+    [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00')]
 
-    >>> ser2 = wrap_timestamps(ser, to_timestamps)
-    0   2019-01-01 02:00:00
-    1   2019-01-01 03:00:00
-    2   2019-01-01 00:00:00
-    3   2019-01-01 01:00:00
-    dtype: datetime64[ns]
+    >>> ts_list2 = wrapped_time_timestamps(ts_list, to_timestamps)
+    [Timestamp('2019-01-01 02:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
     """
-    arr = np.sort(np.array(to_timestamps))
-    freqs = set((np.roll(arr, -1) - arr)[:-1])
-    assert len(freqs), f"Timeseries has more than one frequency, {freqs}"
+    to_arr = np.sort(np.array(to_timestamps))
+    freqs = set((np.roll(to_arr, -1) - to_arr)[:-1])
+    assert len(freqs) == 1, f"Timeseries must have exactly one frequency, found: {freqs}"
     freq = next(iter(freqs))
-    tmin, tmax = arr[0], arr[-1]
+    tmin, tmax = to_arr[0], to_arr[-1]
     tdelta = tmax - tmin + freq
-    ser2 = ser.copy()
-    lower_cond = ser < tmin
+
+    arr = pd.Series(ts_list)  # np.array is not as robust as pd.Series here
+    arr2 = arr.copy()
+    lower_cond = arr < tmin
     if lower_cond.sum() > 0:
-        ser2.loc[lower_cond] += tdelta
-    upper_cond = ser > tmax
+        arr2.loc[lower_cond] += tdelta
+    upper_cond = arr > tmax
     if upper_cond.sum() > 0:
-        ser2.loc[upper_cond] -= tdelta
-    return ser2
+        arr2.loc[upper_cond] -= tdelta
+    ts_list2 = arr2.tolist()
+    return ts_list2  # type: ignore
 
 
-def roll_time_interval(
-    ser: "pd.Series[pd.Timestamp]",
+def rolled_interval_timestamps(
+    ts_list: list[datetime],
     from_interval_type: TimeIntervalType,
     to_interval_type: TimeIntervalType,
-    to_timestamps: list[pd.Timestamp],
-) -> "pd.Series[pd.Timestamp]":
-    """Roll pandas timeseries by shifting time interval based on interval type and then
-    wrapping timestamps
+    to_timestamps: list[datetime],
+) -> list[datetime]:
+    """Roll ts_list by shifting time interval based on interval type and then
+    wrapping timestamps according to to_timestamps.
 
     Example:
-    >>> ser = pd.Series(pd.date_range("2018-12-31 22:00", periods=4, freq="h"))
-    0   2018-12-31 22:00:00
-    1   2018-12-31 23:00:00
-    2   2019-01-01 00:00:00
-    3   2019-01-01 01:00:00
-    dtype: datetime64[ns]
+    >>> ts_list = pd.date_range("2019-01-01 00:00", periods=3, freq="h").tolist()  # period-ending
+    [Timestamp('2018-12-31 23:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
 
-    >>> to_timestamps = pd.date_range("2019-01-01 00:00", periods=4, freq="h").tolist()
-    [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00'), Timestamp('2019-01-01 03:00:00')]
+    >>> to_timestamps = pd.date_range(
+    ...     "2019-01-01 00:00", periods=3, freq="h"
+    ... ).tolist()  # period-beginning
+    [Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00'), Timestamp('2019-01-01 02:00:00')]
 
-    >>> ser2 = roll_time_interval(
-    ...     ser, TimeIntervalType.PERIOD_BEGINNING, TimeIntervalType.PERIOD_ENDING, to_timestamps
+    >>> ts_list2 = rolled_interval_timestamps(
+    ...     ts_list,
+    ...     TimeIntervalType.PERIOD_ENDING,
+    ...     TimeIntervalType.PERIOD_BEGINNING,
+    ...     to_timestamps,
     ... )
-    0   2019-01-01 03:00:00
-    1   2019-01-01 00:00:00
-    2   2019-01-01 01:00:00
-    3   2019-01-01 02:00:00
-    dtype: datetime64[ns]
+    [Timestamp('2019-01-01 02:00:00'), Timestamp('2019-01-01 00:00:00'), Timestamp('2019-01-01 01:00:00')]
     """
-    ser = shift_time_interval(ser, from_interval_type, to_interval_type)
-    ser = wrap_timestamps(ser, to_timestamps)
-    return ser
+    ts_list2 = shifted_interval_timestamps(ts_list, from_interval_type, to_interval_type)
+    ts_list3 = wrapped_time_timestamps(ts_list2, to_timestamps)
+    return ts_list3
+
+
+def is_prevailing_time_zone(tz: tzinfo | None) -> bool:
+    """Check that tz is a prevailing time zone"""
+    if not tz:
+        return False
+    ts1 = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    ts2 = datetime(year=2020, month=6, day=1, tzinfo=tz)
+
+    return ts1.utcoffset() != ts2.utcoffset()
+
+
+def is_standard_time_zone(tz: tzinfo | None) -> bool:
+    """Check that tz is a standard time zone"""
+    if not tz:
+        return False
+    ts1 = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    ts2 = datetime(year=2020, month=6, day=1, tzinfo=tz)
+
+    return ts1.utcoffset() == ts2.utcoffset()
 
 
 def get_standard_time_zone(tz: tzinfo | None) -> tzinfo | None:
+    """Get the standard time zone counterpart of tz"""
     ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
     std_tz_name = ts.tzname()
     if not std_tz_name:
         return None
     try:
-        return zoneinfo.ZoneInfo(std_tz_name)
-    except zoneinfo.ZoneInfoNotFoundError:
+        return ZoneInfo(std_tz_name)
+    except ZoneInfoNotFoundError:
         utcoffset = ts.utcoffset()
         if not utcoffset:
             return None
         return timezone(utcoffset)
+
+
+def get_tzname(tz: tzinfo | None) -> str:
+    """Get the time zone name of tz
+    Note: except for the tzname extracted from ZoneInfo,
+    tzname may not be reinstantiated into a tzinfo object
+    """
+    if not tz:
+        return "None"
+    if isinstance(tz, ZoneInfo):
+        return tz.key
+    ts = datetime(year=2020, month=1, day=1, tzinfo=tz)
+    return tz.tzname(ts)  # type: ignore

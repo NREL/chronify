@@ -109,7 +109,10 @@ class CsvTimeSeriesParser:
     def _check_input_format(data_file: Path) -> None:
         valid_extensions = [".csv"]
         if data_file.suffix not in valid_extensions:
-            msg = f"{data_file.name} does not have a file extension in the supported extensions: {valid_extensions}"
+            msg = (
+                f"{data_file.name} does not have a file extension in the "
+                f"supported extensions: {valid_extensions}"
+            )
             raise InvalidValue(msg)
 
     @staticmethod
@@ -130,7 +133,10 @@ class CsvTimeSeriesParser:
     def _create_schemas(
         csv_fmt: CsvTimeSeriesFormats, name: str, year: int, length: int
     ) -> tuple[PivotedTableSchema | None, TableSchema]:
-        """Create a PivotedTableSchema if necessary, and a TableSchema for both the time format and datetime format."""
+        """
+        Create a PivotedTableSchema if necessary, and a TableSchema for both
+        the time format and datetime format.
+        """
         create_pivoted_schema = True
         pivoted_dimension_name = "hour"
         value_columns = [str(x) for x in range(1, 25)]
@@ -166,7 +172,8 @@ class CsvTimeSeriesParser:
         self, data_file: Path, table_name: str, data_year: int, length: int
     ) -> None:
         """
-        Given a file of csv time series data, convert the time format to datetime timestamps
+        Given a file of csv time series data, convert the time format to datetime
+        timestamps
         and ingest into database
         """
         self._check_input_format(data_file)

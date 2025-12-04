@@ -1,4 +1,5 @@
 from zoneinfo import ZoneInfo
+from datetime import tzinfo
 import pytest
 from datetime import datetime, timedelta
 from typing import Any
@@ -14,11 +15,15 @@ from chronify.models import TableSchema
 from chronify.time import TimeIntervalType, MeasurementType
 from chronify.exceptions import ConflictingInputsError, InvalidParameter
 from chronify.datetime_range_generator import DatetimeRangeGenerator
-from chronify.time_utils import shift_time_interval, roll_time_interval, wrap_timestamps
+from chronify.time_utils import (
+    shifted_interval_timestamps,
+    rolled_interval_timestamps,
+    wrapped_time_timestamps,
+)
 
 
 def generate_datetime_data(time_config: DatetimeRange) -> pd.Series:  # type: ignore
-    return pd.to_datetime(list(DatetimeRangeGenerator(time_config).iter_timestamps()))
+    return pd.to_datetime(list(DatetimeRangeGenerator(time_config)._iter_timestamps()))
 
 
 def generate_datetime_dataframe(schema: TableSchema) -> pd.DataFrame:
@@ -31,7 +36,7 @@ def generate_datetime_dataframe(schema: TableSchema) -> pd.DataFrame:
 
 
 def get_datetime_schema(
-    year: int, tzinfo: ZoneInfo | None, interval_type: TimeIntervalType, name: str
+    year: int, tzinfo: tzinfo | None, interval_type: TimeIntervalType, name: str
 ) -> TableSchema:
     start = datetime(year=year, month=1, day=1, tzinfo=tzinfo)
     end = datetime(year=year + 1, month=1, day=1, tzinfo=tzinfo)
@@ -133,19 +138,19 @@ def test_roll_time_using_shift_and_wrap() -> None:
     to_schema = get_datetime_schema(2024, None, TimeIntervalType.PERIOD_BEGINNING, "to_table")
     data = generate_datetime_data(to_schema.time_config)
 
-    df["rolled"] = roll_time_interval(
-        df[from_schema.time_config.time_column],
+    df["rolled"] = rolled_interval_timestamps(
+        df[from_schema.time_config.time_column].tolist(),
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
         data,
     )
-    df["rolled2"] = shift_time_interval(
-        df[from_schema.time_config.time_column],
+    df["rolled2"] = shifted_interval_timestamps(
+        df[from_schema.time_config.time_column].tolist(),
         from_schema.time_config.interval_type,
         to_schema.time_config.interval_type,
     )
-    df["rolled2"] = wrap_timestamps(
-        df["rolled2"],
+    df["rolled2"] = wrapped_time_timestamps(
+        df["rolled2"].tolist(),
         data,
     )
     assert df["rolled"].equals(df["rolled2"])
@@ -155,7 +160,7 @@ def test_roll_time_using_shift_and_wrap() -> None:
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
 def test_time_interval_shift(
     iter_engines: Engine,
-    tzinfo: ZoneInfo | None,
+    tzinfo: tzinfo | None,
 ) -> None:
     from_schema = get_datetime_schema(
         2020, tzinfo, TimeIntervalType.PERIOD_BEGINNING, "from_table"
@@ -171,7 +176,7 @@ def test_time_interval_shift(
 @pytest.mark.parametrize("tzinfo", [ZoneInfo("US/Eastern"), None])
 def test_time_interval_shift_different_time_ranges(
     iter_engines: Engine,
-    tzinfo: ZoneInfo | None,
+    tzinfo: tzinfo | None,
 ) -> None:
     from_schema = get_datetime_schema(
         2020, tzinfo, TimeIntervalType.PERIOD_BEGINNING, "from_table"
@@ -194,7 +199,7 @@ def test_time_interval_shift_different_time_ranges(
     ],
 )
 def test_time_shift_different_timezones(
-    iter_engines: Engine, tzinfo_tuple: tuple[ZoneInfo | None]
+    iter_engines: Engine, tzinfo_tuple: tuple[tzinfo | None]
 ) -> None:
     from_schema = get_datetime_schema(
         2020, tzinfo_tuple[0], TimeIntervalType.PERIOD_BEGINNING, "from_table"

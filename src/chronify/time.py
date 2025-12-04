@@ -11,10 +11,11 @@ class TimeType(StrEnum):
     """Defines the supported time formats in the load data."""
 
     DATETIME = "datetime"
+    DATETIME_TZ_COL = "datetime_tz_col"
     ANNUAL = "annual"
     INDEX_NTZ = "index_ntz"
     INDEX_TZ = "index_tz"
-    INDEX_LOCAL = "index_local"
+    INDEX_TZ_COL = "index_tz_col"
     REPRESENTATIVE_PERIOD_NTZ = "representative_period_ntz"
     REPRESENTATIVE_PERIOD_TZ = "representative_period_tz"
     YEAR_MONTH_DAY_HOUR_NTZ = "year_month_day_hour"

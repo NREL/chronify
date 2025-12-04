@@ -1,13 +1,17 @@
 from sqlalchemy import Connection, Table, select, text
 from typing import Optional
+from datetime import datetime, tzinfo
 
 import pandas as pd
 
 from chronify.exceptions import InvalidTable
 from chronify.models import TableSchema
+from chronify.time_configs import DatetimeRangeWithTZColumn
 from chronify.sqlalchemy.functions import read_database
 from chronify.time_range_generator_factory import make_time_range_generator
+from chronify.datetime_range_generator import DatetimeRangeGeneratorExternalTimeZone
 from chronify.time import LeapDayAdjustmentType
+from chronify.time_utils import is_prevailing_time_zone
 
 
 def check_timestamps(
@@ -44,7 +48,21 @@ class TimeSeriesChecker:
         self._check_null_consistency()
         self._check_expected_timestamps_by_time_array(count)
 
+    @staticmethod
+    def _has_prevailing_time_zone(lst: list[tzinfo | None]) -> bool:
+        for tz in lst:
+            if is_prevailing_time_zone(tz):
+                return True
+        return False
+
     def _check_expected_timestamps(self) -> int:
+        """Check that the timestamps in the table match the expected timestamps."""
+        if isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone):
+            return self._check_expected_timestamps_with_external_time_zone()
+        return self._check_expected_timestamps_datetime()
+
+    def _check_expected_timestamps_datetime(self) -> int:
+        """For tz-naive or tz-aware time without external time zone column"""
         expected = self._time_generator.list_timestamps()
         time_columns = self._time_generator.list_time_columns()
         stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
@@ -52,8 +70,41 @@ class TimeSeriesChecker:
             stmt = stmt.where(self._table.c[col].is_not(None))
         df = read_database(stmt, self._conn, self._schema.time_config)
         actual = self._time_generator.list_distinct_timestamps_from_dataframe(df)
+        expected = sorted(set(expected))  # drop duplicates for tz-naive prevailing time
         check_timestamp_lists(actual, expected)
         return len(expected)
+
+    def _check_expected_timestamps_with_external_time_zone(self) -> int:
+        """For tz-naive time with external time zone column"""
+        assert isinstance(self._time_generator, DatetimeRangeGeneratorExternalTimeZone)  # for mypy
+        expected_dct = self._time_generator.list_timestamps_by_time_zone()
+        time_columns = self._time_generator.list_time_columns()
+        assert isinstance(self._schema.time_config, DatetimeRangeWithTZColumn)  # for mypy
+        time_columns.append(self._schema.time_config.get_time_zone_column())
+        stmt = select(*(self._table.c[x] for x in time_columns)).distinct()
+        for col in time_columns:
+            stmt = stmt.where(self._table.c[col].is_not(None))
+        df = read_database(stmt, self._conn, self._schema.time_config)
+        actual_dct = self._time_generator.list_distinct_timestamps_by_time_zone_from_dataframe(df)
+
+        if sorted(expected_dct.keys()) != sorted(actual_dct.keys()):
+            msg = (
+                "Time zone records do not match between expected and actual from table "
+                f"\nexpected: {sorted(expected_dct.keys())} vs. \nactual: {sorted(actual_dct.keys())}"
+            )
+            raise InvalidTable(msg)
+
+        assert len(expected_dct) > 0  # for mypy
+        count = set()
+        for tz_name in expected_dct.keys():
+            count.add(len(expected_dct[tz_name]))
+            # drops duplicates for tz-naive prevailing time
+            expected = sorted(set(expected_dct[tz_name]))
+            actual = actual_dct[tz_name]
+            check_timestamp_lists(actual, expected, msg_prefix=f"For {tz_name}\n")
+        # return len by preserving duplicates for tz-naive prevailing time
+        assert len(count) == 1, "Mismatch in counts among time zones"
+        return count.pop()
 
     def _check_null_consistency(self) -> None:
         # If any time column has a NULL, all time columns must have a NULL.
@@ -79,6 +130,14 @@ class TimeSeriesChecker:
             raise InvalidTable(msg)
 
     def _check_expected_timestamps_by_time_array(self, count: int) -> None:
+        if isinstance(
+            self._time_generator, DatetimeRangeGeneratorExternalTimeZone
+        ) and self._has_prevailing_time_zone(self._schema.time_config.get_time_zones()):
+            # cannot check counts by timestamps when tz-naive prevailing time zones are present
+            has_tz_naive_prevailing = True
+        else:
+            has_tz_naive_prevailing = False
+
         id_cols = ",".join(self._schema.time_array_id_columns)
         time_cols = ",".join(self._schema.time_config.list_time_columns())
         # NULL consistency was checked above.
@@ -137,7 +196,20 @@ class TimeSeriesChecker:
         for result in self._conn.execute(text(query)).fetchall():
             distinct_count_by_ta = result[0]
             count_by_ta = result[1]
-            if not count_by_ta == count == distinct_count_by_ta:
+
+            if has_tz_naive_prevailing and not count_by_ta == count:
+                id_vals = result[2:]
+                values = ", ".join(
+                    f"{x}={y}" for x, y in zip(self._schema.time_array_id_columns, id_vals)
+                )
+                msg = (
+                    f"The count of time values in each time array must be {count}."
+                    f"Time array identifiers: {values}. "
+                    f"count = {count_by_ta}"
+                )
+                raise InvalidTable(msg)
+
+            if not has_tz_naive_prevailing and not count_by_ta == count == distinct_count_by_ta:
                 id_vals = result[2:]
                 values = ", ".join(
                     f"{x}={y}" for x, y in zip(self._schema.time_array_id_columns, id_vals)
@@ -151,13 +223,16 @@ class TimeSeriesChecker:
                 raise InvalidTable(msg)
 
 
-def check_timestamp_lists(actual: list[pd.Timestamp], expected: list[pd.Timestamp]) -> None:
+def check_timestamp_lists(
+    actual: list[pd.Timestamp] | list[datetime],
+    expected: list[pd.Timestamp] | list[datetime],
+    msg_prefix: str = "",
+) -> None:
     match = actual == expected
+    msg = msg_prefix
     if not match:
         if len(actual) != len(expected):
-            msg = f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}\n"
-        else:
-            msg = ""
+            msg += f"Mismatch number of timestamps: actual: {len(actual)} vs. expected: {len(expected)}\n"
         missing = set(expected).difference(set(actual))
         extra = set(actual).difference(set(expected))
         msg += "Actual timestamps do not match expected timestamps. \n"

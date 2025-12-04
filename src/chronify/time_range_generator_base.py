@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Generator
+from typing import Any
 
 import pandas as pd
 
@@ -8,20 +8,16 @@ class TimeRangeGeneratorBase(abc.ABC):
     """Base class for classes that generate time ranges."""
 
     @abc.abstractmethod
-    def iter_timestamps(self) -> Generator[Any, None, None]:
-        """Return an iterator over all time indexes in the table.
-        Type of the time is dependent on the class.
-        """
-
     def list_timestamps(self) -> list[Any]:
         """Return a list of timestamps for a time range.
         Type of the timestamps depends on the class.
+        Note: For DatetimeRangeGeneratorExternalTimeZone class with more than one time zone,
+        this shows all timestamps across all time zones in the order of the time zones.
 
         Returns
         -------
         list[Any]
         """
-        return list(self.iter_timestamps())
 
     @abc.abstractmethod
     def list_distinct_timestamps_from_dataframe(self, df: pd.DataFrame) -> list[Any]:
