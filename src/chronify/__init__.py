@@ -1,5 +1,8 @@
 import importlib.metadata as metadata
+import sys
 
+from chronify._vendor.kyuubi import TCLIService
+from chronify._vendor.kyuubi import pyhive
 from chronify.exceptions import (
     ChronifyExceptionBase,
     ConflictingInputsError,
@@ -59,3 +62,8 @@ __all__ = (
 )
 
 __version__ = metadata.metadata("chronify")["Version"]
+
+
+# Make pyhive importable as if it were installed separately.
+sys.modules["pyhive"] = pyhive
+sys.modules["TCLIService"] = TCLIService
