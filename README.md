@@ -18,7 +18,7 @@ $ pip install chronify
 
 To use Apache Spark via Apache Thrift Server as the backend:
 ```
-$ pip install "chronify[spark]""
+$ pip install "chronify[spark]"
 ```
 
 ## Developer installation
