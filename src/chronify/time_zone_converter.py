@@ -20,7 +20,7 @@ from chronify.exceptions import InvalidParameter, MissingValue
 from chronify.time_series_mapper_base import apply_mapping
 from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.sqlalchemy.functions import read_database
-from chronify.time import TimeType
+from chronify.time import TimeDataType, TimeType
 from chronify.time_utils import wrapped_time_timestamps, get_tzname
 
 
@@ -171,7 +171,9 @@ class TimeZoneConverterBase(abc.ABC):
 
 
 class TimeZoneConverter(TimeZoneConverterBase):
-    """Class for time zone conversion of time series data to a specified time zone."""
+    """Class for time zone conversion of time series data to a specified time zone.
+    Output timestamp is tz-naive with time_zone recorded in a column.
+    """
 
     def __init__(
         self,
@@ -200,6 +202,7 @@ class TimeZoneConverter(TimeZoneConverterBase):
                 time_kwargs.items(),
             )
         )
+        time_kwargs["dtype"] = TimeDataType.TIMESTAMP_NTZ
         time_kwargs["time_type"] = TimeType.DATETIME_TZ_COL
         time_kwargs["time_zone_column"] = "time_zone"
         time_kwargs["time_zones"] = [self._to_time_zone]
@@ -274,7 +277,9 @@ class TimeZoneConverter(TimeZoneConverterBase):
 
 
 class TimeZoneConverterByColumn(TimeZoneConverterBase):
-    """Class for time zone conversion of time series data based on a time zone column."""
+    """Class for time zone conversion of time series data based on a time zone column.
+    Output timestamp is tz-naive with time_zone recorded in a column.
+    """
 
     def __init__(
         self,
@@ -304,6 +309,7 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
                 time_kwargs.items(),
             )
         )
+        time_kwargs["dtype"] = TimeDataType.TIMESTAMP_NTZ
         time_kwargs["time_type"] = TimeType.DATETIME_TZ_COL
         time_kwargs["time_zone_column"] = self.time_zone_column
         time_kwargs["time_zones"] = self._get_time_zones()

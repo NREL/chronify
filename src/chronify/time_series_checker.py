@@ -86,7 +86,6 @@ class TimeSeriesChecker:
             stmt = stmt.where(self._table.c[col].is_not(None))
         df = read_database(stmt, self._conn, self._schema.time_config)
         actual_dct = self._time_generator.list_distinct_timestamps_by_time_zone_from_dataframe(df)
-
         if sorted(expected_dct.keys()) != sorted(actual_dct.keys()):
             msg = (
                 "Time zone records do not match between expected and actual from table "

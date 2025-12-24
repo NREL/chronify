@@ -7,6 +7,7 @@ import pandas as pd
 
 from chronify.time import (
     LeapDayAdjustmentType,
+    TimeDataType,
 )
 from chronify.time_configs import DatetimeRanges, DatetimeRange, DatetimeRangeWithTZColumn
 from chronify.time_utils import adjust_timestamp_by_dst_offset, get_tzname
@@ -118,42 +119,59 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
             raise InvalidValue(msg)
 
     def _list_timestamps(self, time_zone: Optional[tzinfo]) -> list[datetime]:
-        """always return tz-naive timestamps relative to input time_zone"""
-        if self._model.start_time_is_tz_naive():
-            if time_zone:
+        """return timestamps for a given time_zone expected in the dataframe
+        returned timestamp dtype matches self._model.dtype, e.g.,
+        if time_zone is None, return tz-naive timestamps else return tz-aware timestamps
+        """
+        match (self._model.start_time_is_tz_naive(), self._model.dtype):
+            case (True, TimeDataType.TIMESTAMP_NTZ):
+                # align in local time of the time zone, all time zones have the same tz-naive timestamps
+                start = self._model.start
+            case (True, TimeDataType.TIMESTAMP_TZ):
+                # align in local time of the time zone, all time zones have different tz-aware timestamps that are aligned when adjusted by time zone
                 start = self._model.start.replace(tzinfo=time_zone)
-            else:
-                start = None
-        else:
-            if time_zone:
-                start = self._model.start.astimezone(time_zone)
-            else:
-                start = self._model.start.replace(tzinfo=None)
-        timestamps = list(self._iter_timestamps(start=start))
-        return [x.replace(tzinfo=None) for x in timestamps]
+            case (False, TimeDataType.TIMESTAMP_NTZ):
+                # align in absolute time, all time zones have different tz-naive timestamps that are aligned when localized to the time zone
+                if time_zone:
+                    start = self._model.start.astimezone(time_zone).replace(tzinfo=None)
+                else:
+                    start = self._model.start.replace(tzinfo=None)
+            case (False, TimeDataType.TIMESTAMP_TZ):
+                # align in absolute time, all time zones have the same tz-aware timestamps
+                start = self._model.start
+            case _:
+                msg = f"Unsupported combination of start_time_is_tz_naive and dtype: {self._model}"
+                raise InvalidValue(msg)
+        return list(self._iter_timestamps(start=start))
 
     def list_timestamps(self) -> list[datetime]:
-        """return ordered timestamps across all time zones in the order of the time zones."""
+        """return ordered tz-naive timestamps across all time zones in the order of the time zones."""
         dct = self.list_timestamps_by_time_zone()
         return list(chain(*dct.values()))
 
     def list_timestamps_by_time_zone(self) -> dict[str, list[datetime]]:
-        """for each time zone, returns full timestamp iteration (duplicates allowed)"""
+        """for each time zone, returns full timestamp iteration
+        (duplicates allowed)"""
         dct = {}
         for tz in self._model.get_time_zones():
             tz_name = get_tzname(tz)
             dct[tz_name] = self._list_timestamps(tz)
-
         return dct
 
     def list_distinct_timestamps_by_time_zone_from_dataframe(
         self, df: pd.DataFrame
     ) -> dict[str, list[datetime]]:
+        """
+        from the dataframe, for each time zone, returns distinct timestamps
+        """
         tz_col = self._model.get_time_zone_column()
         t_col = self._model.time_column
         df[t_col] = pd.to_datetime(df[t_col])
         df2 = df[[tz_col, t_col]].drop_duplicates()
         dct = {}
         for tz_name in sorted(df2[tz_col].unique()):
-            dct[tz_name] = sorted(df2.loc[df2[tz_col] == tz_name, t_col].tolist())
+            timestamps = sorted(df2.loc[df2[tz_col] == tz_name, t_col].tolist())
+            # if timestamps[0].tzinfo:
+            #     timestamps = [x.astimezone(tz_name).replace(tzinfo=None) for x in timestamps]
+            dct[tz_name] = timestamps
         return dct

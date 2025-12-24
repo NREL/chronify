@@ -8,13 +8,12 @@ from chronify.exceptions import InvalidParameter
 
 
 class TimeType(StrEnum):
-    """Defines the supported time formats in the load data."""
+    """Defines the formats of time config / representation."""
 
     DATETIME = "datetime"
     DATETIME_TZ_COL = "datetime_tz_col"
     ANNUAL = "annual"
-    INDEX_NTZ = "index_ntz"
-    INDEX_TZ = "index_tz"
+    INDEX = "index"
     INDEX_TZ_COL = "index_tz_col"
     REPRESENTATIVE_PERIOD_NTZ = "representative_period_ntz"
     REPRESENTATIVE_PERIOD_TZ = "representative_period_tz"
@@ -23,12 +22,13 @@ class TimeType(StrEnum):
     YEAR_MONTH_DAY_PERIOD_NTZ = "year_month_day_period"
 
 
-class DatetimeFormat(StrEnum):
-    """Defines the time format of the datetime config model"""
+class TimeDataType(StrEnum):
+    """Defines the data types of datetime columns in load_data."""
 
-    ALIGNED = "aligned"
-    LOCAL = "local"
-    LOCAL_AS_STRINGS = "local_as_strings"
+    TIMESTAMP_TZ = "timestamp_tz"
+    TIMESTAMP_NTZ = "timestamp_ntz"
+    STRING = "string"
+    TIMESTAMP_IN_PARTS = "timestamp_in_parts"
 
 
 class RepresentativePeriodFormat(StrEnum):
