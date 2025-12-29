@@ -144,14 +144,15 @@ class TimeZoneConverterBase(abc.ABC):
         msg = ""
         if not isinstance(from_schema.time_config, DatetimeRange):
             msg += "Source schema does not have DatetimeRange time config. "
-        if (
-            isinstance(from_schema.time_config, DatetimeRange)
-            and from_schema.time_config.start_time_is_tz_naive()
-        ):
+        if from_schema.time_config.dtype != TimeDataType.TIMESTAMP_TZ:
+            msg += "Source schema time config dtype must be Timestamp_TZ. "
+        if from_schema.time_config.start_time_is_tz_naive():
             msg += (
                 "Source schema start_time must be timezone-aware. "
-                "To convert from timezone-naive to timezone-aware, "
-                "use the TimeSeriesMapperDatetime.map_time() method instead. "
+                "This converter will convert time zones and return timestamps as tz-naive "
+                "along with time zone information in a column. "
+                "To localize timestamps from timezone-naive to timezone-aware, "
+                "use TimeZoneLocalizer() or TimeZoneLocalizerByColumn() instead. "
             )
         if msg != "":
             raise InvalidParameter(msg)
@@ -171,8 +172,16 @@ class TimeZoneConverterBase(abc.ABC):
 
 
 class TimeZoneConverter(TimeZoneConverterBase):
-    """Class for time zone conversion of time series data to a specified time zone.
-    Output timestamp is tz-naive with time_zone recorded in a column.
+    """Class for time zone conversion of tz-aware, aligned_in_absolute_time
+    time series data to a specified time zone.
+
+    Input data table must contain tz-aware timestamps.
+    Input time config must be of type DatetimeRange with Timestamp_TZ dtype and tz-aware start time.
+    Output data table will contain tz-naive timestamps with time zone recorded in a column
+    Output time config will be of type DatetimeRange with Timestamp_NTZ dtype and tz-naive start time.
+
+    # TODO: support DatetimeRangeWithTZColumn as input time config
+    # TODO: support wrap_time_allowed option
     """
 
     def __init__(
@@ -277,8 +286,35 @@ class TimeZoneConverter(TimeZoneConverterBase):
 
 
 class TimeZoneConverterByColumn(TimeZoneConverterBase):
-    """Class for time zone conversion of time series data based on a time zone column.
-    Output timestamp is tz-naive with time_zone recorded in a column.
+    """Class for time zone conversion of tz-aware, aligned_in_absolute_time
+    time series data based on a time zone column.
+
+    Input data table must contain tz-aware timestamps and a time zone column.
+    Input time config must be of type DatetimeRangeWithTZColumn or DatetimeRange with Timestamp_TZ dtype.
+     - If DatetimeRange is used, time_zone_column must be provided.
+     - If DatetimeRangeWithTZColumn is used, it is converted to DatetimeRange internally.
+     time_zone_column, if provided, is ignored and instead taken from the time_config.
+    Output data table will contain tz-naive timestamps and the original time zone column.
+    Output time config will be of type DatetimeRangeWithTZColumn with Timestamp_NTZ dtype (see scenarios).
+
+    I/O Time config scenarios:
+    --------------------------------
+    To convert tz-aware timestamps aligned_in_absolute_time to multiple time zones specified in a column:
+     - wrap_time_allowed = False
+     - Input time config: DatetimeRange with tz-aware start time, Timestamp_TZ dtype
+     - Output time config: DatetimeRangeWithTZColumn with tz-aware start time, Timestamp_NTZ dtype
+
+    To convert tz-aware timestamps aligned_in_absolute_time to multiple time zones specified in a column
+    and aligned_in_local_time:
+     - wrap_time_allowed = True
+     - Input time config: DatetimeRange with tz-aware start time, Timestamp_TZ dtype
+     - Output time config: DatetimeRangeWithTZColumn with tz-naive start time, Timestamp_NTZ dtype
+     Note: converted time is wrapped within the local time range of the original timestamps.
+    --------------------------------
+
+    # TODO: support DatetimeRangeWithTZColumn as input time config
+    # TODO: add util func to reduce code duplication with TimeZoneLocalizerByColumn
+    # TODO: add util func to reduce DatetimeRangeWithTZColumn aligned_in_absolute_time to DatetimeRange
     """
 
     def __init__(
