@@ -120,8 +120,8 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
 
     def _list_timestamps(self, time_zone: Optional[tzinfo]) -> list[datetime]:
         """return timestamps for a given time_zone expected in the dataframe
-        returned timestamp dtype matches self._model.dtype, e.g.,
-        if time_zone is None, return tz-naive timestamps else return tz-aware timestamps
+        returned timestamp dtype matches that in the dataframe, i.e. self._model.dtype
+        (e.g., if time_zone is None, return tz-naive timestamps else return tz-aware timestamps)
         """
         match (self._model.start_time_is_tz_naive(), self._model.dtype):
             case (True, TimeDataType.TIMESTAMP_NTZ):

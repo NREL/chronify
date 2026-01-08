@@ -5,6 +5,7 @@ from sqlalchemy import Engine, MetaData, Table, select
 from typing import Optional
 from pathlib import Path
 import pandas as pd
+from pandas import DatetimeTZDtype
 
 from chronify.models import TableSchema, MappingTableSchema
 from chronify.time_configs import (
@@ -60,14 +61,14 @@ def localize_time_zone(
     TableSchema
         Schema of output table with converted timestamps.
     """
-    tzc = TimeZoneLocalizer(engine, metadata, src_schema, to_time_zone)
-    tzc.localize_time_zone(
+    tzl = TimeZoneLocalizer(engine, metadata, src_schema, to_time_zone)
+    tzl.localize_time_zone(
         scratch_dir=scratch_dir,
         output_file=output_file,
         check_mapped_timestamps=check_mapped_timestamps,
     )
 
-    return tzc._to_schema
+    return tzl._to_schema
 
 
 def localize_time_zone_by_column(
@@ -114,15 +115,15 @@ def localize_time_zone_by_column(
         )
         raise MissingValue(msg)
 
-    tzc = TimeZoneLocalizerByColumn(
+    tzl = TimeZoneLocalizerByColumn(
         engine, metadata, src_schema, time_zone_column=time_zone_column
     )
-    tzc.localize_time_zone(
+    tzl.localize_time_zone(
         scratch_dir=scratch_dir,
         output_file=output_file,
         check_mapped_timestamps=check_mapped_timestamps,
     )
-    return tzc._to_schema
+    return tzl._to_schema
 
 
 class TimeZoneLocalizerBase(abc.ABC):
@@ -138,8 +139,8 @@ class TimeZoneLocalizerBase(abc.ABC):
         self._metadata = metadata
         self._from_schema = from_schema
 
-    @abc.abstractmethod
     @staticmethod
+    @abc.abstractmethod
     def _check_from_schema(from_schema: TableSchema) -> None:
         """Check that from_schema is valid for time zone localization"""
 
@@ -205,7 +206,10 @@ class TimeZoneLocalizer(TimeZoneLocalizerBase):
         assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
         to_time_config: DatetimeRange = self._from_schema.time_config.model_copy(
             update={
-                "start": self._from_schema.time_config.start.replace(tzinfo=self._to_time_zone)
+                "dtype": TimeDataType.TIMESTAMP_TZ
+                if self._to_time_zone
+                else TimeDataType.TIMESTAMP_NTZ,
+                "start": self._from_schema.time_config.start.replace(tzinfo=self._to_time_zone),
             }
         )
 
@@ -307,8 +311,8 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
         msg = ""
         if isinstance(from_schema.time_config, DatetimeRange) and time_zone_column is None:
             msg += "time_zone_column must be provided when source schema time config is of type DatetimeRange. "
-        if time_zone_column not in from_schema.time_array_id_columns:
-            msg = f"{time_zone_column=} must be in source schema time_array_id_columns."
+        # if time_zone_column not in from_schema.time_array_id_columns:
+        #     msg = f"{time_zone_column=} must be in source schema time_array_id_columns."
         if msg != "":
             msg += f"\n{from_schema}"
             raise InvalidParameter(msg)
@@ -335,7 +339,7 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
         assert isinstance(self._from_schema.time_config, DatetimeRangeWithTZColumn)  # mypy
         match self._from_schema.time_config.start_time_is_tz_naive():
             case True:
-                # tz-naive start, aligned in local time of the time zones
+                # tz-naive start, aligned_in_local_time of the time zones
                 to_time_config: DatetimeRangeWithTZColumn = (
                     self._from_schema.time_config.model_copy(
                         update={
@@ -345,7 +349,7 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
                 )
                 return to_time_config
             case False:
-                # tz-aware start, aligned in absolute time, convert to DatetimeRange config
+                # tz-aware start, aligned_in_absolute_time, convert to DatetimeRange config
                 time_kwargs = self._from_schema.time_config.model_dump()
                 time_kwargs = dict(
                     filter(
@@ -409,12 +413,19 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
                 self.time_zone_column
             ].to_list()
 
+        if "None" in time_zones and len(time_zones) > 1:
+            msg = (
+                "Chronify does not support mix of None and time zones in time_zone_column."
+                "This is because databases do not support tz-aware and tz-naive timestamps "
+                f"in the same column: {time_zones}"
+            )
+            raise InvalidParameter(msg)
+
         time_zones = [None if tz == "None" else ZoneInfo(tz) for tz in time_zones]
         return time_zones
 
     def _create_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema]:
         """Create mapping dataframe for localizing tz-naive datetime to column time zones"""
-        # assert isinstance(self._from_schema.time_config, DatetimeRangeWithTZColumn)  # mypy
         time_col = self._from_schema.time_config.time_column
         from_time_col = "from_" + time_col
         from_time_generator = make_time_range_generator(self._from_schema.time_config)
@@ -443,17 +454,27 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
         to_time_config = self._to_schema.time_config
 
         df_tz = []
+        primary_tz = ZoneInfo(list(from_time_data_dct.keys())[0])
         for tz_name, from_time_data in from_time_data_dct.items():
+            # convert tz-aware timestamps to a single time zone for mapping
+            # this is because pandas coerces tz-aware timestamps with mixed time zones to object dtype otherwise
+            to_time_data = [ts.astimezone(primary_tz) for ts in to_time_data_dct[tz_name]]
             df_tz.append(
                 pd.DataFrame(
                     {
                         from_time_col: from_time_data,
                         from_tz_col: tz_name,
-                        time_col: to_time_data_dct[tz_name],
+                        time_col: to_time_data,
                     }
                 )
             )
         df = pd.concat(df_tz, ignore_index=True)
+        if not isinstance(df[time_col].dtype, DatetimeTZDtype):
+            msg = (
+                "Mapped time column is expected to be of "
+                f"DatetimeTZDtype but got {df[time_col].dtype}"
+            )
+            raise InvalidParameter(msg)
 
         mapping_schema = MappingTableSchema(
             name="mapping_table_gtz_conversion",

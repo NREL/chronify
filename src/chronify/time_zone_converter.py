@@ -143,12 +143,12 @@ class TimeZoneConverterBase(abc.ABC):
     def _check_from_schema(self, from_schema: TableSchema) -> None:
         msg = ""
         if not isinstance(from_schema.time_config, DatetimeRange):
-            msg += "Source schema does not have DatetimeRange time config. "
+            msg += "Source schema must have DatetimeRange time config. "
         if from_schema.time_config.dtype != TimeDataType.TIMESTAMP_TZ:
             msg += "Source schema time config dtype must be Timestamp_TZ. "
         if from_schema.time_config.start_time_is_tz_naive():
             msg += (
-                "Source schema start_time must be timezone-aware. "
+                "Source schema time config start time must be timezone-aware. "
                 "This converter will convert time zones and return timestamps as tz-naive "
                 "along with time zone information in a column. "
                 "To localize timestamps from timezone-naive to timezone-aware, "
@@ -197,20 +197,19 @@ class TimeZoneConverter(TimeZoneConverterBase):
 
     def generate_to_time_config(self) -> DatetimeRangeWithTZColumn:
         assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
-        to_time_config = self._from_schema.time_config.model_copy()
-        if self._to_time_zone:
-            to_time_config.start = to_time_config.start.astimezone(self._to_time_zone).replace(
-                tzinfo=None
-            )
-        else:
-            to_time_config.start = to_time_config.start.replace(tzinfo=None)
-        time_kwargs = to_time_config.model_dump()
+        time_kwargs = self._from_schema.time_config.model_dump()
         time_kwargs = dict(
             filter(
                 lambda k_v: k_v[0] in DatetimeRangeWithTZColumn.model_fields,
                 time_kwargs.items(),
             )
         )
+        if self._to_time_zone:
+            time_kwargs["start"] = (
+                time_kwargs["start"].astimezone(self._to_time_zone).replace(tzinfo=None)
+            )
+        else:
+            time_kwargs["start"] = time_kwargs["start"].replace(tzinfo=None)
         time_kwargs["dtype"] = TimeDataType.TIMESTAMP_NTZ
         time_kwargs["time_type"] = TimeType.DATETIME_TZ_COL
         time_kwargs["time_zone_column"] = "time_zone"
@@ -335,16 +334,16 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
 
     def generate_to_time_config(self) -> DatetimeRangeBase:
         assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
-        to_time_config = self._from_schema.time_config.model_copy()
-        if self._wrap_time_allowed:
-            to_time_config.start = to_time_config.start.replace(tzinfo=None)
-        time_kwargs = to_time_config.model_dump()
+        time_kwargs = self._from_schema.time_config.model_dump()
         time_kwargs = dict(
             filter(
                 lambda k_v: k_v[0] in DatetimeRangeWithTZColumn.model_fields,
                 time_kwargs.items(),
             )
         )
+        if self._wrap_time_allowed:
+            time_kwargs["start"] = time_kwargs["start"].replace(tzinfo=None)
+
         time_kwargs["dtype"] = TimeDataType.TIMESTAMP_NTZ
         time_kwargs["time_type"] = TimeType.DATETIME_TZ_COL
         time_kwargs["time_zone_column"] = self.time_zone_column

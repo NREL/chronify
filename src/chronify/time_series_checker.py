@@ -27,7 +27,10 @@ def check_timestamps(
 
 
 class TimeSeriesChecker:
-    """Performs checks on time series arrays in a table."""
+    """Performs checks on time series arrays in a table.
+    Timestamps in the table will be checked against expected timestamps generated from the
+    TableSchema's time_config. TZ-awareness of the generated timestamps will match that of thetable.
+    """
 
     def __init__(
         self,

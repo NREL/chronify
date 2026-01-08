@@ -3,7 +3,7 @@ import logging
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, tzinfo
 from typing import Union, Literal, Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, ValidationInfo
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
@@ -68,9 +68,6 @@ class TimeBaseModel(ChronifyBaseModel, abc.ABC):
 class DatetimeRangeBase(TimeBaseModel):
     """Defines a time range base class that uses Python datetime instances."""
 
-    dtype: Literal[
-        TimeDataType.TIMESTAMP_TZ, TimeDataType.TIMESTAMP_NTZ
-    ] = TimeDataType.TIMESTAMP_TZ
     time_column: str = Field(description="Column in the table that represents time.")
     length: int
     resolution: timedelta
@@ -92,12 +89,44 @@ class DatetimeRange(DatetimeRangeBase):
         description="Start time of the range. If it includes a time zone, the timestamps in "
         "the data must be time zone-aware."
     )
+    dtype: Optional[Literal[TimeDataType.TIMESTAMP_TZ, TimeDataType.TIMESTAMP_NTZ]] = Field(
+        description="Data type of the timestamps in the time column.",
+        default=None,
+    )
 
     def get_time_zone_column(self) -> None:
         return None
 
     def get_time_zones(self) -> list[tzinfo | None]:
         return []
+
+    @field_validator("dtype", mode="after")
+    @classmethod
+    def check_dtype_start_time_consistency(
+        cls,
+        dtype: Optional[Literal[TimeDataType.TIMESTAMP_TZ, TimeDataType.TIMESTAMP_NTZ]],
+        info: ValidationInfo,
+    ) -> Literal[TimeDataType.TIMESTAMP_TZ, TimeDataType.TIMESTAMP_NTZ]:
+        match (info.data["start"].tzinfo is None, dtype):
+            # assign default dtype if not provided
+            case (True, None):
+                dtype = TimeDataType.TIMESTAMP_NTZ
+            case (False, None):
+                dtype = TimeDataType.TIMESTAMP_TZ
+            # validate dype if provided
+            case (True, TimeDataType.TIMESTAMP_TZ):
+                msg = (
+                    "DatetimeRange with tz-naive start time must have dtype TIMESTAMP_NTZ: "
+                    f"\n{info.data['start']=}, {dtype=}"
+                )
+                raise InvalidValue(msg)
+            case (False, TimeDataType.TIMESTAMP_NTZ):
+                msg = (
+                    "DatetimeRange with tz-aware start time must have dtype TIMESTAMP_TZ: "
+                    f"\n{info.data['start']=}, {dtype=}"
+                )
+                raise InvalidValue(msg)
+        return dtype
 
 
 class DatetimeRangeWithTZColumn(DatetimeRangeBase):
@@ -116,6 +145,9 @@ class DatetimeRangeWithTZColumn(DatetimeRangeBase):
     )
     time_zones: list[tzinfo | ZoneInfo | None] = Field(
         description="Unique time zones from the table."
+    )
+    dtype: Literal[TimeDataType.TIMESTAMP_TZ, TimeDataType.TIMESTAMP_NTZ] = Field(
+        description="Data type of the timestamps in the time column."
     )
 
     def get_time_zone_column(self) -> str:

@@ -13,10 +13,11 @@ from collections import Counter
 import pandas as pd
 from numpy.dtypes import DateTime64DType, ObjectDType
 from pandas import DatetimeTZDtype
+from chronify.time import TimeDataType
 from sqlalchemy import Connection, Engine, Selectable, text
 
 from chronify.exceptions import InvalidOperation, InvalidParameter
-from chronify.time_configs import DatetimeRangeBase, DatetimeRange, TimeBaseModel
+from chronify.time_configs import DatetimeRangeBase, TimeBaseModel
 from chronify.utils.path_utils import check_overwrite, delete_if_exists, to_path
 
 # Copied from Pandas/Polars
@@ -35,7 +36,7 @@ def read_database(
                 df = conn.execute(query).cursor.fetch_df()  # type: ignore
         case "sqlite":
             df = pd.read_sql(query, conn, params=params)
-            if isinstance(config, DatetimeRange):
+            if isinstance(config, DatetimeRangeBase):
                 _convert_database_output_for_datetime(df, config)
         case "hive":
             df = _read_from_hive(query, conn, config, params)
@@ -61,7 +62,7 @@ def write_database(
     """
     match conn.engine.name:
         case "duckdb":
-            _write_to_duckdb(df, conn, table_name, if_table_exists)
+            _write_to_duckdb(df, conn, table_name, configs, if_table_exists)
         case "sqlite":
             _write_to_sqlite(df, conn, table_name, configs, if_table_exists)
         case "hive":
@@ -81,9 +82,9 @@ def _check_one_config_per_datetime_column(configs: Sequence[TimeBaseModel]) -> N
 
 
 def _convert_database_input_for_datetime(
-    df: pd.DataFrame, config: DatetimeRange, copied: bool
+    df: pd.DataFrame, config: DatetimeRangeBase, copied: bool
 ) -> tuple[pd.DataFrame, bool]:
-    if config.start_time_is_tz_naive():
+    if config.dtype == TimeDataType.TIMESTAMP_NTZ:
         return df, copied
 
     if copied:
@@ -91,7 +92,6 @@ def _convert_database_input_for_datetime(
     else:
         df2 = df.copy()
         copied = True
-
     if isinstance(df2[config.time_column].dtype, DatetimeTZDtype):
         df2[config.time_column] = df2[config.time_column].dt.tz_convert("UTC")
     else:
@@ -100,9 +100,9 @@ def _convert_database_input_for_datetime(
     return df2, copied
 
 
-def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRange) -> None:
+def _convert_database_output_for_datetime(df: pd.DataFrame, config: DatetimeRangeBase) -> None:
     if config.time_column in df.columns:
-        if not config.start_time_is_tz_naive():
+        if config.dtype == TimeDataType.TIMESTAMP_TZ:
             if isinstance(df[config.time_column].dtype, ObjectDType):
                 df[config.time_column] = pd.to_datetime(df[config.time_column], utc=True)
             else:
@@ -116,21 +116,37 @@ def _write_to_duckdb(
     df: pd.DataFrame,
     conn: Connection,
     table_name: str,
+    configs: Sequence[TimeBaseModel],
     if_table_exists: DbWriteMode,
 ) -> None:
     assert conn._dbapi_connection is not None
     assert conn._dbapi_connection.driver_connection is not None
+    # time_cols = []
+    # non_time_cols = df.columns.tolist()
+    # for config in configs:
+    #     if isinstance(config, DatetimeRangeBase):
+    #         time_col = config.time_column
+    #         if config.dtype == TimeDataType.TIMESTAMP_TZ:
+    #             time_cols.append(f"{time_col}::TIMESTAMPTZ AS {time_col}")
+    #         else:
+    #             time_cols.append(f"{time_col}::TIMESTAMP AS {time_col}")
+    #         non_time_cols.remove(time_col)
+
+    # col_stmt = ", ".join(time_cols + non_time_cols)
+    col_stmt = "*"
+
     match if_table_exists:
         case "append":
-            query = f"INSERT INTO {table_name} SELECT * FROM df"
+            query = f"INSERT INTO {table_name} SELECT {col_stmt} FROM df"
         case "replace":
             conn._dbapi_connection.driver_connection.sql(f"DROP TABLE IF EXISTS {table_name}")
-            query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
+            query = f"CREATE TABLE {table_name} AS SELECT {col_stmt} FROM df"
         case "fail":
-            query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
+            query = f"CREATE TABLE {table_name} AS SELECT {col_stmt} FROM df"
         case _:
             msg = f"{if_table_exists=}"
             raise InvalidOperation(msg)
+
     conn._dbapi_connection.driver_connection.sql(query)
 
 
@@ -190,7 +206,7 @@ def _read_from_hive(
 ) -> pd.DataFrame:
     df = pd.read_sql_query(query, conn, params=params)
     if (
-        isinstance(config, DatetimeRange)
+        isinstance(config, DatetimeRangeBase)
         and config.time_column in df.columns
         and not config.start_time_is_tz_naive()
     ):
@@ -210,7 +226,7 @@ def _write_to_sqlite(
     _check_one_config_per_datetime_column(configs)
     copied = False
     for config in configs:
-        if isinstance(config, DatetimeRange):
+        if isinstance(config, DatetimeRangeBase):
             df, copied = _convert_database_input_for_datetime(df, config, copied)
     df.to_sql(table_name, conn, if_exists=if_table_exists, index=False)
 
