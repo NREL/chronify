@@ -62,7 +62,7 @@ def write_database(
     """
     match conn.engine.name:
         case "duckdb":
-            _write_to_duckdb(df, conn, table_name, configs, if_table_exists)
+            _write_to_duckdb(df, conn, table_name, if_table_exists)
         case "sqlite":
             _write_to_sqlite(df, conn, table_name, configs, if_table_exists)
         case "hive":
@@ -116,33 +116,19 @@ def _write_to_duckdb(
     df: pd.DataFrame,
     conn: Connection,
     table_name: str,
-    configs: Sequence[TimeBaseModel],
     if_table_exists: DbWriteMode,
 ) -> None:
     assert conn._dbapi_connection is not None
     assert conn._dbapi_connection.driver_connection is not None
-    # time_cols = []
-    # non_time_cols = df.columns.tolist()
-    # for config in configs:
-    #     if isinstance(config, DatetimeRangeBase):
-    #         time_col = config.time_column
-    #         if config.dtype == TimeDataType.TIMESTAMP_TZ:
-    #             time_cols.append(f"{time_col}::TIMESTAMPTZ AS {time_col}")
-    #         else:
-    #             time_cols.append(f"{time_col}::TIMESTAMP AS {time_col}")
-    #         non_time_cols.remove(time_col)
-
-    # col_stmt = ", ".join(time_cols + non_time_cols)
-    col_stmt = "*"
 
     match if_table_exists:
         case "append":
-            query = f"INSERT INTO {table_name} SELECT {col_stmt} FROM df"
+            query = f"INSERT INTO {table_name} SELECT * FROM df"
         case "replace":
             conn._dbapi_connection.driver_connection.sql(f"DROP TABLE IF EXISTS {table_name}")
-            query = f"CREATE TABLE {table_name} AS SELECT {col_stmt} FROM df"
+            query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
         case "fail":
-            query = f"CREATE TABLE {table_name} AS SELECT {col_stmt} FROM df"
+            query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
         case _:
             msg = f"{if_table_exists=}"
             raise InvalidOperation(msg)

@@ -892,7 +892,7 @@ class Store:
         >>> num_time_arrays = 3
         >>> df = pd.DataFrame(
         ...     {
-        ...         "id": np.concat(
+        ...         "id": np.concatenate(
         ...             [np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]
         ...         ),
         ...         "month": np.tile(np.repeat(range(1, 13), 7 * 24), num_time_arrays),
@@ -983,7 +983,7 @@ class Store:
         >>> num_time_arrays = 1
         >>> df = pd.DataFrame(
         ...     {
-        ...         "id": np.concat(
+        ...         "id": np.concatenate(
         ...             [np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]
         ...         ),
         ...         "timestamp": np.tile(
@@ -1072,7 +1072,7 @@ class Store:
         >>> num_time_arrays = 3
         >>> df = pd.DataFrame(
         ...     {
-        ...         "id": np.concat(
+        ...         "id": np.concatenate(
         ...             [np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]
         ...         ),
         ...         "timestamp": np.tile(
