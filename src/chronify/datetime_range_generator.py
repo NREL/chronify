@@ -1,7 +1,7 @@
 from datetime import datetime, tzinfo
 from typing import Generator, Optional
-from zoneinfo import ZoneInfo
 from itertools import chain
+from calendar import isleap
 
 import pandas as pd
 
@@ -10,7 +10,7 @@ from chronify.time import (
     TimeDataType,
 )
 from chronify.time_configs import DatetimeRanges, DatetimeRange, DatetimeRangeWithTZColumn
-from chronify.time_utils import adjust_timestamp_by_dst_offset, get_tzname
+from chronify.time_utils import get_tzname
 from chronify.time_range_generator_base import TimeRangeGeneratorBase
 from chronify.exceptions import InvalidValue
 
@@ -26,51 +26,52 @@ class DatetimeRangeGeneratorBase(TimeRangeGeneratorBase):
         self._model = model
         self._adjustment = leap_day_adjustment or LeapDayAdjustmentType.NONE
 
-    def _iter_timestamps(
-        self, start: Optional[datetime] = None
-    ) -> Generator[datetime, None, None]:
-        """
+    def _list_timestamps(self, start: Optional[datetime] = None) -> list[datetime]:
+        """Return all timestamps as a list.
         if start is supplied, override self._model.start
         """
         if start is None:
             start = self._model.start
-        tz = start.tzinfo
 
-        for i in range(self._model.length):
-            if not tz:
-                cur = adjust_timestamp_by_dst_offset(
-                    start + i * self._model.resolution, self._model.resolution
-                )
-            else:
-                # always step in standard time
-                cur_utc = start.astimezone(ZoneInfo("UTC")) + i * self._model.resolution
-                cur = adjust_timestamp_by_dst_offset(
-                    cur_utc.astimezone(tz), self._model.resolution
-                )
+        timestamps = pd.date_range(
+            start=start,
+            periods=self._model.length,
+            freq=self._model.resolution,
+        ).tolist()
 
-            is_leap_year = (
-                pd.Timestamp(f"{cur.year}-01-01") + pd.Timedelta(days=365)
-            ).year == cur.year
-            if not is_leap_year:
-                yield pd.Timestamp(cur)
-                continue
+        match self._adjustment:
+            case LeapDayAdjustmentType.DROP_FEB29:
+                timestamps = [
+                    ts
+                    for ts in timestamps
+                    if not (isleap(ts.year) and ts.month == 2 and ts.day == 29)
+                ]
+            case LeapDayAdjustmentType.DROP_DEC31:
+                timestamps = [
+                    ts
+                    for ts in timestamps
+                    if not (isleap(ts.year) and ts.month == 12 and ts.day == 31)
+                ]
+            case LeapDayAdjustmentType.DROP_JAN1:
+                timestamps = [
+                    ts
+                    for ts in timestamps
+                    if not (isleap(ts.year) and ts.month == 1 and ts.day == 1)
+                ]
+            case _:
+                pass
 
-            month = cur.month
-            day = cur.day
-            if not (
-                self._adjustment == LeapDayAdjustmentType.DROP_FEB29 and month == 2 and day == 29
-            ):
-                if not (
-                    self._adjustment == LeapDayAdjustmentType.DROP_DEC31
-                    and month == 12
-                    and day == 31
-                ):
-                    if not (
-                        self._adjustment == LeapDayAdjustmentType.DROP_JAN1
-                        and month == 1
-                        and day == 1
-                    ):
-                        yield pd.Timestamp(cur)
+        return timestamps  # type: ignore
+
+    def _iter_timestamps(
+        self, start: Optional[datetime] = None
+    ) -> Generator[datetime, None, None]:
+        """Generator from pd.date_range().
+        Note: Established time library already handles historical changes in time zone conversion to UTC.
+        (e.g. Algeria (Africa/Algiers) changed from UTC+0 to UTC+1 on April 25, 1980)
+        """
+        for ts in self._list_timestamps(start=start):
+            yield ts
 
     def list_time_columns(self) -> list[str]:
         return self._model.list_time_columns()
@@ -94,7 +95,7 @@ class DatetimeRangeGenerator(DatetimeRangeGeneratorBase):
         assert isinstance(self._model, DatetimeRange)
 
     def list_timestamps(self) -> list[datetime]:
-        return list(self._iter_timestamps())
+        return self._list_timestamps()  # list(self._iter_timestamps())
 
 
 class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
@@ -118,7 +119,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
             )
             raise InvalidValue(msg)
 
-    def _list_timestamps(self, time_zone: Optional[tzinfo]) -> list[datetime]:
+    def _list_timestamps_by_time_zone(self, time_zone: Optional[tzinfo]) -> list[datetime]:
         """return timestamps for a given time_zone expected in the dataframe
         returned timestamp dtype matches that in the dataframe, i.e. self._model.dtype
         (e.g., if time_zone is None, return tz-naive timestamps else return tz-aware timestamps)
@@ -142,7 +143,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
             case _:
                 msg = f"Unsupported combination of start_time_is_tz_naive and dtype: {self._model}"
                 raise InvalidValue(msg)
-        return list(self._iter_timestamps(start=start))
+        return self._list_timestamps(start=start)  # ist(self._iter_timestamps(start=start))
 
     def list_timestamps(self) -> list[datetime]:
         """return ordered tz-naive timestamps across all time zones in the order of the time zones."""
@@ -155,7 +156,7 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
         dct = {}
         for tz in self._model.get_time_zones():
             tz_name = get_tzname(tz)
-            dct[tz_name] = self._list_timestamps(tz)
+            dct[tz_name] = self._list_timestamps_by_time_zone(time_zone=tz)
         return dct
 
     def list_distinct_timestamps_by_time_zone_from_dataframe(
