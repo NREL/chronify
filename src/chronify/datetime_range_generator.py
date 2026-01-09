@@ -120,10 +120,9 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
     def _list_timestamps(self, time_zone: Optional[tzinfo]) -> list[datetime]:
         """always return tz-naive timestamps relative to input time_zone"""
         if self._model.start_time_is_tz_naive():
-            if time_zone:
-                start = self._model.start.replace(tzinfo=time_zone)
-            else:
-                start = None
+            # For clock-time-aligned data, iterate naively without timezone conversion.
+            # All timezones get the same clock times (e.g., midnight everywhere).
+            start = None
         else:
             if time_zone:
                 start = self._model.start.astimezone(time_zone)
