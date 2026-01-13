@@ -8,6 +8,7 @@ import pandas as pd
 from sqlalchemy import Engine, MetaData
 
 from chronify.sqlalchemy.functions import read_database, write_database
+from chronify.time_utils import get_standard_time_zone
 from chronify.time_zone_localizer import (
     TimeZoneLocalizer,
     TimeZoneLocalizerByColumn,
@@ -65,37 +66,58 @@ def get_datetime_schema(
     tzinfo: tzinfo | None,
     interval_type: TimeIntervalType,
     name: str,
-    has_tz_col: bool = False,
 ) -> TableSchema:
-    start = datetime(year=year, month=1, day=1, tzinfo=tzinfo)
-    end = datetime(year=year, month=1, day=2, tzinfo=tzinfo)
+    start = datetime(year=year, month=3, day=11, tzinfo=tzinfo)
+    end = datetime(year=year, month=3, day=12, tzinfo=tzinfo)
     resolution = timedelta(hours=1)
     length = (end - start) / resolution + 1
     cols = ["id"]
-    if has_tz_col:
-        time_config: DatetimeRangeBase = DatetimeRangeWithTZColumn(
-            dtype=TimeDataType.TIMESTAMP_NTZ,
-            start=start,
-            resolution=resolution,
-            length=length,
-            interval_type=interval_type,
-            time_column="timestamp",
-            time_zone_column="time_zone",
-            time_zones=[
-                ZoneInfo("US/Eastern"),
-                ZoneInfo("US/Central"),
-                ZoneInfo("US/Mountain"),
-            ],
-        )
-    else:
-        time_config = DatetimeRange(
-            dtype=TimeDataType.TIMESTAMP_TZ if tzinfo else TimeDataType.TIMESTAMP_NTZ,
-            start=start,
-            resolution=resolution,
-            length=length,
-            interval_type=interval_type,
-            time_column="timestamp",
-        )
+    time_config = DatetimeRange(
+        dtype=TimeDataType.TIMESTAMP_TZ if tzinfo else TimeDataType.TIMESTAMP_NTZ,
+        start=start,
+        resolution=resolution,
+        length=length,
+        interval_type=interval_type,
+        time_column="timestamp",
+    )
+    schema = TableSchema(
+        name=name,
+        time_config=time_config,
+        time_array_id_columns=cols,
+        value_column="value",
+    )
+    return schema
+
+
+def get_datetime_with_tz_col_schema(
+    year: int,
+    tzinfo: tzinfo | None,
+    interval_type: TimeIntervalType,
+    name: str,
+    standard_tz: bool = False,
+) -> TableSchema:
+    start = datetime(year=year, month=3, day=11, tzinfo=tzinfo)
+    end = datetime(year=year, month=3, day=12, tzinfo=tzinfo)
+    resolution = timedelta(hours=1)
+    length = (end - start) / resolution + 1
+    cols = ["id"]
+    time_zones = [
+        ZoneInfo("US/Eastern"),
+        ZoneInfo("US/Central"),
+        ZoneInfo("US/Mountain"),
+    ]
+    if standard_tz:
+        time_zones = [get_standard_time_zone(tz) for tz in time_zones]
+    time_config: DatetimeRangeBase = DatetimeRangeWithTZColumn(
+        dtype=TimeDataType.TIMESTAMP_NTZ,
+        start=start,
+        resolution=resolution,
+        length=length,
+        interval_type=interval_type,
+        time_column="timestamp",
+        time_zone_column="time_zone",
+        time_zones=time_zones,
+    )
     schema = TableSchema(
         name=name,
         time_config=time_config,
@@ -144,10 +166,13 @@ def run_localization(
     if to_time_zone is None:
         expected = df["timestamp"]
     else:
-        expected = df["timestamp"].dt.tz_localize(to_time_zone)
+        std_tz = get_standard_time_zone(to_time_zone)
+        expected = df["timestamp"].dt.tz_localize(std_tz).dt.tz_convert(to_time_zone)
+
     assert (dfo["timestamp"] == expected).prod() == 1
 
 
+# TODO: add test for error cases
 def run_localization_to_column_time_zones(
     engine: Engine,
     df: pd.DataFrame,
@@ -165,14 +190,15 @@ def run_localization_to_column_time_zones(
     dfo = get_mapped_dataframe(engine, to_schema.name, to_schema.time_config)
     dfo = dfo[df.columns].sort_values(by="index").reset_index(drop=True)
     dfo["timestamp"] = pd.to_datetime(dfo["timestamp"])  # needed for engine 2, not sure why
-
     assert df["value"].equals(dfo["value"])
     for i in range(len(dfo)):
         tzn = dfo.loc[i, "time_zone"]
         if tzn == "None":
             ts = dfo.loc[i, "timestamp"].replace(tzinfo=None)
         else:
-            ts = dfo.loc[i, "timestamp"].tz_convert(ZoneInfo(tzn)).replace(tzinfo=None)
+            # source data is in local standard time
+            ts = dfo.loc[i, "timestamp"].tz_convert(tzn).replace(tzinfo=None)
+
         assert df.loc[i, "timestamp"] == ts
 
 
@@ -210,25 +236,23 @@ def test_src_table_not_tz_naive(iter_engines: Engine) -> None:
     )  # TODO, support tz-naive to tz-aware conversion
 
 
-@pytest.mark.parametrize(
-    "to_time_zone", [None, ZoneInfo("US/Central"), ZoneInfo("America/Los_Angeles")]
-)
+@pytest.mark.parametrize("to_time_zone", [None, ZoneInfo("US/Central"), ZoneInfo("EST")])
 def test_time_localization(iter_engines: Engine, to_time_zone: tzinfo | None) -> None:
     from_schema = get_datetime_schema(2018, None, TimeIntervalType.PERIOD_BEGINNING, "base_table")
     df = generate_datetime_dataframe(from_schema)
     run_localization(iter_engines, df, from_schema, to_time_zone)
 
 
-@pytest.mark.parametrize("from_time_tz", [None, ZoneInfo("US/Mountain")])
+@pytest.mark.parametrize("from_time_tz", [None, ZoneInfo("US/Mountain"), ZoneInfo("MST")])
 def test_time_localization_to_column_time_zones(
     iter_engines: Engine, from_time_tz: tzinfo | None
 ) -> None:
-    from_schema = get_datetime_schema(
+    from_schema = get_datetime_with_tz_col_schema(
         2018,
         from_time_tz,
         TimeIntervalType.PERIOD_BEGINNING,
         "base_table",
-        has_tz_col=True,
+        standard_tz=True,
     )
     df = generate_dataframe_with_tz_col(from_schema)
     run_localization_to_column_time_zones(iter_engines, df, from_schema)

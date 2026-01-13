@@ -24,6 +24,7 @@ from chronify.time_range_generator_factory import make_time_range_generator
 from chronify.sqlalchemy.functions import read_database
 from chronify.time import TimeDataType, TimeType
 from chronify.time_series_mapper import map_time
+from chronify.time_utils import get_standard_time_zone, is_standard_time_zone
 
 
 def localize_time_zone(
@@ -204,12 +205,19 @@ class TimeZoneLocalizer(TimeZoneLocalizerBase):
 
     def generate_to_time_config(self) -> DatetimeRange:
         assert isinstance(self._from_schema.time_config, DatetimeRange)  # mypy
+        # must localize to standard time zone of the to_time_zone before converting to to_time_zone
+        # because data must be in local standard time
+        tz_start = self._from_schema.time_config.start
+        if self._to_time_zone:
+            to_std_tz = get_standard_time_zone(self._to_time_zone)
+            tz_start = tz_start.replace(tzinfo=to_std_tz).astimezone(self._to_time_zone)
+
         to_time_config: DatetimeRange = self._from_schema.time_config.model_copy(
             update={
                 "dtype": TimeDataType.TIMESTAMP_TZ
                 if self._to_time_zone
                 else TimeDataType.TIMESTAMP_NTZ,
-                "start": self._from_schema.time_config.start.replace(tzinfo=self._to_time_zone),
+                "start": tz_start,
             }
         )
 
@@ -284,6 +292,7 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
             self._convert_from_time_config_to_datetime_range_with_tz_column()
         else:
             self.time_zone_column = self._from_schema.time_config.time_zone_column
+        self._check_standard_time_zones()
         self._to_schema = self.generate_to_schema()
 
     @staticmethod
@@ -316,6 +325,25 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
         if msg != "":
             msg += f"\n{from_schema}"
             raise InvalidParameter(msg)
+
+    def _check_standard_time_zones(self) -> None:
+        """Check that all time zones in the time_zone_column are valid standard time zones."""
+        assert isinstance(self._from_schema.time_config, DatetimeRangeWithTZColumn)  # mypy
+        for tz in self._from_schema.time_config.time_zones:
+            if tz == "None":
+                msg = (
+                    "Chronify does not support None time zone in time_zone_column "
+                    "when localizing time zones by column. "
+                )
+                raise InvalidParameter(msg)
+            if not is_standard_time_zone(tz):
+                std_tz = get_standard_time_zone(tz)
+                msg = (
+                    f"Time zone {tz} in column {self.time_zone_column} is not a standard time zone. "
+                    f"Please provide standard time zones (without DST) for localization. "
+                    f"Standard time zone for {tz} is {std_tz}."
+                )
+                raise InvalidParameter(msg)
 
     def _convert_from_time_config_to_datetime_range_with_tz_column(self) -> None:
         """Convert DatetimeRange from_schema time config to DatetimeRangeWithTZColumn time config
@@ -421,7 +449,7 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
             )
             raise InvalidParameter(msg)
 
-        time_zones = [None if tz == "None" else ZoneInfo(tz) for tz in time_zones]
+        time_zones = [ZoneInfo(tz) for tz in time_zones]
         return time_zones
 
     def _create_mapping(self) -> tuple[pd.DataFrame, MappingTableSchema]:
