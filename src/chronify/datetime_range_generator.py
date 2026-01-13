@@ -126,13 +126,17 @@ class DatetimeRangeGeneratorExternalTimeZone(DatetimeRangeGeneratorBase):
         """
         match (self._model.start_time_is_tz_naive(), self._model.dtype):
             case (True, TimeDataType.TIMESTAMP_NTZ):
-                # aligned_in_local_time of the time zone, all time zones have the same tz-naive timestamps
+                # aligned_in_local_standard_time of the time zone,
+                # all time zones must have the same tz-naive timestamps
+                # timestamps must represent local standard time zone, not local prevailing time zone with DST
                 start = self._model.start
             case (True, TimeDataType.TIMESTAMP_TZ):
-                # aligned_in_local_time of the time zone, all time zones have different tz-aware timestamps that are aligned when adjusted by time zone
+                # aligned_in_local_standard_time of the time zone,
+                # all time zones have different tz-aware timestamps that are aligned when adjusted to local standard time zone
                 start = self._model.start.replace(tzinfo=time_zone)
             case (False, TimeDataType.TIMESTAMP_NTZ):
-                # aligned_in_absolute_time, all time zones have different tz-naive timestamps that are aligned when localized to the time zone
+                # aligned_in_absolute_time,
+                # all time zones have different tz-naive timestamps that are aligned when localized to the time zone
                 if time_zone:
                     start = self._model.start.astimezone(time_zone).replace(tzinfo=None)
                 else:

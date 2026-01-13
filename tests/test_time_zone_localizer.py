@@ -14,7 +14,7 @@ from chronify.time_zone_localizer import (
     localize_time_zone,
     localize_time_zone_by_column,
 )
-from chronify.time_configs import DatetimeRange, DatetimeRangeWithTZColumn
+from chronify.time_configs import DatetimeRange, DatetimeRangeWithTZColumn, DatetimeRangeBase
 from chronify.models import TableSchema
 from chronify.time import TimeDataType, TimeIntervalType
 from chronify.datetime_range_generator import (
@@ -72,9 +72,8 @@ def get_datetime_schema(
     resolution = timedelta(hours=1)
     length = (end - start) / resolution + 1
     cols = ["id"]
-    # cols += ["time_zone"] if has_tz_col else []
     if has_tz_col:
-        time_config = DatetimeRangeWithTZColumn(
+        time_config: DatetimeRangeBase = DatetimeRangeWithTZColumn(
             dtype=TimeDataType.TIMESTAMP_NTZ,
             start=start,
             resolution=resolution,
@@ -86,7 +85,6 @@ def get_datetime_schema(
                 ZoneInfo("US/Eastern"),
                 ZoneInfo("US/Central"),
                 ZoneInfo("US/Mountain"),
-                # None,
             ],
         )
     else:
@@ -121,7 +119,7 @@ def ingest_data(
 def get_mapped_dataframe(
     engine: Engine,
     table_name: str,
-    time_config: DatetimeRange,
+    time_config: DatetimeRangeBase,
 ) -> pd.DataFrame:
     with engine.connect() as conn:
         query = f"select * from {table_name}"

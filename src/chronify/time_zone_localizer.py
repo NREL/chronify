@@ -255,7 +255,7 @@ class TimeZoneLocalizerByColumn(TimeZoneLocalizerBase):
 
     I/O Time config scenarios:
     --------------------------------
-    To localize tz-naive timestamps aligned_in_local_time to multiple time zones specified in a column:
+    To localize tz-naive timestamps aligned_in_local_standard_time to multiple time zones specified in a column:
      - Input time config: DatetimeRangeWithTZColumn with tz-naive start time, Timestamp_NTZ dtype
      - Output time config: DatetimeRangeWithTZColumn with tz-naive start time, Timestamp_TZ dtype
 

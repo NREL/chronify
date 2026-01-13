@@ -304,7 +304,7 @@ class TimeZoneConverterByColumn(TimeZoneConverterBase):
      - Output time config: DatetimeRangeWithTZColumn with tz-aware start time, Timestamp_NTZ dtype
 
     To convert tz-aware timestamps aligned_in_absolute_time to multiple time zones specified in a column
-    and aligned_in_local_time:
+    and aligned_in_local_standard_time:
      - wrap_time_allowed = True
      - Input time config: DatetimeRange with tz-aware start time, Timestamp_TZ dtype
      - Output time config: DatetimeRangeWithTZColumn with tz-naive start time, Timestamp_NTZ dtype
