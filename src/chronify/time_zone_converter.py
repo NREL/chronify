@@ -24,6 +24,7 @@ from chronify.time import TimeDataType, TimeType
 from chronify.time_utils import wrapped_time_timestamps, get_tzname
 
 
+# TODO - retain original timestamp column
 def convert_time_zone(
     engine: Engine,
     metadata: MetaData,
