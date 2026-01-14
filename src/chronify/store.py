@@ -51,6 +51,7 @@ from chronify.time_configs import DatetimeRange, IndexTimeRangeBase, TimeBasedDa
 from chronify.time_series_checker import check_timestamps
 from chronify.time_series_mapper import map_time
 from chronify.time_zone_converter import TimeZoneConverter, TimeZoneConverterByColumn
+from chronify.time_zone_localizer import TimeZoneLocalizer, TimeZoneLocalizerByColumn
 from chronify.utils.path_utils import check_overwrite, to_path
 from chronify.utils.sqlalchemy_view import create_view
 
@@ -1114,6 +1115,179 @@ class Store:
             raise TableAlreadyExists(msg)
 
         tzc.convert_time_zone(
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
+        )
+
+        with self._engine.begin() as conn:
+            self._schema_mgr.add_schema(conn, dst_schema)
+
+        return dst_schema
+
+    def localize_time_zone(
+        self,
+        src_name: str,
+        time_zone: tzinfo | None,
+        scratch_dir: Optional[Path] = None,
+        output_file: Optional[Path] = None,
+        check_mapped_timestamps: bool = False,
+    ) -> TableSchema:
+        """
+        Localize the time zone of the existing table represented by src_name to a specified time zone
+
+        Parameters
+        ----------
+        src_name
+            Refers to the table name of the source data.
+        time_zone
+            Standard time zone to localize to. If None, keep as tz-naive.
+        scratch_dir
+            Directory to use for temporary writes. Default to the system's tmp filesystem.
+        output_file
+            If set, write the mapped table to this Parquet file.
+        check_mapped_timestamps
+            Perform time checks on the result of the mapping operation. This can be slow and
+            is not required.
+
+        Raises
+        ------
+        TableAlreadyExists
+            Raised if the dst_schema name already exists.
+
+        Examples
+        --------
+        >>> store = Store()
+        >>> start = datetime(year=2018, month=1, day=1)  # tz-naive
+        >>> freq = timedelta(hours=1)
+        >>> hours_per_year = 8760
+        >>> num_time_arrays = 1
+        >>> df = pd.DataFrame(
+        ...     {
+        ...         "id": np.concatenate(
+        ...             [np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]
+        ...         ),
+        ...         "timestamp": np.tile(
+        ...             pd.date_range(start, periods=hours_per_year, freq="h"), num_time_arrays
+        ...         ),
+        ...         "value": np.random.random(hours_per_year * num_time_arrays),
+        ...     }
+        ... )
+        >>> schema = TableSchema(
+        ...     name="some_data",
+        ...     time_config=DatetimeRange(
+        ...         time_column="timestamp",
+        ...         start=start,
+        ...         length=hours_per_year,
+        ...         resolution=freq,
+        ...     ),
+        ...     time_array_id_columns=["id"],
+        ...     value_column="value",
+        ... )
+        >>> store.ingest_table(df, schema)
+        >>> to_time_zone = ZoneInfo("EST")
+        >>> dst_schema = store.localize_time_zone(
+        ...     schema.name, to_time_zone, check_mapped_timestamps=True
+        ... )
+        """
+
+        src_schema = self._schema_mgr.get_schema(src_name)
+        tzl = TimeZoneLocalizer(self._engine, self._metadata, src_schema, time_zone)
+
+        dst_schema = tzl.generate_to_schema()
+        if self.has_table(dst_schema.name):
+            msg = dst_schema.name
+            raise TableAlreadyExists(msg)
+
+        tzl.localize_time_zone(
+            scratch_dir=scratch_dir,
+            output_file=output_file,
+            check_mapped_timestamps=check_mapped_timestamps,
+        )
+
+        with self._engine.begin() as conn:
+            self._schema_mgr.add_schema(conn, dst_schema)
+
+        return dst_schema
+
+    def localize_time_zone_by_column(
+        self,
+        src_name: str,
+        time_zone_column: str,
+        scratch_dir: Optional[Path] = None,
+        output_file: Optional[Path] = None,
+        check_mapped_timestamps: bool = False,
+    ) -> TableSchema:
+        """
+        Localize the time zone of the existing table represented by src_name to time zones defined by a column
+
+        Parameters
+        ----------
+        src_name
+            Refers to the table name of the source data.
+        time_zone_column
+            Name of the time zone column for localization.
+        scratch_dir
+            Directory to use for temporary writes. Default to the system's tmp filesystem.
+        output_file
+            If set, write the mapped table to this Parquet file.
+        check_mapped_timestamps
+            Perform time checks on the result of the mapping operation. This can be slow and
+            is not required.
+
+        Raises
+        ------
+        TableAlreadyExists
+            Raised if the dst_schema name already exists.
+
+        Examples
+        --------
+        >>> store = Store()
+        >>> start = datetime(year=2018, month=1, day=1)  # tz-naive
+        >>> freq = timedelta(hours=1)
+        >>> hours_per_year = 8760
+        >>> num_time_arrays = 3
+        >>> df = pd.DataFrame(
+        ...     {
+        ...         "id": np.concatenate(
+        ...             [np.repeat(i, hours_per_year) for i in range(1, 1 + num_time_arrays)]
+        ...         ),
+        ...         "timestamp": np.tile(
+        ...             pd.date_range(start, periods=hours_per_year, freq="h"), num_time_arrays
+        ...         ),
+        ...         "time_zone": np.repeat(["EST", "CST", "MST"], hours_per_year),
+        ...         "value": np.random.random(hours_per_year * num_time_arrays),
+        ...     }
+        ... )
+        >>> schema = TableSchema(
+        ...     name="some_data",
+        ...     time_config=DatetimeRange(
+        ...         time_column="timestamp",
+        ...         start=start,
+        ...         length=hours_per_year,
+        ...         resolution=freq,
+        ...     ),
+        ...     time_array_id_columns=["id"],
+        ...     value_column="value",
+        ... )
+        >>> store.ingest_table(df, schema)
+        >>> time_zone_column = "time_zone"
+        >>> dst_schema = store.localize_time_zone_by_column(
+        ...     schema.name,
+        ...     time_zone_column,
+        ...     check_mapped_timestamps=True,
+        ... )
+        """
+
+        src_schema = self._schema_mgr.get_schema(src_name)
+        tzl = TimeZoneLocalizerByColumn(self._engine, self._metadata, src_schema, time_zone_column)
+
+        dst_schema = tzl.generate_to_schema()
+        if self.has_table(dst_schema.name):
+            msg = dst_schema.name
+            raise TableAlreadyExists(msg)
+
+        tzl.localize_time_zone(
             scratch_dir=scratch_dir,
             output_file=output_file,
             check_mapped_timestamps=check_mapped_timestamps,
