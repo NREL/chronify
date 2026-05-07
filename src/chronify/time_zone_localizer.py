@@ -34,7 +34,32 @@ def localize_time_zone(
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
 ) -> TableSchema:
-    """Localize TIMESTAMP_NTZ time column in a table to a specified standard time zone."""
+    """Localize TIMESTAMP_NTZ time column in a table to a specified standard time zone.
+
+    Input data must be in a standard time zone (without DST) because it's ambiguous to localize
+    tz-naive timestamps with skips and duplicates to a prevailing time zone.
+
+    Updates table to TIMESTAMP_TZ time column and returns a new time config.
+
+    Parameters
+    ----------
+    backend : IbisBackend
+        Backend wrapping the database connection that holds the source table.
+    src_schema : TableSchema
+        Defines the source table in the database.
+    to_time_zone : tzinfo or None
+        Standard time zone to convert to. If None, convert to tz-naive.
+    output_file : pathlib.Path, optional
+        If set, write the mapped table to this Parquet file.
+    check_mapped_timestamps : bool, optional
+        Perform time checks on the result of the mapping operation. This can be slow and
+        is not required.
+
+    Returns
+    -------
+    TableSchema
+        Schema of output table with converted timestamps.
+    """
     tzl = TimeZoneLocalizer(backend, src_schema, to_time_zone)
     tzl.localize_time_zone(
         output_file=output_file,
@@ -50,7 +75,31 @@ def localize_time_zone_by_column(
     output_file: Optional[Path] = None,
     check_mapped_timestamps: bool = False,
 ) -> TableSchema:
-    """Localize TIMESTAMP_NTZ time column in a table to multiple time zones specified by a column."""
+    """Localize TIMESTAMP_NTZ time column in a table to multiple time zones specified by a column.
+
+    Updates table to TIMESTAMP_TZ time column and returns a new time config.
+
+    Parameters
+    ----------
+    backend : IbisBackend
+        Backend wrapping the database connection that holds the source table.
+    src_schema : TableSchema
+        Defines the source table in the database.
+    time_zone_column : Optional[str]
+        Column name in the source table that contains the time zone information.
+         - Required if src_schema.time_config is of type DatetimeRange.
+         - Ignored if src_schema.time_config is of type DatetimeRangeWithTZColumn.
+    output_file : pathlib.Path, optional
+        If set, write the mapped table to this Parquet file.
+    check_mapped_timestamps : bool, optional
+        Perform time checks on the result of the mapping operation. This can be slow and
+        is not required.
+
+    Returns
+    -------
+    dst_schema : TableSchema
+        schema of output table with converted timestamps
+    """
     if isinstance(src_schema.time_config, DatetimeRange) and time_zone_column is None:
         msg = (
             "time_zone_column must be provided when localizing time zones "

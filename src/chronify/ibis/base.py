@@ -25,7 +25,6 @@ from chronify.time_configs import (
 )
 
 _DATETIME_RANGES = (DatetimeRange, DatetimeRangeWithTZColumn)
-DatetimeRanges = DatetimeRange | DatetimeRangeWithTZColumn
 
 
 def _check_one_config_per_datetime_column(configs: Iterable[TimeBaseModel]) -> None:

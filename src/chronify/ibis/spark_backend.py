@@ -98,7 +98,6 @@ class SparkBackend(IbisBackend):
             return self._connection.create_table(name, obj=obj, schema=schema, overwrite=overwrite)
 
     def delete_rows(self, name: str, values: dict[str, Any]) -> None:
-        # Spark 3.4+ supports parameterized SQL via the ``args`` keyword.
         quoted_name = _quote_identifier(name)
         param_names = [f"p{i}" for i in range(len(values))]
         where = " AND ".join(f"{_quote_identifier(c)} = :{p}" for c, p in zip(values, param_names))

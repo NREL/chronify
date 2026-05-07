@@ -1,5 +1,6 @@
 """Tests for AnnualTimeRangeGenerator."""
 
+import pandas as pd
 import pytest
 
 from chronify.annual_time_range_generator import AnnualTimeRangeGenerator
@@ -30,8 +31,6 @@ def test_list_time_columns():
 
 
 def test_list_distinct_timestamps_from_dataframe_not_implemented():
-    import pandas as pd
-
     gen = AnnualTimeRangeGenerator(_make_config())
     with pytest.raises(NotImplementedError):
         gen.list_distinct_timestamps_from_dataframe(pd.DataFrame())
