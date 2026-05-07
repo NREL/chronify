@@ -34,11 +34,12 @@ jobs:
       run: |
         pytest -v --cov=chronify --cov-report=xml:coverage.xml
     - name: codecov
-      uses: codecov/codecov-action@v4.2.0
+      uses: codecov/codecov-action@v5
       if: ${{ matrix.os == env.DEFAULT_OS && matrix.python-version == env.DEFAULT_PYTHON  }}
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         name: chronify-tests
+        files: coverage.xml
         fail_ci_if_error: false
         verbose: true
   mypy:
