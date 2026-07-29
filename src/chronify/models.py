@@ -215,7 +215,7 @@ def get_duckdb_type_from_sqlalchemy(sqlalchemy_type: Any) -> DuckDBPyType:
         msg = f"There is no duckdb mapping for {sqlalchemy_type=}"
         raise InvalidParameter(msg)
 
-    return duckdb_type  # type: ignore
+    return duckdb_type
 
 
 def get_duckdb_types_from_pandas(df: pd.DataFrame) -> list[DuckDBPyType]:
