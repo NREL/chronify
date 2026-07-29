@@ -27,7 +27,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "duckdb >= 1.1.0",
+    "duckdb >= 1.5",
     "duckdb_engine",
     "loguru",
     "pandas >= 2.2, < 3",
