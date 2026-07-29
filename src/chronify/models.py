@@ -1,14 +1,28 @@
 import re
 from typing import Any, Optional
 
-import duckdb.typing
+import duckdb
 import pandas as pd
-from duckdb.typing import DuckDBPyType
 from pydantic import Field, field_validator, model_validator
 from sqlalchemy import BigInteger, Boolean, DateTime, Double, Float, Integer, SmallInteger, String
 from typing_extensions import Annotated
 
 from chronify.base_models import ChronifyBaseModel
+from chronify.duckdb.types import (
+    BIGINT,
+    BOOLEAN,
+    DOUBLE,
+    FLOAT,
+    INTEGER,
+    TINYINT,
+    VARCHAR,
+    TIMESTAMP,
+    TIMESTAMP_MS,
+    TIMESTAMP_NS,
+    TIMESTAMP_S,
+    TIMESTAMP_TZ,
+    DuckDBPyType,
+)
 from chronify.exceptions import InvalidParameter, InvalidValue
 from chronify.time_configs import TimeConfig
 
@@ -156,28 +170,22 @@ _COLUMN_TYPES = {
 _DB_TYPES = {x for x in _COLUMN_TYPES.values()}
 
 _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES = {
-    duckdb.typing.BIGINT.id: BigInteger,  # type: ignore
-    duckdb.typing.BOOLEAN.id: Boolean,  # type: ignore
-    duckdb.typing.DOUBLE.id: Double,  # type: ignore
-    duckdb.typing.FLOAT.id: Float,  # type: ignore
-    duckdb.typing.INTEGER.id: Integer,  # type: ignore
-    duckdb.typing.TINYINT.id: SmallInteger,  # type: ignore
-    duckdb.typing.VARCHAR.id: String,  # type: ignore
-    # Note: timestamp requires special handling because of timezone in sqlalchemy.
+    BIGINT.id: BigInteger,
+    BOOLEAN.id: Boolean,
+    DOUBLE.id: Double,
+    FLOAT.id: Float,
+    INTEGER.id: Integer,
+    TINYINT.id: SmallInteger,
+    VARCHAR.id: String,
 }
 
 
 def get_sqlalchemy_type_from_duckdb(duckdb_type: DuckDBPyType) -> Any:
     """Return the sqlalchemy type for a duckdb type."""
     match duckdb_type:
-        case duckdb.typing.TIMESTAMP_TZ:  # type: ignore
+        case _ if duckdb_type == TIMESTAMP_TZ:
             sqlalchemy_type = DateTime(timezone=True)
-        case (
-            duckdb.typing.TIMESTAMP  # type: ignore
-            | duckdb.typing.TIMESTAMP_MS  # type: ignore
-            | duckdb.typing.TIMESTAMP_NS  # type: ignore
-            | duckdb.typing.TIMESTAMP_S  # type: ignore
-        ):
+        case _ if duckdb_type in (TIMESTAMP, TIMESTAMP_MS, TIMESTAMP_NS, TIMESTAMP_S):
             sqlalchemy_type = DateTime(timezone=False)
         case _:
             cls = _DUCKDB_TYPES_TO_SQLALCHEMY_TYPES.get(duckdb_type.id)
@@ -192,21 +200,17 @@ def get_sqlalchemy_type_from_duckdb(duckdb_type: DuckDBPyType) -> Any:
 def get_duckdb_type_from_sqlalchemy(sqlalchemy_type: Any) -> DuckDBPyType:
     """Return the duckdb type for a sqlalchemy type."""
     if isinstance(sqlalchemy_type, DateTime):
-        duckdb_type = (
-            duckdb.typing.TIMESTAMP_TZ  # type: ignore
-            if sqlalchemy_type.timezone
-            else duckdb.typing.TIMESTAMP  # type: ignore
-        )
+        duckdb_type = TIMESTAMP_TZ if sqlalchemy_type.timezone else TIMESTAMP
     elif isinstance(sqlalchemy_type, BigInteger):
-        duckdb_type = duckdb.typing.BIGINT  # type: ignore
+        duckdb_type = BIGINT
     elif isinstance(sqlalchemy_type, Boolean):
-        duckdb_type = duckdb.typing.BOOLEAN  # type: ignore
+        duckdb_type = BOOLEAN
     elif isinstance(sqlalchemy_type, Double):
-        duckdb_type = duckdb.typing.DOUBLE  # type: ignore
+        duckdb_type = DOUBLE
     elif isinstance(sqlalchemy_type, Integer):
-        duckdb_type = duckdb.typing.INTEGER  # type: ignore
+        duckdb_type = INTEGER
     elif isinstance(sqlalchemy_type, String):
-        duckdb_type = duckdb.typing.VARCHAR  # type: ignore
+        duckdb_type = VARCHAR
     else:
         msg = f"There is no duckdb mapping for {sqlalchemy_type=}"
         raise InvalidParameter(msg)

@@ -4,6 +4,7 @@ from typing import Any
 import duckdb
 from duckdb import DuckDBPyRelation
 
+from chronify.duckdb.types import TIMESTAMP
 from chronify.models import CsvTableSchema, get_duckdb_type_from_sqlalchemy
 from chronify.time_configs import DatetimeRange
 
@@ -24,7 +25,7 @@ def read_csv(path: Path | str, schema: CsvTableSchema, **kwargs: Any) -> DuckDBP
         expr = column
         if isinstance(time_config, DatetimeRange) and column == time_config.time_column:
             time_type = rel.types[i]
-            if time_type == duckdb.typing.TIMESTAMP and not time_config.start_time_is_tz_naive():  # type: ignore
+            if time_type == TIMESTAMP and not time_config.start_time_is_tz_naive():
                 expr = f"timezone('{time_config.start.tzinfo.key}', {column}) AS {column}"  # type: ignore
         exprs.append(expr)
 
