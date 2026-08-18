@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import ibis
+import ibis.expr.operations as ops
 import ibis.expr.types as ir
 import pandas as pd
 from loguru import logger
@@ -78,11 +79,19 @@ class DuckDBBackend(IbisBackend):
 
     def execute(self, expr: ir.Expr) -> pd.DataFrame:
         # Bypass Ibis's generic pandas materialization and use DuckDB's native
-        # cursor.fetch_df(), which is zero-copy from Arrow.
-        if isinstance(expr, ibis.Table):
+        # cursor.fetch_df(), which is zero-copy from Arrow. Expressions that
+        # contain in-memory tables must go through ibis, which registers the
+        # memtables on the connection before executing.
+        if isinstance(expr, ibis.Table) and not expr.op().find(ops.InMemoryTable):
             sql = self._connection.compile(expr)
             return cast(pd.DataFrame, self._connection.con.execute(sql).fetch_df())
         return cast(pd.DataFrame, self._connection.execute(expr))
+
+    def execute_sql_to_df(self, query: str, params: Any = None) -> pd.DataFrame:
+        logger.trace("execute_sql_to_df: {}", query)
+        con = self._connection.con
+        cursor = con.execute(query, params) if params is not None else con.execute(query)
+        return cast(pd.DataFrame, cursor.fetch_df())
 
     def create_view_from_parquet(self, path: str, name: str) -> tuple[ibis.Table, ObjectType]:
         parquet_path = Path(path)

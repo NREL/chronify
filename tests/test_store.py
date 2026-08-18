@@ -160,8 +160,6 @@ def test_ingest_csv(iter_stores_by_engine: Store, tmp_path, generators_schema, u
 
 
 def test_ingest_csvs_with_rollback(tmp_path, multiple_tables):
-    # The new ibis-based backend uses pseudo-transactions that track created objects.
-    # Real SQL rollbacks are not supported.
     store = Store(backend_name="duckdb")
     tables, dst_schema = multiple_tables
     src_file1 = tmp_path / "file1.csv"
@@ -179,7 +177,20 @@ def test_ingest_csvs_with_rollback(tmp_path, multiple_tables):
         time_array_id_columns=dst_schema.time_array_id_columns,
     )
 
+    # A failure partway through the batch (duplicate rows from ingesting the
+    # same file twice) must roll back everything, including the table creation.
+    with pytest.raises(InvalidTable):
+        store.ingest_from_csvs((src_file1, src_file1), src_schema, dst_schema)
+    assert not store.has_table(dst_schema.name)
+
     store.ingest_from_csvs((src_file1, src_file2), src_schema, dst_schema)
+    df = store.read_table(dst_schema.name).execute()
+    assert len(df) == len(tables[0]) + len(tables[1])
+    assert len(df.id.unique()) == 2
+
+    # A failed append must leave the previously committed rows intact.
+    with pytest.raises(InvalidTable):
+        store.ingest_from_csvs((src_file1,), src_schema, dst_schema)
     df = store.read_table(dst_schema.name).execute()
     assert len(df) == len(tables[0]) + len(tables[1])
     assert len(df.id.unique()) == 2

@@ -407,19 +407,60 @@ def test_spark_dispose(tmp_path: Path) -> None:
     backend.dispose()
 
 
-def test_spark_backend_accepts_non_utc_session() -> None:
-    """Non-UTC session tz is allowed; UTC is pinned only for read_query."""
+def test_spark_backend_non_utc_session_write_read_symmetry(tmp_path: Path) -> None:
+    """Writes and internal reads must agree on instants under a non-UTC session.
+
+    The backend preserves the caller's session timezone (parent packages like
+    dsgrid manage it deliberately) but pins UTC around every operation it
+    performs itself: naive timestamps ingested under a non-UTC session must be
+    stored as UTC wall-clock instants, round-trip unshifted through the pinned
+    read path (read_query), and match naive delete predicates.
+    """
     _require_java_home()
     pyspark = pytest.importorskip("pyspark.sql")
-    session = pyspark.SparkSession.builder.master("local").getOrCreate()
+    session = (
+        pyspark.SparkSession.builder.master("local")
+        .config("spark.sql.parquet.outputTimestampType", "TIMESTAMP_MICROS")
+        .config("spark.sql.warehouse.dir", str(tmp_path / "spark-warehouse"))
+        .getOrCreate()
+    )
     prev_tz = session.conf.get("spark.sql.session.timeZone", None)
     session.conf.set("spark.sql.session.timeZone", "America/Denver")
     try:
         backend = SparkBackend(session=session, owns_session=False)
+        # The caller's session timezone is preserved, not clobbered.
         assert session.conf.get("spark.sql.session.timeZone") == "America/Denver"
-        with backend._pinned_utc_session():
-            assert session.conf.get("spark.sql.session.timeZone") == "UTC"
-        assert session.conf.get("spark.sql.session.timeZone") == "America/Denver"
+        store = Store(backend=backend)
+        schema = TableSchema(
+            name="spark_non_utc_session",
+            value_column="value",
+            time_config=DatetimeRange(
+                time_column="timestamp",
+                start=datetime(2020, 1, 1),
+                length=3,
+                resolution=timedelta(hours=1),
+                interval_type=TimeIntervalType.PERIOD_BEGINNING,
+            ),
+            time_array_id_columns=["id"],
+        )
+        df = pd.DataFrame(
+            {
+                "id": [1, 1, 1],
+                "timestamp": pd.to_datetime(
+                    ["2020-01-01 00:00:00", "2020-01-01 01:00:00", "2020-01-01 02:00:00"]
+                ),
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
+        store.ingest_table(df, schema, skip_time_checks=True)
+        out = backend.read_query(backend.table(schema.name), schema.time_config).sort_values(
+            "timestamp"
+        )
+        assert out["timestamp"].iloc[0] == pd.Timestamp("2020-01-01 00:00:00")
+
+        backend.delete_rows(schema.name, {"timestamp": pd.Timestamp("2020-01-01 01:00:00")})
+        assert len(backend.execute(backend.table(schema.name))) == 2
+        store.drop_table(schema.name)
         backend.dispose()
     finally:
         if prev_tz is None:

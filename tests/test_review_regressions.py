@@ -1,0 +1,238 @@
+"""Regression tests for issues found in the SQLAlchemy-to-ibis migration review."""
+
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import ibis
+import pandas as pd
+import pytest
+
+from chronify.exceptions import InvalidParameter, InvalidTable, TableAlreadyExists
+from chronify.ibis import make_backend
+from chronify.ibis.sqlite_backend import SQLiteBackend
+from chronify.models import TableSchema
+from chronify.store import Store
+from chronify.time import TimeIntervalType
+from chronify.time_configs import DatetimeRange
+from chronify.time_series_mapper_base import _apply_mapping
+
+
+def _make_tz_schema(name: str, length: int = 3) -> TableSchema:
+    return TableSchema(
+        name=name,
+        value_column="value",
+        time_config=DatetimeRange(
+            time_column="timestamp",
+            start=datetime(2020, 1, 1, tzinfo=ZoneInfo("UTC")),
+            length=length,
+            resolution=timedelta(hours=1),
+            interval_type=TimeIntervalType.PERIOD_BEGINNING,
+        ),
+        time_array_id_columns=["id"],
+    )
+
+
+def _make_tz_df(num_ids: int = 1, length: int = 3) -> pd.DataFrame:
+    timestamps = pd.date_range("2020-01-01", periods=length, freq="1h", tz="UTC")
+    return pd.DataFrame(
+        {
+            "id": [i for i in range(1, num_ids + 1) for _ in range(length)],
+            "timestamp": list(timestamps) * num_ids,
+            "value": [float(x) for x in range(num_ids * length)],
+        }
+    )
+
+
+def test_sqlite_timestamp_storage_format_is_consistent():
+    """Creation-path and append-path rows must store timestamps in the same
+    canonical format (naive UTC, space-separated, microseconds) so SQL string
+    comparisons (joins, deletes) work across all rows."""
+    backend = make_backend("sqlite")
+    store = Store(backend=backend)
+    schema = _make_tz_schema("t1")
+    store.ingest_table(_make_tz_df(num_ids=1), schema, skip_time_checks=True)
+    # Append through the same schema.
+    df2 = _make_tz_df(num_ids=1)
+    df2["id"] = 2
+    store.ingest_table(df2, schema, skip_time_checks=True)
+
+    raw = [
+        r[0]
+        for r in backend.connection.con.execute("SELECT DISTINCT timestamp FROM t1").fetchall()
+    ]
+    assert raw == [
+        "2020-01-01 00:00:00.000000",
+        "2020-01-01 01:00:00.000000",
+        "2020-01-01 02:00:00.000000",
+    ]
+    out = store.read_table("t1").execute()
+    assert str(out["timestamp"].dtype) == "datetime64[ns, UTC]"
+
+
+def test_sqlite_delete_rows_with_timestamp_predicate():
+    """delete_rows must adapt datetime values to the stored string format."""
+    backend = make_backend("sqlite")
+    store = Store(backend=backend)
+    schema = _make_tz_schema("t1")
+    store.ingest_table(_make_tz_df(num_ids=1), schema, skip_time_checks=True)
+
+    backend.delete_rows("t1", {"timestamp": pd.Timestamp("2020-01-01 01:00:00+00:00")})
+    remaining = backend.connection.con.execute("SELECT COUNT(*) FROM t1").fetchone()[0]
+    assert remaining == 2
+
+    # Plain datetime values must be adapted to the stored format too.
+    backend.delete_rows("t1", {"timestamp": datetime(2020, 1, 1, 2, tzinfo=ZoneInfo("UTC"))})
+    remaining = backend.connection.con.execute("SELECT COUNT(*) FROM t1").fetchone()[0]
+    assert remaining == 1
+
+
+def test_sqlite_reads_legacy_database(tmp_path: Path):
+    """Databases written by the pre-ibis SQLAlchemy implementation store
+    timestamps as naive space-separated strings in DATETIME columns. Reads
+    must return tz-aware UTC values and new rows must join with old rows."""
+    db_file = tmp_path / "legacy.db"
+    con = sqlite3.connect(db_file)
+    con.execute('CREATE TABLE t_old ("id" INTEGER, "timestamp" DATETIME, "value" REAL)')
+    con.executemany(
+        "INSERT INTO t_old VALUES (?, ?, ?)",
+        [
+            (1, "2020-01-01 00:00:00.000000", 1.0),
+            (1, "2020-01-01 01:00:00.000000", 2.0),
+            (1, "2020-01-01 02:00:00.000000", 3.0),
+        ],
+    )
+    con.commit()
+    con.close()
+
+    backend = SQLiteBackend(connection=ibis.sqlite.connect(db_file))
+    config = _make_tz_schema("t_old").time_config
+    df = backend.execute(backend.apply_schema_types(backend.table("t_old"), config))
+    assert str(df["timestamp"].dtype) == "datetime64[ns, UTC]"
+    assert df["timestamp"].iloc[0] == pd.Timestamp("2020-01-01 00:00:00+00:00")
+
+    # Rows written by the new implementation must match old rows in raw SQL.
+    backend.insert(
+        "t_old",
+        pd.DataFrame(
+            {
+                "id": [2],
+                "timestamp": pd.to_datetime(["2020-01-01 00:00:00+00:00"], utc=True),
+                "value": [9.0],
+            }
+        ),
+    )
+    matches = backend.connection.con.execute(
+        "SELECT COUNT(*) FROM t_old a JOIN t_old b ON a.timestamp = b.timestamp "
+        "WHERE a.id = 1 AND b.id = 2"
+    ).fetchone()[0]
+    assert matches == 1
+
+
+def test_create_view_from_parquet_failure_allows_retry(tmp_path: Path):
+    """A failed create_view_from_parquet must not leave an orphaned schema
+    registration that blocks a retry with corrected data."""
+    store = Store(backend_name="duckdb")
+    schema = _make_tz_schema("pq_table")
+
+    bad_df = _make_tz_df(num_ids=1)
+    bad_df = bad_df.iloc[:-1]  # one timestamp short of the configured length
+    bad_file = tmp_path / "bad.parquet"
+    bad_df.to_parquet(bad_file)
+    with pytest.raises(InvalidTable):
+        store.create_view_from_parquet(bad_file, schema)
+    assert not store.has_table(schema.name)
+
+    good_file = tmp_path / "good.parquet"
+    _make_tz_df(num_ids=1).to_parquet(good_file)
+    store.create_view_from_parquet(good_file, schema)
+    assert store.has_table(schema.name)
+    assert len(store.read_table(schema.name).execute()) == 3
+
+
+def test_apply_mapping_casts_string_keys_numerically(iter_backends):
+    """A string data column joined against a numeric mapping key must coerce
+    numerically ('01' matches 1) instead of comparing unequal strings and
+    silently dropping rows."""
+    backend = iter_backends
+    from_schema = _make_tz_schema("src_str_key")
+    to_schema = _make_tz_schema("dst_str_key")
+    df = _make_tz_df(num_ids=1)
+    df["month"] = "01"
+    backend.create_table(from_schema.name, df)
+    backend.create_table("map_str_key", pd.DataFrame({"from_month": [1]}))
+
+    _apply_mapping("map_str_key", from_schema, to_schema, backend)
+    result = backend.execute(backend.table(to_schema.name))
+    assert len(result) == 3
+
+
+def test_apply_mapping_refuses_to_overwrite_existing_table(iter_backends):
+    """The mapping result must never silently destroy an existing table."""
+    backend = iter_backends
+    from_schema = _make_tz_schema("src_overwrite")
+    to_schema = _make_tz_schema("dst_overwrite")
+    backend.create_table(from_schema.name, _make_tz_df(num_ids=1))
+    backend.create_table(to_schema.name, pd.DataFrame({"precious": [1, 2, 3]}))
+    backend.create_table("map_overwrite", pd.DataFrame({"from_id": [1]}))
+
+    with pytest.raises(TableAlreadyExists):
+        _apply_mapping("map_overwrite", from_schema, to_schema, backend)
+    preserved = backend.execute(backend.table(to_schema.name))
+    assert list(preserved.columns) == ["precious"]
+    assert len(preserved) == 3
+
+
+def test_read_raw_query_supports_non_select_statements(iter_stores_by_engine):
+    """read_raw_query is a raw escape hatch: backend-specific statements that
+    are not SELECT-shaped must work."""
+    store = iter_stores_by_engine
+    schema = _make_tz_schema("raw_table")
+    store.ingest_table(_make_tz_df(num_ids=1), schema, skip_time_checks=True)
+
+    if store.backend.name == "duckdb":
+        df = store.read_raw_query("SHOW TABLES")
+        assert "raw_table" in set(df["name"])
+        df = store.read_raw_query("PRAGMA table_info('raw_table')")
+    else:
+        df = store.read_raw_query("PRAGMA table_info('raw_table')")
+    assert "timestamp" in set(df["name"])
+
+
+def test_read_raw_query_supports_params(iter_stores_by_engine):
+    store = iter_stores_by_engine
+    schema = _make_tz_schema("raw_params")
+    store.ingest_table(_make_tz_df(num_ids=2), schema, skip_time_checks=True)
+
+    df = store.read_raw_query("SELECT * FROM raw_params WHERE id = ?", params=(2,))
+    assert len(df) == 3
+    assert set(df["id"]) == {2}
+
+
+def test_read_raw_query_sqlite_returns_raw_strings():
+    """Unlike read_query, read_raw_query performs no timestamp conversion."""
+    store = Store(backend_name="sqlite")
+    schema = _make_tz_schema("raw_strings")
+    store.ingest_table(_make_tz_df(num_ids=1), schema, skip_time_checks=True)
+
+    df = store.read_raw_query("SELECT timestamp FROM raw_strings ORDER BY timestamp")
+    assert df["timestamp"].iloc[0] == "2020-01-01 00:00:00.000000"
+
+
+def test_duckdb_execute_handles_memtable_expressions(create_duckdb_backend):
+    """execute() must not bypass ibis's memtable registration."""
+    backend = create_duckdb_backend
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    result = backend.execute(ibis.memtable(df))
+    assert list(result["a"]) == [1, 2, 3]
+
+
+def test_base_execute_sql_to_df_rejects_params_when_unsupported(create_duckdb_backend):
+    """DuckDB supports params; the generic ibis fallback raises instead of
+    silently ignoring them."""
+    from chronify.ibis.base import IbisBackend
+
+    backend = create_duckdb_backend
+    with pytest.raises(InvalidParameter):
+        IbisBackend.execute_sql_to_df(backend, "SELECT 1", params=(1,))

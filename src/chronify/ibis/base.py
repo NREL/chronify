@@ -307,9 +307,19 @@ class IbisBackend(ABC):
         logger.trace("execute_sql: {}", query)
         self.connection.raw_sql(query)
 
-    def execute_sql_to_df(self, query: str) -> pd.DataFrame:
-        """Execute a raw SQL query and return a DataFrame."""
+    def execute_sql_to_df(self, query: str, params: Any = None) -> pd.DataFrame:
+        """Execute a raw SQL query directly on the backend connection and return
+        a DataFrame.
+
+        Subclasses should bypass ibis so backend-specific statements that are
+        not SELECT-shaped (e.g. ``SHOW TABLES``, ``PRAGMA``) work, and so no
+        timestamp conversion is applied. This default goes through ibis and
+        does not support ``params``.
+        """
         logger.trace("execute_sql_to_df: {}", query)
+        if params is not None:
+            msg = f"The {self.name} backend does not support query parameters"
+            raise InvalidParameter(msg)
         return self.execute(self.sql(query))
 
     def read_query(self, expr: ibis.Table, config: TimeBaseModel) -> pd.DataFrame:

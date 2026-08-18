@@ -2,12 +2,13 @@
 
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from functools import singledispatchmethod
 from typing import Any, Iterable
 
 import ibis
+import ibis.expr.datatypes as dt
 import pandas as pd
 import pyarrow as pa
 from loguru import logger
@@ -27,14 +28,23 @@ from chronify.time_configs import TimeBaseModel
 def _adapt_value(v: Any) -> Any:
     """Convert a value for SQLite parameterized insertion.
 
-    Converts datetime/Timestamp objects to ISO-format strings to avoid the
-    Python 3.12+ DeprecationWarning about the default datetime adapter.
-    Returns None for pd.NaT and other missing-value sentinels.
+    Converts datetime/Timestamp objects to strings to avoid the Python 3.12+
+    DeprecationWarning about the default datetime adapter. Returns None for
+    pd.NaT and other missing-value sentinels.
+
+    SQLite stores timestamps as text, so every comparison (joins, DELETE
+    predicates) is a raw string comparison. All timestamps therefore use one
+    canonical storage format: tz-naive UTC, space-separated, with microseconds
+    (``2020-01-01 00:00:00.000000``). This matches the format written by the
+    pre-ibis SQLAlchemy implementation, so databases created by older chronify
+    versions remain readable and joinable.
     """
     if v is pd.NaT or v is None:
         return None
     if isinstance(v, datetime):
-        return v.isoformat()
+        if v.tzinfo is not None:
+            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+        return v.isoformat(sep=" ", timespec="microseconds")
     if hasattr(v, "isoformat"):
         return v.isoformat()
     return v
@@ -130,8 +140,18 @@ class SQLiteBackend(IbisBackend):
         if isinstance(obj, ibis.Table):
             # SQLite CREATE TABLE AS SELECT loses datetime type info.
             # Execute the expression first, then create from the DataFrame.
-            df = self._connection.execute(obj)
-            return self._connection.create_table(name, obj=df, overwrite=overwrite)
+            obj = self._connection.execute(obj)
+        elif isinstance(obj, pa.Table):
+            obj = obj.to_pandas()
+        if isinstance(obj, pd.DataFrame) and len(obj) > 0:
+            # Create the table empty and insert through our parameterized path
+            # so creation-time rows get the same canonical timestamp string
+            # format as appended rows (see _adapt_value). ibis's own
+            # create_table insertion would store T-separated isoformat.
+            inferred = ibis.memtable(obj).schema()
+            self._connection.create_table(name, schema=inferred, overwrite=overwrite)
+            self.insert(name, obj)
+            return self.table(name)
         return self._connection.create_table(name, obj=obj, schema=schema, overwrite=overwrite)
 
     def insert(self, name: str, data: pd.DataFrame | pa.Table | ibis.Table) -> None:
@@ -161,7 +181,9 @@ class SQLiteBackend(IbisBackend):
         quoted_name = _quote_identifier(name)
         where = " AND ".join(f"{_quote_identifier(c)} = ?" for c in values)
         sql = f"DELETE FROM {quoted_name} WHERE {where}"
-        con.execute(sql, list(values.values()))
+        # Adapt values so datetime predicates use the canonical storage format
+        # and can match the stored strings.
+        con.execute(sql, [_adapt_value(v) for v in values.values()])
         self._commit_if_needed()
         logger.trace("Deleted rows from {} matching {}", name, values)
 
@@ -174,6 +196,29 @@ class SQLiteBackend(IbisBackend):
         logger.trace("execute_sql: {}", query)
         self._connection.con.execute(query)
         self._commit_if_needed()
+
+    def execute_sql_to_df(self, query: str, params: Any = None) -> pd.DataFrame:
+        logger.trace("execute_sql_to_df: {}", query)
+        return pd.read_sql_query(query, self._connection.con, params=params)
+
+    def apply_schema_types(self, expr: ibis.Table, config: TimeBaseModel) -> ibis.Table:
+        """Re-attach the UTC annotation for TIMESTAMP_TZ columns.
+
+        Timestamps are stored as tz-naive UTC text (see :func:`_adapt_value`),
+        and databases created by pre-ibis chronify versions declare those
+        columns as plain DATETIME, so ibis reports them tz-naive. Cast to
+        ``Timestamp(timezone="UTC")`` so reads return tz-aware UTC values.
+        """
+        if not isinstance(config, _DATETIME_RANGES):
+            return expr
+        if config.dtype != TimeDataType.TIMESTAMP_TZ:
+            return expr
+        if config.time_column not in expr.columns:
+            return expr
+        col = expr[config.time_column]
+        if getattr(col.type(), "timezone", None) is not None:
+            return expr
+        return expr.mutate(**{config.time_column: col.cast(dt.Timestamp(timezone="UTC"))})
 
     def dispose(self) -> None:
         if self._owns_connection:

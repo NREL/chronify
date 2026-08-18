@@ -8,7 +8,7 @@ from loguru import logger
 
 from chronify.ibis.base import IbisBackend, ObjectType
 from chronify.models import TableSchema, MappingTableSchema
-from chronify.exceptions import ConflictingInputsError, InvalidOperation
+from chronify.exceptions import ConflictingInputsError, InvalidOperation, TableAlreadyExists
 from chronify.time_series_checker import check_timestamps
 from chronify.time import TimeIntervalType, ResamplingOperationType, AggregationType
 from chronify.time_configs import TimeBasedDataAdjustment
@@ -249,9 +249,15 @@ def _apply_mapping(  # noqa: C901
     for k in keys:
         left_col = left[k]
         right_col = right["from_" + k]
-        # Cast to match types if needed (e.g., string vs int from pivoted columns)
+        # Cast to match types if needed (e.g., string vs int from pivoted columns).
+        # Cast the string side to the other side's type: parsing '01' as an int
+        # matches 1, whereas casting 1 to a string yields '1', which would
+        # silently drop the row from the join.
         if left_col.type() != right_col.type():
-            right_col = right_col.cast(left_col.type())
+            if left_col.type().is_string() and not right_col.type().is_string():
+                left_col = left_col.cast(right_col.type())
+            else:
+                right_col = right_col.cast(left_col.type())
         predicates.append(left_col == right_col)
 
     # Perform the join
@@ -300,4 +306,7 @@ def _apply_mapping(  # noqa: C901
         backend.write_parquet(result, str(output_file))
         return
 
-    backend.create_table(to_schema.name, result, overwrite=True)
+    if backend.has_table(to_schema.name):
+        msg = f"Refusing to overwrite existing table {to_schema.name!r} with mapping result"
+        raise TableAlreadyExists(msg)
+    backend.create_table(to_schema.name, result)

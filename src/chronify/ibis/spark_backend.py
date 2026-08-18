@@ -3,7 +3,8 @@
 import uuid
 import shutil
 from contextlib import contextmanager
-from typing import Any, Generator
+from datetime import datetime, timezone
+from typing import Any, Generator, cast
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
@@ -89,26 +90,39 @@ class SparkBackend(IbisBackend):
         schema: ibis.Schema | None = None,
         overwrite: bool = False,
     ) -> ibis.Table:
-        try:
-            return self._connection.create_table(name, obj=obj, schema=schema, overwrite=overwrite)
-        except Exception as exc:
-            if "LOCATION_ALREADY_EXISTS" not in str(exc):
-                raise
-            self._remove_managed_table_location(name)
-            return self._connection.create_table(name, obj=obj, schema=schema, overwrite=overwrite)
+        # Pin UTC so naive input timestamps are stored as the same instants
+        # regardless of the caller's session timezone; reads are pinned the
+        # same way (see read_query), keeping write/read symmetric.
+        with self._pinned_utc_session():
+            try:
+                return self._connection.create_table(
+                    name, obj=obj, schema=schema, overwrite=overwrite
+                )
+            except Exception as exc:
+                if "LOCATION_ALREADY_EXISTS" not in str(exc):
+                    raise
+                self._remove_managed_table_location(name)
+                return self._connection.create_table(
+                    name, obj=obj, schema=schema, overwrite=overwrite
+                )
+
+    def insert(self, name: str, data: pd.DataFrame | pa.Table | ibis.Table) -> None:
+        with self._pinned_utc_session():
+            super().insert(name, data)
 
     def delete_rows(self, name: str, values: dict[str, Any]) -> None:
         quoted_name = _quote_identifier(name)
         param_names = [f"p{i}" for i in range(len(values))]
         where = " AND ".join(f"{_quote_identifier(c)} = :{p}" for c, p in zip(values, param_names))
         sql = f"DELETE FROM {quoted_name} WHERE {where}"
-        args = dict(zip(param_names, values.values()))
-        try:
-            self._session.sql(sql, args=args)
-        except Exception as exc:
-            if "does not support DELETE" not in str(exc):
-                raise
-            self._overwrite_without_deleted_rows(name, where, args)
+        args = {p: _adapt_arg(v) for p, v in zip(param_names, values.values())}
+        with self._pinned_utc_session():
+            try:
+                self._session.sql(sql, args=args)
+            except Exception as exc:
+                if "does not support DELETE" not in str(exc):
+                    raise
+                self._overwrite_without_deleted_rows(name, where, args)
         logger.trace("Deleted rows from {} matching {}", name, values)
 
     def _overwrite_without_deleted_rows(self, name: str, where: str, args: dict[str, Any]) -> None:
@@ -117,8 +131,7 @@ class SparkBackend(IbisBackend):
         quoted_tmp = _quote_identifier(tmp_name)
         try:
             self._session.sql(
-                f"CREATE TABLE {quoted_tmp} AS "
-                f"SELECT * FROM {quoted_name} WHERE NOT ({where})",
+                f"CREATE TABLE {quoted_tmp} AS SELECT * FROM {quoted_name} WHERE NOT ({where})",
                 args=args,
             )
             self._session.sql(f"INSERT OVERWRITE TABLE {quoted_name} SELECT * FROM {quoted_tmp}")
@@ -144,16 +157,24 @@ class SparkBackend(IbisBackend):
         unknown option). Fall back to the unpartitioned ibis path when no
         partition columns are given.
         """
-        if not partition_by:
-            self._connection.to_parquet(expr, path)
-            return
-        sql = self._connection.compile(expr)
-        df = self._session.sql(sql)
-        df.write.partitionBy(*partition_by).parquet(path)
+        with self._pinned_utc_session():
+            if not partition_by:
+                self._connection.to_parquet(expr, path)
+                return
+            sql = self._connection.compile(expr)
+            df = self._session.sql(sql)
+            df.write.partitionBy(*partition_by).parquet(path)
 
     def execute_sql(self, query: str) -> None:
         logger.trace("execute_sql: {}", query)
-        self._session.sql(query)
+        with self._pinned_utc_session():
+            self._session.sql(query)
+
+    def execute_sql_to_df(self, query: str, params: Any = None) -> pd.DataFrame:
+        logger.trace("execute_sql_to_df: {}", query)
+        with self._pinned_utc_session():
+            df = self._session.sql(query, args=params) if params else self._session.sql(query)
+            return cast(pd.DataFrame, df.toPandas())
 
     def dispose(self) -> None:
         self._connection.disconnect()
@@ -236,3 +257,16 @@ def _quote_identifier(identifier: str) -> str:
     """Quote a SQL identifier for Spark SQL, escaping embedded backticks."""
     escaped = identifier.replace("`", "``")
     return f"`{escaped}`"
+
+
+def _adapt_arg(v: Any) -> Any:
+    """Convert a SQL parameter for unambiguous binding.
+
+    PySpark converts naive datetime parameters through the driver JVM's local
+    timezone, not spark.sql.session.timeZone, so a naive value would bind to
+    the wrong instant on non-UTC machines. Chronify stores naive timestamps
+    as UTC wall clock, so attach UTC explicitly.
+    """
+    if isinstance(v, datetime) and v.tzinfo is None:
+        return v.replace(tzinfo=timezone.utc)
+    return v

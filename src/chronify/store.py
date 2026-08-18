@@ -160,22 +160,19 @@ class Store:
         self, path: Path, schema: TableSchema, bypass_checks: bool = False
     ) -> None:
         """Load a table into the database from a Parquet file."""
-        obj_type = self._create_view_from_parquet(path, schema)
+        _, obj_type = self._backend.create_view_from_parquet(str(to_path(path)), schema.name)
         try:
             if not bypass_checks:
                 check_timestamps(self._backend, schema.name, schema)
-        except InvalidTable:
+            # Register the schema only after the checks pass so a failure
+            # doesn't leave an orphaned schema row that blocks retries.
+            self._schema_mgr.add_schema(schema)
+        except Exception:
             if obj_type == ObjectType.TABLE:
                 self._backend.drop_table(schema.name)
             else:
                 self._backend.drop_view(schema.name)
             raise
-
-    def _create_view_from_parquet(self, path: Path | str, schema: TableSchema) -> "ObjectType":
-        """Create a view in the database from a Parquet file."""
-        _, obj_type = self._backend.create_view_from_parquet(str(to_path(path)), schema.name)
-        self._schema_mgr.add_schema(schema)
-        return obj_type
 
     def ingest_from_csv(
         self,
@@ -1060,24 +1057,36 @@ class Store:
         schema = self._schema_mgr.get_schema(name)
         return self._backend.apply_schema_types(expr, schema.time_config)
 
-    def read_raw_query(self, query: str) -> pd.DataFrame:
-        """Execute a raw SQL query on the backend and return the results as a DataFrame.
+    def read_raw_query(self, query: str, params: Any = None) -> pd.DataFrame:
+        """Execute a raw SQL query directly on the backend database connection,
+        bypassing Ibis, and return the results as a DataFrame.
 
         This is an escape hatch for executing backend-specific SQL that Ibis cannot
-        express. For portable queries, prefer :meth:`read_query`, which returns an
-        Ibis Table expression with consistent cross-backend typing.
+        express (e.g. ``SHOW TABLES``, ``PRAGMA``, ``SUMMARIZE``). For portable
+        queries, prefer :meth:`read_query`, which returns an Ibis Table expression
+        with consistent cross-backend typing.
+
+        Note: Unlike :meth:`read_query`, no conversion of timestamps is performed.
+        Timestamps will be in the format of the underlying database. SQLite
+        backends will return strings instead of datetime.
 
         Parameters
         ----------
         query
             SQL query to execute.
+        params
+            Optional parameters for the SQL query, in the backend's native
+            placeholder style (``?`` for DuckDB and SQLite, named parameters
+            for Spark).
 
         Examples
         --------
         >>> store = Store()
-        >>> df = store.read_raw_query("SELECT * from my_table WHERE column = 'value1'")
+        >>> df = store.read_raw_query(
+        ...     "SELECT * from my_table WHERE column = ?", params=("value1",)
+        ... )
         """
-        return self._backend.execute_sql_to_df(query)
+        return self._backend.execute_sql_to_df(query, params=params)
 
     def write_query_to_parquet(
         self,
@@ -1106,6 +1115,9 @@ class Store:
         output_file = to_path(file_path)
         check_overwrite(output_file, overwrite)
         expr = self._backend.sql(stmt) if isinstance(stmt, str) else stmt
+        if name is not None:
+            schema = self._schema_mgr.get_schema(name)
+            expr = self._backend.apply_schema_types(expr, schema.time_config)
         self._backend.write_parquet(expr, str(output_file), partition_by=partition_columns)
 
     def write_table_to_parquet(
